@@ -1,0 +1,26 @@
+
+{
+  "build": { "dockerfile": "Dockerfile" },
+  "features": {
+    "ghcr.io/devcontainers/features/desktop-lite:1": {}
+  },
+  "forwardPorts": [6080],
+  "portsAttributes": {
+    "6080": {
+      "label": "desktop"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "surfer-project.surfer",
+        "GitHub.vscode-github-actions",
+        "technosophos.vscode-make",
+        "rashwell.tcl",
+        "mshr-h.veriloghdl",
+        "ms-python.python"
+      ]
+    }
+  },
+  "postStartCommand": "./startup.sh"
+}
