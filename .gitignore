@@ -1,0 +1,25 @@
+# Build artifacts
+synth/build/
+synth/icestorm_icebreaker/build/
+*.json
+*.asc
+*.bit
+*.log
+
+# Generated Verilog/SystemVerilog
+*.sv2v.v
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.bak
