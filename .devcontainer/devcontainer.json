@@ -1,9 +1,5 @@
 {
-  "name": "Hardware Development",
-  "build": { 
-    "dockerfile": "Dockerfile" 
-  },
-  "remoteUser": "vscode",
+  "build": { "dockerfile": "Dockerfile" },
   "features": {
     "ghcr.io/devcontainers/features/desktop-lite:1": {}
   },
@@ -25,13 +21,5 @@
       ]
     }
   },
-  "postStartCommand": "/usr/local/bin/startup.sh"
+  "postStartCommand": "./startup.sh"
 }
-```
-
-## 📁 Your File Structure Should Be:
-```
-.devcontainer/
-├── Dockerfile
-├── devcontainer.json
-└── startup.sh
