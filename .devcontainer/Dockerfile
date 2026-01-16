@@ -2,18 +2,33 @@
 FROM mcr.microsoft.com/vscode/devcontainers/base:ubuntu
 
 ENV LANG C.UTF-8
-ARG INSTALL_ZSH="true"
+ARG INSTALL_ZSH="true" 
 
 RUN apt-get update
-RUN apt-get -y install wget unzip
-RUN mkdir /tools
-#install oss-cad-suite for everything
-RUN cd /tools && wget https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2024-11-21/oss-cad-suite-linux-x64-20241121.tgz && tar -xf oss-cad-suite-linux-x64-20241121.tgz && export PATH="/tools/oss-cad-suite/bin:$PATH" && rm oss-cad-suite-linux-x64-20241121.tgz
+RUN apt-get -y install \
+    wget \
+    unzip 
+
+#install oss-cad-suite
+RUN cd /opt && \
+    wget https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2024-11-21/oss-cad-suite-linux-x64-20241121.tgz && \
+    tar -xf oss-cad-suite-linux-x64-20241121.tgz && \
+    rm oss-cad-suite-linux-x64-20241121.tgz
+    
+# ENV PATH="$HOME/opt/oss-cad-suite/bin:$PATH" 
+ENV PATH="/opt/oss-cad-suite/bin:${PATH}"
 
 #install sv2v
-RUN cd /tools && wget https://github.com/zachjs/sv2v/releases/download/v0.0.12/sv2v-Linux.zip && unzip sv2v-Linux.zip && rm sv2v-Linux.zip
+RUN cd /opt && \
+    wget https://github.com/zachjs/sv2v/releases/download/v0.0.13/sv2v-Linux.zip && \
+    unzip sv2v-Linux.zip && \
+    rm sv2v-Linux.zip
+    
+# ENV PATH="$HOME/opt/sv2v/sv2v-Linux:$PATH"
+ENV PATH="/opt/sv2v-Linux:${PATH}"
 
-#install Rust
 USER vscode
+
+#install Rust (So far no tools need rust, so do we need it?)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/home/vscode/.cargo/bin:${PATH}"
