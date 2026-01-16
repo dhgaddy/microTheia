@@ -1,6 +1,2 @@
-if [ -f /tools/oss-cad-suite/environment ]; then
-  source /tools/oss-cad-suite/environment
-else
-  export PATH="/tools/oss-cad-suite/bin:$PATH"
-fi
+source /tools/oss-cad-suite/environment
 export PATH="$PATH:/tools/sv2v-Linux:/root/.cargo/bin"
