@@ -1,13 +1,12 @@
 #!/bin/bash
+set -e
 
-# Source oss-cad-suite environment if available
+# Only source oss-cad-suite if it exists
 if [ -f /tools/oss-cad-suite/environment ]; then
-  source /tools/oss-cad-suite/environment
-else
-  export PATH="/tools/oss-cad-suite/bin:$PATH"
+  . /tools/oss-cad-suite/environment
 fi
 
-# Add sv2v and Rust to PATH (use HOME instead of hardcoded path)
-export PATH="$PATH:/tools:$HOME/.cargo/bin"
+# Extend PATH safely
+export PATH="/tools:/home/vscode/.cargo/bin:$PATH"
 
 echo "Development environment initialized!"
