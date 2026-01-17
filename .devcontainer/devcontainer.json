@@ -20,6 +20,5 @@
         "ms-python.python"
       ]
     }
-  },
-  "postStartCommand": "./startup.sh"
+  }
 }
