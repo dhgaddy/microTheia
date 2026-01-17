@@ -20,10 +20,9 @@ RUN cd /opt && \
     tar -xf oss-cad-suite-linux-x64-20241121.tgz && \
     rm oss-cad-suite-linux-x64-20241121.tgz
     
-# ENV PATH="$HOME/opt/oss-cad-suite/bin:$PATH" 
 ENV PATH="/opt/oss-cad-suite/bin:${PATH}"
 
-# sv2v installation ---------------------------------------------------------------
+# install sv2v
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
         echo "Installing prebuilt sv2v (amd64)"; \
         cd /opt && \
@@ -41,27 +40,6 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
 
 ENV PATH="/opt/sv2v-Linux:${PATH}"
 ENV PATH="/opt/sv2v/bin:${PATH}"
-# ------------------------------------------------------------------------------------
-
-# sv2v old ------------------------------------------------------------------------------------
-# if AMD64 Architecture
-# RUN cd /opt && \
-#     wget https://github.com/zachjs/sv2v/releases/download/v0.0.13/sv2v-Linux.zip && \
-#     unzip sv2v-Linux.zip && \
-#     rm sv2v-Linux.zip
-
-# ENV PATH="/opt/sv2v-Linux:${PATH}"
-
-# if ARM Architecture
-# RUN curl -sSL https://get.haskellstack.org/ | sh
-
-# RUN cd /opt && \
-#     git clone https://github.com/zachjs/sv2v.git && \
-#     cd sv2v && \
-#     make
-    
-# ENV PATH="/opt/sv2v/bin:${PATH}"
-# ------------------------------------------------------------------------------------------------
 
 USER vscode
 
