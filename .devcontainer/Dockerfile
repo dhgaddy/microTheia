@@ -1,19 +1,35 @@
 
-# FROM mcr.microsoft.com/vscode/devcontainers/base:ubuntu
-FROM rajitmanohar/act_sky130:latest
+FROM mcr.microsoft.com/vscode/devcontainers/base:ubuntu
 
 ENV LANG C.UTF-8
 ARG INSTALL_ZSH="true" 
 ARG TARGETARCH
 
 RUN apt-get update
-RUN apt-get -y install \
+# RUN apt-get -y install \
+#     wget \
+#     unzip \
+#     curl \
+#     git \
+#     build-essential \
+#     libgmp-dev
+RUN apt-get update && apt-get -y install \
     wget \
     unzip \
     curl \
     git \
     build-essential \
-    libgmp-dev
+    pkg-config \
+    software-properties-common \
+    ca-certificates \
+    libgmp-dev \
+    libedit-dev \
+    zlib1g-dev \
+    m4 \
+    libfmt-dev \
+    ninja-build \
+    python3 \
+    python3-pip
 
 #install oss-cad-suite
 RUN cd /opt && \
@@ -42,7 +58,18 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
 ENV PATH="/opt/sv2v-Linux:${PATH}"
 ENV PATH="/opt/sv2v/bin:${PATH}"
 
-USER vscode
+# Set up and install actflow
+RUN cd /opt && \
+    mkdir actflow
+
+ENV ACT_HOME=/opt/actflow
+
+RUN git clone https://github.com/asyncvlsi/actflow.git && \
+    cd actflow && \
+    git submodule update --init --recursive && \
+    ./build && \
+    cd .. && \
+    rm -rf actflow
 
 #install Rust (So far no tools need rust, so do we need it?)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
