@@ -1,5 +1,6 @@
 
-FROM mcr.microsoft.com/vscode/devcontainers/base:ubuntu
+# FROM mcr.microsoft.com/vscode/devcontainers/base:ubuntu
+FROM rajitmanohar/act_sky130:latest
 
 ENV LANG C.UTF-8
 ARG INSTALL_ZSH="true" 
