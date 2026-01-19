@@ -46,3 +46,5 @@ USER vscode
 #install Rust (So far no tools need rust, so do we need it?)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/home/vscode/.cargo/bin:${PATH}"
+
+RUN curl -sSLf https://scala-cli.virtuslab.org/get | sh
