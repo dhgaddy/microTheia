@@ -47,4 +47,4 @@ USER vscode
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/home/vscode/.cargo/bin:${PATH}"
 
-RUN curl -sSLf https://scala-cli.virtuslab.org/get | sh
+RUN curl -sSLf https://scala-cli.virtuslab.org/get | sh && scala-cli
