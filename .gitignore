@@ -23,3 +23,10 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.bak
+
+# Chisel Stuff
+mill.*
+target/
+project/project/
+project/target/
+build/

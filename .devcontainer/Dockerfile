@@ -13,7 +13,7 @@ RUN apt-get -y install \
     git \
     build-essential \
     libgmp-dev
-
+    
 #install oss-cad-suite
 RUN cd /opt && \
     wget https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2024-11-21/oss-cad-suite-linux-x64-20241121.tgz && \
