@@ -1,0 +1,3 @@
+[submodule "third_party/ASYNC-Chisel"]
+	path = third_party/ASYNC-Chisel
+	url = git@github.com:Jilin-Zhang/ASYNC-Chisel.git

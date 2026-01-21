@@ -5,10 +5,13 @@ https://github.com/sifferman/verilog_template
 
 I'm sure everybody knows how to create branches, PRs, and merge. Make sure we communicate clearly on slack for what we are currently doing on the repo.
 
-## ACT setup (TEMPORARY)
-Don't install act, stdlib, annotate, and actsim seperately just use actflow
-If you are on a mac, try using brew to install
+# Setup
+MAKE SURE TO RUN as this will install async-chisel library
 
-https://github.com/asyncvlsi/homebrew-tap
+https://github.com/Jilin-Zhang/ASYNC-Chisel
 
-https://github.com/asyncvlsi/actflow
+```bash
+git submodule update --init --recursive
+```
+
+## Chisel Instruction
