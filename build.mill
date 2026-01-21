@@ -17,6 +17,18 @@ object `async-chisel-test` extends SbtModule { m =>
   override def millSourcePath = super.millSourcePath / os.up
   override def scalaVersion = "2.13.16"
   def chiselVersion = "7.0.0"
+
+  // For async-chisel stuff
+  override def sources = T.sources(
+    millSourcePath / "src" / "main" / "scala",
+    // millSourcePath / "third_party" / "ASYNC-Chisel" / "src" / "main" / "scala" / "tool" / "AnalyzeCircuit.scala", // issue with firrtl versioning
+    millSourcePath / "third_party" / "ASYNC-Chisel" / "src" / "main" / "scala" / "tool" / "AsyncLib_ACG.scala"
+  )
+
+  override def resources = T.sources(
+    millSourcePath / "third_party" / "ASYNC-Chisel" / "src" / "main" / "resources"
+  )
+
   override def scalacOptions = Seq(
     "-language:reflectiveCalls",
     "-deprecation",

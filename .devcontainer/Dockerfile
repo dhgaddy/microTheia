@@ -42,6 +42,21 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
 ENV PATH="/opt/sv2v-Linux:${PATH}"
 ENV PATH="/opt/sv2v/bin:${PATH}"
 
+# SBT
+RUN apt-get update && apt-get install -y \
+    curl gnupg ca-certificates && \
+    echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" \
+        > /etc/apt/sources.list.d/sbt.list && \
+    echo "deb https://repo.scala-sbt.org/scalasbt/debian /" \
+        > /etc/apt/sources.list.d/sbt_old.list && \
+    curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x2EE0EA64E40A89B84B2DF73499E82A75642AC823" \
+        | gpg --dearmor \
+        | tee /etc/apt/trusted.gpg.d/scalasbt-release.gpg > /dev/null && \
+    apt-get update && \
+    apt-get install -y sbt && \
+    rm -rf /var/lib/apt/lists/*
+
+
 USER vscode
 
 #install Rust (So far no tools need rust, so do we need it?)
