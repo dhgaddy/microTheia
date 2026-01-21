@@ -13,7 +13,9 @@ RUN apt-get -y install \
     git \
     build-essential \
     libgmp-dev \
-    default-jre
+    default-jre \
+    gnupg \
+    ca-certificates
 
 #install oss-cad-suite
 RUN cd /opt && \
@@ -42,10 +44,8 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
 ENV PATH="/opt/sv2v-Linux:${PATH}"
 ENV PATH="/opt/sv2v/bin:${PATH}"
 
-# SBT
-RUN apt-get update && apt-get install -y \
-    curl gnupg ca-certificates && \
-    echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" \
+# SBT install
+RUN echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" \
         > /etc/apt/sources.list.d/sbt.list && \
     echo "deb https://repo.scala-sbt.org/scalasbt/debian /" \
         > /etc/apt/sources.list.d/sbt_old.list && \
@@ -55,7 +55,6 @@ RUN apt-get update && apt-get install -y \
     apt-get update && \
     apt-get install -y sbt && \
     rm -rf /var/lib/apt/lists/*
-
 
 USER vscode
 
