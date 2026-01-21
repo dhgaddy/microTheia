@@ -12,8 +12,9 @@ RUN apt-get -y install \
     curl \
     git \
     build-essential \
-    libgmp-dev
-    
+    libgmp-dev \
+    default-jre
+
 #install oss-cad-suite
 RUN cd /opt && \
     wget https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2024-11-21/oss-cad-suite-linux-x64-20241121.tgz && \
@@ -47,4 +48,4 @@ USER vscode
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/home/vscode/.cargo/bin:${PATH}"
 
-RUN curl -sSLf https://scala-cli.virtuslab.org/get | sh && scala-cli
+RUN curl -sSLf https://scala-cli.virtuslab.org/get | sh
