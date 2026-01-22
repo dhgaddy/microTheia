@@ -21,4 +21,10 @@ lazy val root = (project in file("."))
       "-Ymacro-annotations",
     ),
     addCompilerPlugin("org.chipsalliance" % "chisel-plugin" % chiselVersion cross CrossVersion.full),
+    Compile / unmanagedSources ++= Seq(
+      baseDirectory.value / "third_party/ASYNC-Chisel/src/main/scala/tool/AsyncLib_ACG.scala",
+      // baseDirectory.value / "third_party/ASYNC-Chisel/src/main/scala/tool/AnalyzeCircuit.scala"
+    ),
+    Compile / unmanagedResourceDirectories +=
+      baseDirectory.value / "third_party/ASYNC-Chisel/src/main/resources",
   )
