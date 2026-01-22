@@ -1,8 +1,11 @@
-.PHONY: lint synth clean_synth clean
+.PHONY: lint sim synth clean_synth chisel-test chisel-verilog clean-chisel clean
 
 # Lint the RTL
 lint:
 	verilator lint.vlt -f rtl/rtl.f --lint-only --top top
+
+# needs to be completed
+sim:
 
 # Synthesize for iCEBreaker
 synth: synth/icestorm_icebreaker/build/icebreaker.bit
@@ -56,8 +59,17 @@ run-sorter: synth/icestorm_icebreaker/build/icebreaker.bit
 run-echo: synth/icestorm_icebreaker/build/icebreaker_echo.bit
 	iceprog synth/icestorm_icebreaker/build/icebreaker_echo.bit
 
+chisel-test:
+	sbt test
+
+chisel-verilog:
+	sbt run
+
 clean_synth:
 	rm -rf synth/build synth/icestorm_icebreaker/build
 
-clean: clean_synth
-	rm -rf *.log *.rpt
+clean_chisel:
+	rtl/chisel-verilog/*.sv rtl/chisel-verilog/*.v rtl/chisel-verilog/filelist.f
+
+clean: clean_synth clean_chisel
+	rm -rf *.log *.rpt 

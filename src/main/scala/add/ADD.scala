@@ -29,18 +29,10 @@ class ADD extends Module{
   }
 }
 
-// object elaborate_ADD extends App {
-//   (new chisel3.stage.ChiselStage).execute(
-//     Array("-X", "verilog"),
-//     Seq(ChiselGeneratorAnnotation(() => new Add()),
-//       TargetDirAnnotation("Outputs/Add"))
-//   )
-// }
-
 object ADD extends App {
   ChiselStage.emitSystemVerilogFile(
     new ADD,
     Array("--target-dir", "rtl/chisel-verilog", "--target", "systemverilog"),
-    firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info", "-default-layer-specialization=enable")
+    firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info", "-default-layer-specialization=enable") // Disabling this gives code more similar to the old version
   )
 }

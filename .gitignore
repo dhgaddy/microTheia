@@ -369,3 +369,4 @@ hs_err_pid*
 rtl/chisel-verilog/*.sv
 rtl/chisel-verilog/*.v
 rtl/chisel-verilog/*.f
+rtl/chisel-verilog/verification
