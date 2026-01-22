@@ -21,6 +21,8 @@ lazy val root = (project in file("."))
       "-Ymacro-annotations",
     ),
     addCompilerPlugin("org.chipsalliance" % "chisel-plugin" % chiselVersion cross CrossVersion.full),
+
+    // Used when referencing as a third_party, will currently and temporarly keep the things directly in our project
     // Compile / unmanagedSources ++= Seq(
     //   baseDirectory.value / "third_party/ASYNC-Chisel/src/main/scala/tool/AsyncLib_ACG.scala",
     //   // baseDirectory.value / "third_party/ASYNC-Chisel/src/main/scala/tool/AnalyzeCircuit.scala"
