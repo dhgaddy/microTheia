@@ -1,7 +1,12 @@
 package sync_matmul
 
 import chisel3._
-import common.GenVerilog
+import chisel3.stage.ChiselGeneratorAnnotation
+import firrtl.options.TargetDirAnnotation
+import tool._
+
+// _root_ disambiguates from package chisel3.util.circt if user imports chisel3.util._
+import _root_.circt.stage.ChiselStage
 
 class Sync_MatMul(val n: Int = 4, val bits: Int = 8) extends Module {
   val io = IO(new Bundle { 
@@ -48,4 +53,12 @@ class Sync_MatMul(val n: Int = 4, val bits: Int = 8) extends Module {
 
   io.C := acc
   
+}
+
+object Sync_MatMul extends App {
+  ChiselStage.emitSystemVerilogFile(
+    new Sync_MatMul,
+    Array("--target-dir", "rtl/chisel-verilog", "--target", "systemverilog"),
+    firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info", "-default-layer-specialization=enable") // Disabling this gives code more similar to the old version
+  )
 }
