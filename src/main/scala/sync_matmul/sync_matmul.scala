@@ -58,7 +58,7 @@ class Sync_MatMul(val n: Int = 4, val bits: Int = 8) extends Module {
 object Sync_MatMul extends App {
   ChiselStage.emitSystemVerilogFile(
     new Sync_MatMul,
-    Array("--target-dir", "rtl/chisel-verilog", "--target", "systemverilog"),
+    Array("--target-dir", "src/rtl/chisel-verilog", "--target", "systemverilog"),
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info", "-default-layer-specialization=enable") // Disabling this gives code more similar to the old version
   )
 }
