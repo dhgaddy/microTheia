@@ -366,7 +366,16 @@ project/plugins/project/
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 
-rtl/chisel-verilog/*.sv
-rtl/chisel-verilog/*.v
-rtl/chisel-verilog/*.f
-rtl/chisel-verilog/verification
+src/rtl/chisel-verilog/*.sv
+src/rtl/chisel-verilog/*.v
+src/rtl/chisel-verilog/*.f
+src/rtl/chisel-verilog/verification
+
+# GF180MCU PROJECT GITIGNORE
+__pycache__/
+gf180mcu/
+gf180_drc.lyrdb
+sim_build/
+final/
+img/
+*.lyrdb
