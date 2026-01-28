@@ -2,6 +2,7 @@
 
 ## Combination of two templates
 https://github.com/chipsalliance/chisel-template
+
 https://github.com/wafer-space/gf180mcu-project-template
 
 I'm sure everybody knows how to create branches, PRs, and merge. Make sure we communicate clearly on slack for what we are currently doing on the repo.
