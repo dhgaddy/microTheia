@@ -1,7 +1,13 @@
 # Running Scripts
 
 ## Voxel Implementation
+Open aedatconvert.py, change the parameters TS_MIN & TS_MAX to the timestamp range of the gestures that need to be classified 
+Run:
+ python3 ./aedatconvert input.aedat out.txt
 
+- Next open voxelactual.txt.
+- Change the TIMESTAMPS_PER_FRAME parameter to the number of lines in out.txt divided 16, then round down to the nearest whole number.
+- run ./voxelactual input.txt
 ## aedet visualizer 
 .aedat_visualizer
 
