@@ -32,7 +32,7 @@ class ADD extends Module{
 object ADD extends App {
   ChiselStage.emitSystemVerilogFile(
     new ADD,
-    Array("--target-dir", "rtl/chisel-verilog", "--target", "systemverilog"),
+    Array("--target-dir", "src/rtl/chisel-verilog", "--target", "systemverilog"),
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info", "-default-layer-specialization=enable") // Disabling this gives code more similar to the old version
   )
 }
