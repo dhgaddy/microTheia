@@ -16,12 +16,14 @@ RUN apt-get -y install \
     default-jre \
     gnupg \
     ca-certificates \
-    python3 \
-    python3-pip \
-    python3-venv
+    python3
+#     python3 \
+#     python3-pip
+#     python3-pip \
+#     python3-venv
 
-#install numpy and matplotlib
-RUN python3 -m pip install --no-cache-dir numpy matplotlib
+# #install numpy and matplotlib
+# RUN python3 -m pip install --no-cache-dir numpy matplotlib
 
 #install oss-cad-suite
 RUN cd /opt && \
