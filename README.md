@@ -19,7 +19,7 @@ make synth          # Synthesize Verilog
 make sim            # Simulate Verilog
 make chisel-test    # Test Chisel modules
 make chisel-verilog # Generates the verilog, choose the file 
-make clean-synth    # Removes out all synth files
+make clean-synth    # Removes all synth files
 make clean-chisel   # Removes all generated verilog files
 ```
 

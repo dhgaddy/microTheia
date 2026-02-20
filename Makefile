@@ -96,7 +96,7 @@ chisel-test: ## uses the chisel tests, runs on all
 chisel-verilog: ## generates the verilog, choose the file
 	sbt run
 
-clean-synth: ## removes out all synth files
+clean-synth: ## removes all synth files
 	rm -rf synth/build synth/icestorm_icebreaker/build
 
 clean-chisel: ## removes all generated verilog files
