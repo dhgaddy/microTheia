@@ -1,4 +1,4 @@
-.PHONY: help lint sim synth clean_synth chisel-test chisel-verilog clean-chisel clean synth-echorun-sorter run-echo
+.PHONY: help lint sim synth clean-synth chisel-test chisel-verilog clean-chisel clean synth-echorun-sorter run-echo
 
 # gf180 tags
 .PHONY: all sim-gl clone-pdk librelane librelane-nodrc librelane-klayoutdrc librelane-magicdrc librelane-openroad librelane-klayout librelane-padring sim-gl sim-view copy-final render-image
@@ -96,13 +96,13 @@ chisel-test: ## uses the chisel tests, runs on all
 chisel-verilog: ## generates the verilog, choose the file
 	sbt run
 
-clean_synth: ## removes out all synth files
+clean-synth: ## removes out all synth files
 	rm -rf synth/build synth/icestorm_icebreaker/build
 
-clean_chisel: ## removes all generated verilog files
+clean-chisel: ## removes all generated verilog files
 	rm -rf $(CHISEL_RTL_DIR)/*.sv $(CHISEL_RTL_DIR)/*.v $(CHISEL_RTL_DIR)/filelist.f
 
-clean: clean_synth clean_chisel ## cleans out all generated files
+clean: clean-synth clean-chisel ## cleans out all generated files
 	rm -rf *.log *.rpt 
 
 all: librelane ## Build the project (runs LibreLane)
