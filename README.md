@@ -1,8 +1,6 @@
 # Group G (Still unsure of the name)
 
 ## Setup
-To run locally
-
 ```bash
 git clone git@github.com:MrPoloGit/group-g.git
 cd group-g
