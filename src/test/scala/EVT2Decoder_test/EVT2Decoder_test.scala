@@ -1,5 +1,3 @@
-// See README.md for license details.
-
 package EVT2Decoder
 
 import chisel3._

@@ -11,7 +11,7 @@ Ensure [Docker](https://www.docker.com/) is installed and start the devcontainer
 
 ## Run
 ```bash
-make help           # Show this help message
+make help           # Show all commands
 make lint           # Verify Verilog including generated
 make synth          # Synthesize Verilog
 make sim            # Simulate Verilog
@@ -20,6 +20,10 @@ make chisel-verilog # Generates the verilog, choose the file
 make clean-synth    # Removes all synth files
 make clean-chisel   # Removes all generated verilog files
 ```
+
+## GF180
+
+[Click here](GF180.md) to see the GF180 information.
 
 ## Other repositories
 
