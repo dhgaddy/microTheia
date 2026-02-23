@@ -1,4 +1,4 @@
-package sync_matmul
+package voxelbinning
 
 import chisel3._
 import chisel3.util._
@@ -47,10 +47,11 @@ class VoxelBinning(
 
   // Ring buffer memory: counters for all bins
   val totalCounters = w_bins * cellsPerBin            // total counter slots across all bins
+  val counterAddrW: Int = log2Ceil(totalCounters max 1) // bits needed to index counters ring storage
   val counters = RegInit(VecInit(Seq.fill(totalCounters)(0.U(counter.W)))) // actual storage: every counter starts at 0
 
   def ringAddr(bin: UInt, cell: UInt): UInt =
-    (bin * cellsPerBin.U) + cell                      // convert (bin,cell) into flat index in counters[]
+    ((bin * cellsPerBin.U) + cell)(counterAddrW - 1, 0) // convert (bin,cell) into flat index in counters[]
 
   // Double buffer to hold a flattened window snapshot
   val winBuf0 = RegInit(VecInit(Seq.fill(featsPerWindow)(0.U(counter.W)))) // snapshot buffer 0 (flattened features)
@@ -86,8 +87,8 @@ class VoxelBinning(
     Mux(x === satMax, x, x + 1.U)                     // if already max, stay; else increment by 1
 
   // State + bin tracking
-  val S_RUN :: S_CAPTURE :: S_OUTPUT :: S_ADV_CLEAR :: S_APPLY_EVT :: Nil = Enum(5) // 5 FSM states
-  val state = RegInit(S_RUN)                           // start FSM in RUN state
+  val sRun :: sCapture :: sOutput :: sAdvClear :: sApplyEvt :: Nil = Enum(5) // 5 FSM states
+  val state = RegInit(sRun) // start FSM in RUN state                   
 
   val haveBin   = RegInit(false.B)                     // false until we see first event and initialize time/bin
   val curBinIdx = RegInit(0.U(binIdxW.W))              // which bin we are currently writing into
@@ -111,7 +112,7 @@ class VoxelBinning(
   io.readout_data  := VecInit(Seq.fill(parallelReads)(0.U(counter.W))) // default: output zeros
 
   // Only accept events in RUN state
-  io.event_ready := (state === S_RUN)                  // ready only when we're in RUN state
+  io.event_ready := (state === sRun)                  // ready only when we're in RUN state
   val eventFire = io.event_valid && io.event_ready     // true when we actually accept an event this cycle
 
   // Wrap helpers for ring indices (circular bin buffer)
@@ -146,7 +147,7 @@ class VoxelBinning(
   // FSM
   switch(state) {
 
-    is(S_RUN) {
+    is(sRun) {
       when(eventFire) {                                 // only process when an event is accepted
 
         when(!haveBin) {                                // if this is the very first event ever
@@ -154,6 +155,8 @@ class VoxelBinning(
           curBinIdx := 0.U                              // start writing into bin 0
           curBinEnd := io.event_time + dt               // current bin ends dt after first event time
           binsInMem := 1.U                              // we now have 1 valid bin in memory
+          val a0 = ringAddr(0.U(binIdxW.W), cellIdx)    // first event belongs to newly initialized bin 0
+          counters(a0) := satInc(counters(a0))          // count the first event immediately
         }
 
         when(haveBin && (io.event_time < curBinEnd)) {   // if event timestamp is still inside current bin
@@ -170,16 +173,16 @@ class VoxelBinning(
           when(binsInMem >= r_bins.U) {                  // if we have enough bins, do window readout
             capSel     := ~capSel                        // toggle which winBuf we capture into
             capFeatIdx := 0.U                            // start capture at feature 0
-            state      := S_CAPTURE                      // go capture window snapshot
+            state      := sCapture                      // go capture window snapshot
           }.otherwise {                                  // not enough bins -> skip output
             clearCellIdx := 0.U                          // start clearing at cell 0
-            state        := S_ADV_CLEAR                  // go advance/clear bins only
+            state        := sAdvClear                  // go advance/clear bins only
           }
         }
       }
     }
 
-    is(S_CAPTURE) {
+    is(sCapture) {
       val oldest = oldestBinIdx(curBinIdx)               // find the oldest bin of the last r_bins window
 
       for (lane <- 0 until parallelReads) {              // each lane outputs/copies one feature per cycle
@@ -197,11 +200,11 @@ class VoxelBinning(
 
       when(capFeatIdx + parallelReads.U >= featsPerWindow.U) { // if we finished capturing entire window
         outFeatIdx := 0.U                                // start output from feature 0
-        state      := S_OUTPUT                           // go stream window out
+        state      := sOutput                           // go stream window out
       }
     }
 
-    is(S_OUTPUT) {
+    is(sOutput) {
       val fire = io.readout_ready                        // downstream says it can accept a beat this cycle
 
       io.readout_valid := true.B                         // we are outputting valid data in OUTPUT state
@@ -221,12 +224,12 @@ class VoxelBinning(
         outFeatIdx := outFeatIdx + parallelReads.U       // advance output pointer
         when(outFeatIdx + parallelReads.U >= featsPerWindow.U) { // if we just sent the last beat
           clearCellIdx := 0.U                            // begin clearing at cell 0
-          state        := S_ADV_CLEAR                    // advance/clear bins for the new event time
+          state        := sAdvClear                    // advance/clear bins for the new event time
         }
       }
     }
 
-    is(S_ADV_CLEAR) {
+    is(sAdvClear) {
       when(clearCellIdx === 0.U) {                       // at start of clearing a bin (first cell)
         curBinIdx := wrapInc(curBinIdx)                  // move to next bin in ring (advance time bin)
         curBinEnd := curBinEnd + dt                      // extend bin end by dt (next bin end)
@@ -235,14 +238,15 @@ class VoxelBinning(
         }
       }
 
-      val a = ringAddr(curBinIdx, clearCellIdx)          // address of (new current bin, cell being cleared)
+      val clearBinIdx = Mux(clearCellIdx === 0.U, wrapInc(curBinIdx), curBinIdx) // use the advanced bin immediately on first clear cycle
+      val a = ringAddr(clearBinIdx, clearCellIdx)        // address of (new current bin, cell being cleared)
       counters(a) := 0.U                                 // clear that one cell (set counter to 0)
 
       when(clearCellIdx === (cellsPerBin - 1).U) {       // if we cleared the last cell of this bin
         clearCellIdx := 0.U                              // reset clear cell pointer for next bin
         when(advBinsLeft === 1.U) {                      // if this was the final bin we needed to advance
           advBinsLeft := 0.U                             // done advancing
-          state       := S_APPLY_EVT                     // now apply the latched event to the correct bin
+          state       := sApplyEvt                     // now apply the latched event to the correct bin
         }.otherwise {                                     // else we still have more bins to advance/clear
           advBinsLeft := advBinsLeft - 1.U               // decrement remaining bins to clear
           // stay in S_ADV_CLEAR (next cycle will advance again at clearCellIdx==0)
@@ -252,17 +256,17 @@ class VoxelBinning(
       }
     }
 
-    is(S_APPLY_EVT) {
+    is(sApplyEvt) {
       val a = ringAddr(curBinIdx, latEvtCell)            // address of (current bin after advance, latched cell)
       counters(a) := satInc(counters(a))                 // apply the boundary-crossing event increment
-      state := S_RUN                                     // go back to RUN and accept new events again
+      state := sRun                                     // go back to RUN and accept new events again
     }
   }
 }
 
-object Sync_MatMul extends App {
+object VoxelBinning extends App {
   ChiselStage.emitSystemVerilogFile(
-    new Sync_MatMul,
+    new VoxelBinning,
     Array("--target-dir", "src/rtl/chisel-verilog", "--target", "systemverilog"),
     firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info", "-default-layer-specialization=enable") // Disabling this gives code more similar to the old version
   )
