@@ -1,7 +1,12 @@
-package voxel
+package VoxelBinner
 
 import chisel3._
 import chisel3.util._
+import chisel3.stage.ChiselGeneratorAnnotation
+import firrtl.options.TargetDirAnnotation
+import tool._
+import _root_.circt.stage.ChiselStage
+
 
 class VoxelBinner(
     val numBins: Int = 8,
@@ -89,4 +94,12 @@ class VoxelBinner(
   // ============================================================
 
   io.readData := bins(io.readBin)(io.readAddr)
+}
+
+object VoxelBinner extends App {
+  ChiselStage.emitSystemVerilogFile(
+    new VoxelBinner,
+    Array("--target-dir", "src/rtl/chisel-verilog", "--target", "systemverilog"),
+    firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info", "-default-layer-specialization=enable") // Disabling this gives code more similar to the old version
+  )
 }
