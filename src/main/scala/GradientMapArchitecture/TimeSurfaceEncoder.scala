@@ -1,4 +1,4 @@
-package TimeSurfaceEncoder
+package GradientMapArchitecture
 
 import chisel3._
 import chisel3.util._
@@ -7,7 +7,7 @@ import chisel3.util._
 import tool._
 import _root_.circt.stage.ChiselStage
 
-import TimeSurfaceMemory.TimeSurfaceMemory
+import GradientMapArchitecture.TimeSurfaceMemory
 
 class TimeSurfaceEncoder(
     val GRID_SIZE: Int   = 16,

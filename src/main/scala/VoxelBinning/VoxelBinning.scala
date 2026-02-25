@@ -8,7 +8,13 @@ import tool._
 import _root_.circt.stage.ChiselStage
 
 class VoxelBinning(
-
+  val win: Int = 400,                 // Window size W 
+  val w_bins: Int = 5,                // Number of bins B stored in ring
+  val r_bins: Int = 5,                // Number of bins to read out
+  val grid: Int = 16,                 // Pooled x/y grid (e.g., 16x16)
+  val counter: Int = 8,               // Counter bit size
+  val parallelReads: Int = 1,         // How many counters output per cycle
+  val TIME_W: Int = 32
 ) extends Module {
   val io = IO(new Bundle { 
     // Event input

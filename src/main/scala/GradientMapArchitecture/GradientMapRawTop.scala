@@ -1,14 +1,14 @@
-package GradientMapRawTop
+package GradientMapArchitecture
 
 import chisel3._
 import chisel3.util._
 import _root_.circt.stage.ChiselStage
 
 import UartRx.UartRx
-import InputFIFO.InputFIFO
-import EVT2Decoder.EVT2Decoder
-import TimeSurfaceEncoder.TimeSurfaceEncoder
-import SpatioTemporalClassifier.SpatioTemporalClassifier
+import GradientMapArchitecture.InputFIFO
+import GradientMapArchitecture.EVT2Decoder
+import GradientMapArchitecture.TimeSurfaceEncoder
+import GradientMapArchitecture.SpatioTemporalClassifier
 import UartDebug.UartDebug
 
 class GradientMapRawTop(

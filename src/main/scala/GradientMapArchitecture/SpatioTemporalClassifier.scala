@@ -1,11 +1,11 @@
-package SpatioTemporalClassifier
+package GradientMapArchitecture
 
 import chisel3._
 import chisel3.util._
 import _root_.circt.stage.ChiselStage
 
-import WeightRom.WeightRom
-import SystolicArray.SystolicArray
+import GradientMapArchitecture.WeightRom
+import GradientMapArchitecture.SystolicArray
 
 class SpatioTemporalClassifier(
   val CLK_FREQ_HZ: Int     = 12000000,
