@@ -56,25 +56,28 @@ class SystolicArray(
         w(k) := io.w_data_flat((k+1)*WEIGHT_BITS-1, k*WEIGHT_BITS).asSInt
     }
 
-    // ------------------------------------------------------------
     // Combinational argmax
-    // ------------------------------------------------------------
-
     val comb_best_class = Wire(UInt(log2Ceil(NUM_CLASSES).W))
-    val comb_max_score  = Wire(SInt(ACC_BITS.W))
 
-    comb_max_score  := acc(0)
-    comb_best_class := 0.U
+    // Build parallel comparison wires to avoid self-referential cycle
+    val is_max = Wire(Vec(NUM_CLASSES, Bool()))
 
-    for (k <- 1 until NUM_CLASSES) {
-        when (acc(k) > comb_max_score) {
-        comb_max_score  := acc(k)
+    for (k <- 0 until NUM_CLASSES) {
+    val beats_all_others = (0 until NUM_CLASSES).filter(_ != k).map { j =>
+        acc(k) >= acc(j)
+    }.reduce(_ && _)
+    is_max(k) := beats_all_others
+    }
+
+    // Priority encode: pick lowest index that is max (handles ties)
+    comb_best_class := (NUM_CLASSES - 1).U
+    for (k <- (NUM_CLASSES - 2) to 0 by -1) {
+    when(is_max(k)) {
         comb_best_class := k.U
-        }
+    }
     }
 
     // Main FSM
-
     io.result_valid := false.B
 
     io.w_addr       := 0.U
@@ -83,7 +86,6 @@ class SystolicArray(
 
     switch(state) {
 
-        // --------------------------------------------------------
         is (S_IDLE) {
 
         pipe_valid_r := false.B
@@ -102,7 +104,6 @@ class SystolicArray(
         }
         }
 
-        // --------------------------------------------------------
         is (S_RUNNING) {
 
         // Accumulate previous feature × weight
@@ -126,7 +127,6 @@ class SystolicArray(
         }
         }
 
-        // --------------------------------------------------------
         is (S_DRAIN) {
 
         for (k <- 0 until NUM_CLASSES) {
@@ -139,7 +139,6 @@ class SystolicArray(
         state        := S_ARGMAX
         }
 
-        // --------------------------------------------------------
         is (S_ARGMAX) {
 
         for (k <- 0 until NUM_CLASSES) {
