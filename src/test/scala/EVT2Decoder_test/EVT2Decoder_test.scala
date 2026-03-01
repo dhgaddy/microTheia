@@ -1,4 +1,4 @@
-package EVT2Decoder
+package GradientMapArchitecture
 
 import chisel3._
 import chisel3.simulator.scalatest.ChiselSim

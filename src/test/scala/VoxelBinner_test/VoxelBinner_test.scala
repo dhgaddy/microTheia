@@ -1,4 +1,4 @@
-package voxel
+package VoxelBinner
 
 import chisel3._
 import chisel3.simulator.scalatest.ChiselSim
