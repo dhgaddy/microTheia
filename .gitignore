@@ -394,3 +394,9 @@ cocotb/uart/results.xml
 cocotb/voxel_bin_architecture/sim_build*
 cocotb/voxel_bin_architecture/__pycache__/
 cocotb/voxel_bin_architecture/results.xml
+
+# synth_sv
+synth/*.log
+synth/*.asc
+synth/*.bit
+synth/*.json
