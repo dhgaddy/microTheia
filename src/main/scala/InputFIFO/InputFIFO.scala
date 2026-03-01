@@ -1,4 +1,4 @@
-package GradientMapArchitecture
+package InputFIFO
 
 import chisel3._
 import chisel3.stage.ChiselGeneratorAnnotation

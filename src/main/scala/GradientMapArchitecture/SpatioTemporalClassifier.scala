@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import _root_.circt.stage.ChiselStage
 
-import GradientMapArchitecture.WeightRom
+import GradientMapArchitecture.WeightRam
 import GradientMapArchitecture.SystolicArray
 
 class SpatioTemporalClassifier(
@@ -99,10 +99,10 @@ class SpatioTemporalClassifier(
   io.ts_read_enable := scan_active && (scan_addr < NUM_CELLS.U)
 
   // Weight ROMs (4 parallel)
-  val wrom0 = Module(new WeightRom(0))
-  val wrom1 = Module(new WeightRom(1))
-  val wrom2 = Module(new WeightRom(2))
-  val wrom3 = Module(new WeightRom(3))
+  val wrom0 = Module(new WeightRam(0))
+  val wrom1 = Module(new WeightRam(1))
+  val wrom2 = Module(new WeightRam(2))
+  val wrom3 = Module(new WeightRam(3))
 
   wrom0.io.cell_addr := scan_addr
   wrom1.io.cell_addr := scan_addr

@@ -5,8 +5,8 @@ import chisel3.util._
 import _root_.circt.stage.ChiselStage
 
 import UartRx.UartRx
-import GradientMapArchitecture.InputFIFO
-import GradientMapArchitecture.EVT2Decoder
+import InputFIFO.InputFIFO
+import EVT2Decoder.EVT2Decoder
 import GradientMapArchitecture.TimeSurfaceEncoder
 import GradientMapArchitecture.SpatioTemporalClassifier
 import UartDebug.UartDebug

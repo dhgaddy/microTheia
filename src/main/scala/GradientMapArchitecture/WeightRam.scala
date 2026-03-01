@@ -7,7 +7,7 @@ import chisel3.util._
 import tool._
 import _root_.circt.stage.ChiselStage
 
-class WeightRom(
+class WeightRam(
     val CLASS_IDX: Int = 0,
     val NUM_CLASSES: Int = 4,
     val NUM_CELLS: Int = 256,
@@ -75,9 +75,9 @@ class WeightRom(
     io.dout := doutReg
 }
 
-object WeightRom extends App {
+object WeightRam extends App {
     ChiselStage.emitSystemVerilogFile(
-        new WeightRom,
+        new WeightRam,
         Array("--target-dir", "src/rtl/chisel-verilog", "--target", "systemverilog"),
         firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info", "-default-layer-specialization=enable") // Disabling this gives code more similar to the old version
     )
