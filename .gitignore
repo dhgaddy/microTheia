@@ -379,3 +379,18 @@ sim_build/
 final/
 img/
 *.lyrdb
+
+# cocotb/gradient_map_architectures
+cocotb/gradient_map_architecture/sim_build*
+cocotb/gradient_map_architecture/__pycache__/
+cocotb/gradient_map_architecture/results.xml
+
+# cocotb/uart
+cocotb/uart/sim_build*
+cocotb/uart/__pycache__/
+cocotb/uart/results.xml
+
+# cocotb/voxel_bin_architecture
+cocotb/voxel_bin_architecture/sim_build*
+cocotb/voxel_bin_architecture/__pycache__/
+cocotb/voxel_bin_architecture/results.xml
