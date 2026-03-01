@@ -4,7 +4,7 @@
 // Rotates bins on a timer; flattens READOUT_BINS bins for classification.
 // Parallel reads (PARALLEL_READS values/cycle) feed the systolic array.
 
-module TimeSurfaceBinning #(
+module voxel_binning #(
     parameter CLK_FREQ_HZ    = 12_000_000,
     parameter WINDOW_MS      = 400,
     parameter NUM_BINS       = 4,
@@ -20,6 +20,7 @@ module TimeSurfaceBinning #(
     input  logic signed [4:0] event_x,
     input  logic signed [4:0] event_y,
     input  logic        event_polarity,
+    output logic        event_ready,
     output logic        readout_start,
     output logic [PARALLEL_READS*COUNTER_BITS-1:0] readout_data,
     output logic        readout_valid
@@ -58,6 +59,7 @@ module TimeSurfaceBinning #(
     } state_t;
 
     state_t state;
+    assign event_ready = (state != S_CLEAR);
 
     logic [BIN_IDX_BITS-1:0]                   readout_bin_ptr;
     logic [GRID_ADDR_BITS-PARALLEL_BITS:0]     readout_cell_ctr;

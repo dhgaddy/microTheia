@@ -3,7 +3,7 @@
 // Spatio-temporal DVS gesture classifier
 // Pipeline: frame pulse → direct BRAM-to-systolic stream → argmax → threshold gate
 
-module spatio_temporal_classifier #(
+module gesture_classifier #(
     parameter CLK_FREQ_HZ     = 12_000_000,
     parameter FRAME_PERIOD_MS = 10,
     parameter GRID_SIZE       = 16,
@@ -105,31 +105,74 @@ module spatio_temporal_classifier #(
     end
 
     assign ts_read_addr   = scan_addr;
-    assign ts_read_enable = scan_active && (scan_addr < ADDR_BITS'(NUM_CELLS));
+    // NUM_CELLS can equal 2^ADDR_BITS (e.g., 256 with 8-bit addresses),
+    // so comparing against ADDR_BITS'(NUM_CELLS) would wrap to 0.
+    assign ts_read_enable = scan_active && (scan_addr <= ADDR_BITS'(NUM_CELLS - 1));
 
     logic [ADDR_BITS-1:0]               w_addr;
     logic [NUM_CLASSES*WEIGHT_BITS-1:0] w_data_flat;
     logic signed [WEIGHT_BITS-1:0]      w0, w1, w2, w3;
 
-    weight_rom #(.CLASS_IDX(0), .NUM_CLASSES(NUM_CLASSES),
-                 .NUM_CELLS(NUM_CELLS), .GRID_SIZE(GRID_SIZE),
-                 .WEIGHT_BITS(WEIGHT_BITS)) u_wrom0 (
-        .clk(clk), .rst(rst), .cell_addr(w_addr), .dout(w0));
+    // Four single-port weight RAMs (one per class)
+    weight_ram #(
+        .CLASS_IDX  (0),
+        .NUM_CLASSES(NUM_CLASSES),
+        .NUM_CELLS  (NUM_CELLS),
+        .GRID_SIZE  (GRID_SIZE),
+        .WEIGHT_BITS(WEIGHT_BITS)
+    ) u_wram0 (
+        .clk      (clk),
+        .rst      (rst),
+        .we       (1'b0),
+        .cell_addr(w_addr),
+        .din      ('0),
+        .dout     (w0)
+    );
 
-    weight_rom #(.CLASS_IDX(1), .NUM_CLASSES(NUM_CLASSES),
-                 .NUM_CELLS(NUM_CELLS), .GRID_SIZE(GRID_SIZE),
-                 .WEIGHT_BITS(WEIGHT_BITS)) u_wrom1 (
-        .clk(clk), .rst(rst), .cell_addr(w_addr), .dout(w1));
+    weight_ram #(
+        .CLASS_IDX  (1),
+        .NUM_CLASSES(NUM_CLASSES),
+        .NUM_CELLS  (NUM_CELLS),
+        .GRID_SIZE  (GRID_SIZE),
+        .WEIGHT_BITS(WEIGHT_BITS)
+    ) u_wram1 (
+        .clk      (clk),
+        .rst      (rst),
+        .we       (1'b0),
+        .cell_addr(w_addr),
+        .din      ('0),
+        .dout     (w1)
+    );
 
-    weight_rom #(.CLASS_IDX(2), .NUM_CLASSES(NUM_CLASSES),
-                 .NUM_CELLS(NUM_CELLS), .GRID_SIZE(GRID_SIZE),
-                 .WEIGHT_BITS(WEIGHT_BITS)) u_wrom2 (
-        .clk(clk), .rst(rst), .cell_addr(w_addr), .dout(w2));
+    weight_ram #(
+        .CLASS_IDX  (2),
+        .NUM_CLASSES(NUM_CLASSES),
+        .NUM_CELLS  (NUM_CELLS),
+        .GRID_SIZE  (GRID_SIZE),
+        .WEIGHT_BITS(WEIGHT_BITS)
+    ) u_wram2 (
+        .clk      (clk),
+        .rst      (rst),
+        .we       (1'b0),
+        .cell_addr(w_addr),
+        .din      ('0),
+        .dout     (w2)
+    );
 
-    weight_rom #(.CLASS_IDX(3), .NUM_CLASSES(NUM_CLASSES),
-                 .NUM_CELLS(NUM_CELLS), .GRID_SIZE(GRID_SIZE),
-                 .WEIGHT_BITS(WEIGHT_BITS)) u_wrom3 (
-        .clk(clk), .rst(rst), .cell_addr(w_addr), .dout(w3));
+    weight_ram #(
+        .CLASS_IDX  (3),
+        .NUM_CLASSES(NUM_CLASSES),
+        .NUM_CELLS  (NUM_CELLS),
+        .GRID_SIZE  (GRID_SIZE),
+        .WEIGHT_BITS(WEIGHT_BITS)
+    ) u_wram3 (
+        .clk      (clk),
+        .rst      (rst),
+        .we       (1'b0),
+        .cell_addr(w_addr),
+        .din      ('0),
+        .dout     (w3)
+    );
 
     assign w_data_flat = {w3, w2, w1, w0};
 

@@ -3,7 +3,7 @@
 // Parallel-input systolic matrix multiply for feature classification.
 // Processes PARALLEL_INPUTS cells per cycle; total cycles = ceil(NUM_CELLS / PARALLEL_INPUTS).
 
-module SystolicMatrixMultiply #(
+module systolic_array #(
     parameter NUM_CLASSES    = 4,
     parameter NUM_CELLS      = 1024,
     parameter VALUE_BITS     = 6,
@@ -42,6 +42,7 @@ module SystolicMatrixMultiply #(
 
     logic signed [ACC_BITS-1:0] acc   [0:NUM_CLASSES-1];
     logic signed [ACC_BITS-1:0] acc_r [0:NUM_CLASSES-1];
+    logic signed [ACC_BITS-1:0] acc_tmp [0:NUM_CLASSES-1];
 
     logic [PARALLEL_INPUTS*VALUE_BITS-1:0] feat_pipe_r;
     logic                                   pipe_valid_r;
@@ -76,6 +77,8 @@ module SystolicMatrixMultiply #(
     endgenerate
 
     logic signed [ACC_BITS-1:0] max_score;
+    logic signed [ACC_BITS-1:0] max_tmp;
+    logic [1:0]                 best_tmp;
     integer k, i;
 
     always_ff @(posedge clk) begin
@@ -116,14 +119,20 @@ module SystolicMatrixMultiply #(
 
                     // Accumulate the pipelined data; acc_cnt tracks which batch this is
                     if (pipe_valid_r) begin
+                        for (k = 0; k < NUM_CLASSES; k = k + 1)
+                            acc_tmp[k] = acc[k];
+
                         for (int p = 0; p < PARALLEL_INPUTS; p = p + 1) begin
                             if ((acc_cnt * PARALLEL_INPUTS + p) < NUM_CELLS) begin
                                 for (k = 0; k < NUM_CLASSES; k = k + 1) begin
-                                    acc[k] <= acc[k] +
+                                    acc_tmp[k] = acc_tmp[k] +
                                         ACC_BITS'($signed({1'b0, feat_vals[p]}) * $signed(w[p][k]));
                                 end
                             end
                         end
+                        for (k = 0; k < NUM_CLASSES; k = k + 1)
+                            acc[k] <= acc_tmp[k];
+
                         acc_cnt <= acc_cnt + 1'b1;
                     end
 
@@ -143,14 +152,19 @@ module SystolicMatrixMultiply #(
                 S_DRAIN: begin
                     // Drain the last pipelined batch
                     if (pipe_valid_r) begin
+                        for (k = 0; k < NUM_CLASSES; k = k + 1)
+                            acc_tmp[k] = acc[k];
+
                         for (int p = 0; p < PARALLEL_INPUTS; p = p + 1) begin
                             if ((acc_cnt * PARALLEL_INPUTS + p) < NUM_CELLS) begin
                                 for (k = 0; k < NUM_CLASSES; k = k + 1) begin
-                                    acc[k] <= acc[k] +
+                                    acc_tmp[k] = acc_tmp[k] +
                                         ACC_BITS'($signed({1'b0, feat_vals[p]}) * $signed(w[p][k]));
                                 end
                             end
                         end
+                        for (k = 0; k < NUM_CLASSES; k = k + 1)
+                            acc[k] <= acc_tmp[k];
                     end
                     pipe_valid_r <= 1'b0;
                     state        <= S_ARGMAX;
@@ -160,14 +174,16 @@ module SystolicMatrixMultiply #(
                     for (k = 0; k < NUM_CLASSES; k = k + 1)
                         acc_r[k] <= acc[k];
 
-                    max_score  <= acc[0];
-                    best_class <= 2'd0;
+                    max_tmp  = acc[0];
+                    best_tmp = 2'd0;
                     for (i = 1; i < NUM_CLASSES; i = i + 1) begin
-                        if ($signed(acc[i]) > $signed(max_score)) begin
-                            max_score  <= acc[i];
-                            best_class <= 2'(i);
+                        if ($signed(acc[i]) > $signed(max_tmp)) begin
+                            max_tmp  = acc[i];
+                            best_tmp = i[1:0];
                         end
                     end
+                    max_score  <= max_tmp;
+                    best_class <= best_tmp;
 
                     result_valid <= 1'b1;
                     state        <= S_IDLE;

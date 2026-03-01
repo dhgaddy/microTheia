@@ -1,13 +1,17 @@
-// Top-level for voxel-bin DVS gesture accelerator — raw UART sensor input.
-// Events arrive as 5-byte UART packets [X_HI, X_LO, Y_HI, Y_LO, POL];
-// control bytes 0xFF/FE/FD/FC provide echo/status/config/reset.
+// Top-level for voxel-bin DVS gesture accelerator with raw EVT2.0 UART input.
+// Events arrive as a stream of 32-bit EVT2.0 words over UART (4 bytes
+// per word, MSB first). This module handles UART RX/TX and control,
+// then feeds EVT2 words to voxel_bin_core, which owns the full
+// classifier pipeline:
+//   input_fifo → evt2_decoder → voxel_binning → systolic_array → gesture_classifier.
+// Control bytes 0xFF/FE/FD/FC provide echo/status/config/reset.
 // TX: [0xA0|gesture, confidence] on detection.
 // No external reset pin; power-on reset and soft-reset are generated internally.
 // Target: Lattice iCE40UP5K on iCEBreaker board.
 
 `timescale 1ns/1ps
 
-module voxel_bin_raw_top #(
+module voxel_bin_top #(
     parameter CLK_FREQ          = 12_000_000,
     parameter BAUD_RATE         = 115200,
     parameter WINDOW_MS         = 400,
@@ -15,8 +19,10 @@ module voxel_bin_raw_top #(
     parameter SENSOR_RES        = 320,
     parameter MIN_EVENT_THRESH  = 20,
     parameter MOTION_THRESH     = 8,
-    parameter PERSISTENCE_COUNT = 1,
-    parameter CYCLES_PER_BIN    = 600
+    parameter PERSISTENCE_COUNT = 2,
+    parameter CYCLES_PER_BIN    = 0,
+    // Keep top-level synthesis BRAM usage within iCE40UP5K limits.
+    parameter CORE_PARALLEL_READS = 2
 )(
     input  logic clk,
     input  logic uart_rx,
@@ -31,6 +37,9 @@ module voxel_bin_raw_top #(
 );
 
     localparam CLKS_PER_BIT = CLK_FREQ / BAUD_RATE;
+    localparam integer BYTE_CYCLES = CLKS_PER_BIT * 10;
+    localparam integer CMD_GAP_BYTES = 2;
+    localparam integer CMD_GAP_CYCLES = BYTE_CYCLES * CMD_GAP_BYTES;
 
     reg [4:0] por_cnt = 5'd0;
     wire rst_por = ~&por_cnt;
@@ -65,33 +74,28 @@ module voxel_bin_raw_top #(
     logic [2:0]  debug_state;
     logic        debug_fifo_empty;
     logic        debug_fifo_full;
-    logic        event_ready;
+    logic        core_evt_ready;
+    logic        core_temporal_phase;
 
-    logic        event_valid;
-    logic [8:0]  event_x, event_y;
-    logic        event_polarity;
-    logic [15:0] event_ts;
+    logic [31:0] core_evt_word;
+    logic        core_evt_valid;
 
-    logic        accel_temporal_phase;
-
-    dvs_gesture_accel #(
+    voxel_bin_core #(
         .CLK_FREQ_HZ       (CLK_FREQ),
         .WINDOW_MS         (WINDOW_MS),
         .GRID_SIZE         (GRID_SIZE),
-        .SENSOR_RES        (SENSOR_RES),
+        .FIFO_DEPTH        (128),
         .MIN_EVENT_THRESH  (MIN_EVENT_THRESH),
         .MOTION_THRESH     (MOTION_THRESH),
         .PERSISTENCE_COUNT (PERSISTENCE_COUNT),
-        .CYCLES_PER_BIN    (CYCLES_PER_BIN)
-    ) u_accel (
+        .CYCLES_PER_BIN    (CYCLES_PER_BIN),
+        .PARALLEL_READS    (CORE_PARALLEL_READS)
+    ) u_core (
         .clk                 (clk),
         .rst                 (rst),
-        .event_valid         (event_valid),
-        .event_x             (event_x),
-        .event_y             (event_y),
-        .event_polarity      (event_polarity),
-        .event_ts            (event_ts),
-        .event_ready         (event_ready),
+        .evt_word            (core_evt_word),
+        .evt_word_valid      (core_evt_valid),
+        .evt_word_ready      (core_evt_ready),
         .gesture             (gesture),
         .gesture_valid       (gesture_valid),
         .gesture_confidence  (gesture_confidence),
@@ -99,7 +103,7 @@ module voxel_bin_raw_top #(
         .debug_state         (debug_state),
         .debug_fifo_empty    (debug_fifo_empty),
         .debug_fifo_full     (debug_fifo_full),
-        .debug_temporal_phase(accel_temporal_phase)
+        .debug_temporal_phase(core_temporal_phase)
     );
 
     // Heartbeat ~3 Hz
@@ -148,23 +152,27 @@ module voxel_bin_raw_top #(
 
     // Activity LED
     logic [17:0] activity_led_cnt;
+    wire evt_word_accepted = core_evt_valid && core_evt_ready;
+
     always @(posedge clk) begin
         if (rst)
             activity_led_cnt <= '0;
-        else if (event_valid)
+        else if (evt_word_accepted)
             activity_led_cnt <= {18{1'b1}};
         else if (activity_led_cnt > 0)
             activity_led_cnt <= activity_led_cnt - 1'b1;
     end
     assign led_activity = ~(activity_led_cnt > 0);
 
-    typedef enum logic [2:0] {
-        PKT_X_HI, PKT_X_LO, PKT_Y_HI, PKT_Y_LO, PKT_POL
+    typedef enum logic [1:0] {
+        PKT_B0, PKT_B1, PKT_B2, PKT_B3
     } pkt_state_t;
 
     pkt_state_t pkt_state;
-    logic [8:0]  pkt_x, pkt_y;
-    logic [15:0] pkt_ts;
+    logic [31:0] word_shift;
+
+    logic [31:0] uart_evt_word;
+    logic        uart_evt_pending;
 
     typedef enum logic [3:0] {
         TX_IDLE,
@@ -182,26 +190,20 @@ module voxel_bin_raw_top #(
     logic [1:0] pending_gesture;
     logic [3:0] pending_confidence;
     logic [2:0] pending_state;
+    localparam integer IDLE_CNT_BITS = $clog2(CMD_GAP_CYCLES + 1);
+    logic [IDLE_CNT_BITS-1:0] rx_idle_cycles;
+    logic command_allowed;
 
-    logic [15:0] ts_counter;
-    always @(posedge clk) begin
-        if (rst)
-            ts_counter <= '0;
-        else
-            ts_counter <= ts_counter + 1'b1;
-    end
+    assign core_evt_word  = uart_evt_word;
+    assign core_evt_valid = uart_evt_pending;
+    assign command_allowed = (rx_idle_cycles >= IDLE_CNT_BITS'(CMD_GAP_CYCLES));
 
     always @(posedge clk) begin
         if (rst) begin
-            pkt_state          <= PKT_X_HI;
-            pkt_x              <= 9'd0;
-            pkt_y              <= 9'd0;
-            pkt_ts             <= 16'd0;
-            event_valid        <= 1'b0;
-            event_x            <= 9'd0;
-            event_y            <= 9'd0;
-            event_polarity     <= 1'b0;
-            event_ts           <= 16'd0;
+            pkt_state          <= PKT_B0;
+            word_shift         <= 32'd0;
+            uart_evt_word      <= 32'd0;
+            uart_evt_pending   <= 1'b0;
             tx_state           <= TX_IDLE;
             tx_data            <= 8'd0;
             tx_valid           <= 1'b0;
@@ -209,42 +211,79 @@ module voxel_bin_raw_top #(
             pending_confidence <= 4'd0;
             pending_state      <= 3'd0;
             soft_rst           <= 1'b0;
+            rx_idle_cycles     <= IDLE_CNT_BITS'(CMD_GAP_CYCLES);
         end else begin
-            event_valid <= 1'b0;
-            tx_valid    <= 1'b0;
-            soft_rst    <= 1'b0;
+            tx_valid <= 1'b0;
+            soft_rst <= 1'b0;
+
+            if (rx_valid)
+                rx_idle_cycles <= '0;
+            else if (!command_allowed)
+                rx_idle_cycles <= rx_idle_cycles + 1'b1;
+
+            if (uart_evt_pending && core_evt_ready)
+                uart_evt_pending <= 1'b0;
 
             if (rx_valid) begin
                 case (pkt_state)
-                    PKT_X_HI: begin
+                    // First byte of EVT2 word, or command byte.
+                    PKT_B0: begin
                         case (rx_data)
-                            8'hFF: if (tx_state == TX_IDLE) tx_state <= TX_ECHO;
+                            8'hFF: if (command_allowed && tx_state == TX_IDLE) tx_state <= TX_ECHO;
+                                   else begin
+                                       word_shift[31:24] <= rx_data;
+                                       pkt_state          <= PKT_B1;
+                                   end
                             8'hFE: if (tx_state == TX_IDLE) begin
-                                pending_state <= debug_state;
-                                tx_state <= TX_STATUS;
-                            end
-                            8'hFD: if (tx_state == TX_IDLE) tx_state <= TX_CONFIG_1;
-                            8'hFC: soft_rst <= 1'b1;
+                                       if (command_allowed) begin
+                                           pending_state <= debug_state;
+                                           tx_state      <= TX_STATUS;
+                                       end else begin
+                                           word_shift[31:24] <= rx_data;
+                                           pkt_state          <= PKT_B1;
+                                       end
+                                   end else begin
+                                       word_shift[31:24] <= rx_data;
+                                       pkt_state          <= PKT_B1;
+                                   end
+                            8'hFD: if (command_allowed && tx_state == TX_IDLE) tx_state <= TX_CONFIG_1;
+                                   else begin
+                                       word_shift[31:24] <= rx_data;
+                                       pkt_state          <= PKT_B1;
+                                   end
+                            8'hFC: if (command_allowed) soft_rst <= 1'b1;
+                                   else begin
+                                       word_shift[31:24] <= rx_data;
+                                       pkt_state          <= PKT_B1;
+                                   end
                             default: begin
-                                pkt_x[8]  <= rx_data[0];
-                                pkt_state <= PKT_X_LO;
+                                word_shift[31:24] <= rx_data;
+                                pkt_state          <= PKT_B1;
                             end
                         endcase
                     end
-                    PKT_X_LO: begin pkt_x[7:0] <= rx_data; pkt_state <= PKT_Y_HI; end
-                    PKT_Y_HI: begin pkt_y[8]   <= rx_data[0]; pkt_state <= PKT_Y_LO; end
-                    PKT_Y_LO: begin pkt_y[7:0] <= rx_data; pkt_state <= PKT_POL; end
-                    PKT_POL: begin
-                        if (event_ready) begin
-                            event_x        <= pkt_x;
-                            event_y        <= pkt_y;
-                            event_polarity <= rx_data[0];
-                            event_ts       <= ts_counter;
-                            event_valid    <= 1'b1;
-                        end
-                        pkt_state <= PKT_X_HI;
+
+                    // Second and third bytes of EVT2 word.
+                    PKT_B1: begin
+                        word_shift[23:16] <= rx_data;
+                        pkt_state         <= PKT_B2;
                     end
-                    default: pkt_state <= PKT_X_HI;
+                    PKT_B2: begin
+                        word_shift[15:8] <= rx_data;
+                        pkt_state        <= PKT_B3;
+                    end
+
+                    // Fourth byte of EVT2 word: complete the 32-bit word.
+                    PKT_B3: begin
+                        if (!uart_evt_pending) begin
+                            word_shift[7:0]  <= rx_data;
+                            uart_evt_word    <= {word_shift[31:8], rx_data};
+                            uart_evt_pending <= 1'b1;
+                        end
+                        pkt_state <= PKT_B0;
+                    end
+
+                    default: pkt_state <= PKT_B0;
                 endcase
             end
 
@@ -267,7 +306,7 @@ module voxel_bin_raw_top #(
 
                 TX_STATUS: begin
                     if (!tx_busy) begin
-                        tx_data  <= {4'b1011, accel_temporal_phase, debug_fifo_full, debug_fifo_empty, 1'b0};
+                        tx_data  <= {4'b1011, core_temporal_phase, debug_fifo_full, debug_fifo_empty, 1'b0};
                         tx_valid <= 1'b1;
                         tx_state <= TX_IDLE;
                     end
