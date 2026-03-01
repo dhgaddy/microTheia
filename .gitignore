@@ -379,3 +379,9 @@ sim_build/
 final/
 img/
 *.lyrdb
+
+# synth_sv
+synth/*.log
+synth/*.asc
+synth/*.bit
+synth/*.json
