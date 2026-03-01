@@ -3,8 +3,27 @@
 # gf180 tags
 .PHONY: all sim-gl clone-pdk librelane librelane-nodrc librelane-klayoutdrc librelane-magicdrc librelane-openroad librelane-klayout librelane-padring sim-gl sim-view copy-final render-image
 
+# Debug
+.PHONY: print-duts
+
+SIM ?= verilator
 RTL_DIR := src/rtl
+RTL_F := $(RTL_DIR)/rtl.f
 CHISEL_RTL_DIR := src/rtl/chisel-verilog
+COCOTB_LOG_LEVEL ?= INFO
+WAVES ?= 1
+
+# Extract only top-level modules (ignore chisel -f includes)
+ALL_DUTS = $(shell \
+	awk '!/^#/ && !/^-f/ && /\.sv/ {print $$1}' $(RTL_F) | \
+	xargs -n1 basename | \
+	sed 's/\.sv//')
+
+ifeq ($(strip $(DUT)),)
+SIM_DUTS = $(ALL_DUTS)
+else
+SIM_DUTS = $(DUT)
+endif
 
 # GF180 Stuff
 MAKEFILE_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
@@ -42,8 +61,43 @@ help: ## Show this help message
 lint: ## Lint the RTL
 	verilator lint.vlt -f $(RTL_DIR)/rtl.f --lint-only --top top
 
+print-duts:
+	@echo "RTL_F = $(RTL_F)"
+	@echo "ALL_DUTS = $(ALL_DUTS)"
+	@echo "SIM_DUTS = $(SIM_DUTS)"
+
 sim: ## Run RTL simulation with cocotb
-	cd cocotb; PDK_ROOT=${PDK_ROOT} PDK=${PDK} SLOT=${SLOT} python3 chip_top_tb.py
+	@if [ -z "$(SIM_DUTS)" ]; then \
+		echo "ERROR: No DUTs found from $(RTL_F)"; \
+		exit 1; \
+	fi
+	@for d in $(SIM_DUTS); do \
+		echo "===================================================="; \
+		echo " Running DUT=$$d"; \
+		echo "===================================================="; \
+		\
+		RTL_PATH=$$(grep "/$$d\.sv" $(RTL_F) | head -n1); \
+		if [ -z "$$RTL_PATH" ]; then \
+			echo "ERROR: Could not find $$d in $(RTL_F)"; \
+			exit 1; \
+		fi; \
+		\
+		SUBDIR=$$(echo $$RTL_PATH | awk -F'/' '{print $$3}'); \
+		TEST_DIR=cocotb/$$SUBDIR; \
+		\
+		echo "RTL Path: $$RTL_PATH"; \
+		echo "Test Dir: $$TEST_DIR"; \
+		\
+		TOPLEVEL=$$d \
+		MODULE=test_$$d \
+		SIM=$(SIM) \
+		VERILOG_SOURCES="$$(grep '\.sv' $(RTL_F) | grep -v '^\s*#' | grep -v '^\s*-f')" \
+		PYTHONPATH=$$TEST_DIR \
+		COCOTB_LOG_LEVEL=$(COCOTB_LOG_LEVEL) \
+		WAVES=$(WAVES) \
+		SIM_BUILD=sim_build_$$d \
+		make -f $$(cocotb-config --makefiles)/Makefile.sim || exit 1; \
+	done
 
 synth: synth/icestorm_icebreaker/build/icebreaker.bit ## Synthesize for iCEBreaker
 

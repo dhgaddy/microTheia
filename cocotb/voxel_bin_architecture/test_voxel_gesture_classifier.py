@@ -243,5 +243,3 @@ async def test_golden_model_random(dut):
             dy,
             f"random-cycle-{cycle}",
         )
-
-
