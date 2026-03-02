@@ -400,3 +400,5 @@ synth/*.log
 synth/*.asc
 synth/*.bit
 synth/*.json
+
+results.xml

@@ -17,8 +17,7 @@
         "technosophos.vscode-make",
         "rashwell.tcl",
         "mshr-h.veriloghdl",
-        "ms-python.python",
-        "scala-lang.scala"
+        "ms-python.python"
       ]
     }
   }
