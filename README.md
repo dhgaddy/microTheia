@@ -127,7 +127,6 @@ https://github.com/Jilin-Zhang/ASYNC-Chisel
 - gradient_map_top
 - voxel_bin_core
 - voxel_bin_top
-- voxel_binning
 
 
 - complete parameterization of gradient_map_core, gradient_map_top, voxel_bin_core, voxel_bin_top
@@ -137,4 +136,5 @@ https://github.com/Jilin-Zhang/ASYNC-Chisel
 - clean up the README in scripts
 - add the new python files in scripts and have instructions on how to run
 - include a weights folder for storing the weights we use
-- include a link a google drive storing the 
+- include a link a google drive storing the video recordings
+- include the ice40 stuff and instructions

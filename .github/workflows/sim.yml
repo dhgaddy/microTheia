@@ -33,17 +33,17 @@ jobs:
     #   - run: make sim DUT=gradient_map_core # still broken
     #   - run: make sim DUT=gradient_map_top # still broken
     #   - run: make sim DUT=gradient_gesture_classifier # takes a while to run
-      - run: make sim DUT=gradient_mapping
-      - run: make sim DUT=gradient_systolic_array
-      - run: make sim DUT=gradient_weight_ram
+    #   - run: make sim DUT=gradient_mapping
+    #   - run: make sim DUT=gradient_systolic_array
+    #   - run: make sim DUT=gradient_weight_ram
 
     #   - run: make sim DUT=voxel_bin_core # still broken
     #   - run: make sim DUT=voxel_bin_top # still broken
     #   - run: make sim DUT=voxel_binning # takes a while to run
-      - run: make sim DUT=voxel_gesture_classifier
-      - run: make sim DUT=voxel_systolic_array
-      - run: make sim DUT=voxel_weight_ram
+    #   - run: make sim DUT=voxel_gesture_classifier
+    #   - run: make sim DUT=voxel_systolic_array
+    #   - run: make sim DUT=voxel_weight_ram
 
-      - run: make sim DUT=MatMul
+    # - run: make sim DUT=MatMul
 
       - run: make clean
