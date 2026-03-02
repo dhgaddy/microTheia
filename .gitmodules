@@ -1,3 +1,0 @@
-[submodule "third_party/ASYNC-Chisel"]
-	path = third_party/ASYNC-Chisel
-	url = https://github.com/Jilin-Zhang/ASYNC-Chisel.git
