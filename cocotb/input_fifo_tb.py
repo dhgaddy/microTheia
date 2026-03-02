@@ -5,10 +5,9 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 import random
 
-DEPTH = 8
-PTR_BITS = 3
+DEPTH = 128
+PTR_BITS = 7
 DATA_WIDTH = 32
-
 
 # ---------------------------------------------------------------------------
 # Golden reference model
@@ -234,8 +233,13 @@ async def test_wraparound_ordering(dut):
         await RisingEdge(dut.clk)
         drained.append(int(dut.rd_data.value))
 
-    assert popped == [1, 2, 3, 4], f"Unexpected popped values: {popped}"
-    assert drained == [5, 6, 7, 8, 100, 101, 102, 103], \
+    expected_popped = list(range(1, DEPTH // 2 + 1))
+    assert popped == expected_popped, f"Unexpected popped values: {popped}"
+    expected_remaining = list(range(DEPTH // 2 + 1, DEPTH + 1))
+    expected_new = [100 + i for i in range(DEPTH // 2)]
+    expected_drained = expected_remaining + expected_new
+
+    assert drained == expected_drained, \
         f"Unexpected drained ordering: {drained}"
 
 
