@@ -6,25 +6,25 @@
 // -> SystolicMatrixMultiply + weight_ram -> OutputRegister
 
 module voxel_bin_core #(
-    parameter CLK_FREQ_HZ        = 12_000_000,
-    parameter WINDOW_MS          = 400,
-    parameter GRID_SIZE          = 16,
-    parameter FIFO_DEPTH         = 128,
-    parameter MIN_EVENT_THRESH   = 20, // UNUSED PARAMETER
-    parameter MOTION_THRESH      = 8,  // UNUSED PARAMETER
-    parameter PERSISTENCE_COUNT  = 2,
-    parameter CYCLES_PER_BIN     = 0,
-    parameter PARALLEL_READS     = 4,
-    parameter COUNTER_BITS       = 6,
-    parameter VALUE_BITS         = 6,
-    parameter NUM_CLASSES        = 4,
-    parameter NUM_BINS           = 4,
-    parameter READOUT_BINS       = 4,
-    parameter NUM_CELLS          = NUM_BINS * GRID_SIZE * GRID_SIZE,
-    parameter WEIGHT_BITS        = 8,
-    parameter ACC_BITS           = 24,
-    parameter MIN_SCORE_THRESH   = 30,
-    parameter ACC_SUM_BITS       = 18
+    parameter  CLK_FREQ_HZ        = 12_000_000,
+    parameter  WINDOW_MS          = 400,
+    parameter  GRID_SIZE          = 16,
+    parameter  FIFO_DEPTH         = 128,
+    parameter  MIN_EVENT_THRESH   = 20, // UNUSED PARAMETER
+    parameter  MOTION_THRESH      = 8,  // UNUSED PARAMETER
+    parameter  PERSISTENCE_COUNT  = 2,
+    parameter  CYCLES_PER_BIN     = 0,
+    parameter  PARALLEL_READS     = 4,
+    parameter  COUNTER_BITS       = 6,
+    parameter  VALUE_BITS         = 6,
+    parameter  NUM_CLASSES        = 4,
+    parameter  NUM_BINS           = 4,
+    parameter  READOUT_BINS       = 4,
+    localparam NUM_CELLS          = NUM_BINS * GRID_SIZE * GRID_SIZE,
+    parameter  WEIGHT_BITS        = 8,
+    parameter  ACC_BITS           = 24,
+    parameter  MIN_SCORE_THRESH   = 30,
+    parameter  ACC_SUM_BITS       = 18
 )(
     input  logic        clk,
     input  logic        rst,
@@ -154,7 +154,8 @@ module voxel_bin_core #(
 
     voxel_systolic_array #(
         .NUM_CLASSES   (NUM_CLASSES),
-        .NUM_CELLS     (NUM_CELLS),
+        .NUM_BINS      (NUM_BINS),
+        .GRID_SIZE     (GRID_SIZE),
         .VALUE_BITS    (VALUE_BITS),
         .WEIGHT_BITS   (WEIGHT_BITS),
         .ACC_BITS      (ACC_BITS),
@@ -185,7 +186,7 @@ module voxel_bin_core #(
             for (k = 0; k < NUM_CLASSES; k = k + 1) begin : gen_class_rams
                 voxel_weight_ram #(
                     .CLASS_IDX  (k),
-                    .NUM_CELLS  (NUM_CELLS),
+                    .NUM_BINS   (NUM_BINS),
                     .GRID_SIZE  (GRID_SIZE),
                     .WEIGHT_BITS(WEIGHT_BITS)
                 ) u_weight_ram (

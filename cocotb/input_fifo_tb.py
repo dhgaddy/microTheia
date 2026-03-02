@@ -4,11 +4,13 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 import random
+from config_parser import load_config
 
+CFG = load_config()
 
-FIFO_DEPTH = 128
+FIFO_DEPTH = CFG["FIFO_DEPTH"]
 PTR_BITS   = FIFO_DEPTH.bit_length() - 1
-DATA_WIDTH = 32
+DATA_WIDTH = CFG["DATA_WIDTH"]
 
 # ---------------------------------------------------------------------------
 # Golden reference model

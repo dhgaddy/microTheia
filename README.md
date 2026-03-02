@@ -65,10 +65,10 @@ The underlying simulator is Icarus Verilog (https://github.com/steveicarus/iveri
 The testbenchs are located in `cocotb`. To run the RTL simulation, run the following command:
 
 ```
-make sim DUT=module_name
+make sim DUT=module_name CONFIG=config_name
 ```
 
-If a design name isn't provided the simulation of all modules will be done instead.
+If a design name isn't provided the simulation of all modules will be done instead. If CONFIG isn't provided it will default to voxel_default.txt. Configs are stored in the configs folder.
 
 To run the GL (gate-level) simulation, run the following command:
 
@@ -138,3 +138,5 @@ https://github.com/Jilin-Zhang/ASYNC-Chisel
 - include a weights folder for storing the weights we use
 - include a link a google drive storing the video recordings
 - include the ice40 stuff and instructions
+- GRID_BITS and whatever calculated localparams should be localparams and not passed through
+- move all localparams out from the top definition

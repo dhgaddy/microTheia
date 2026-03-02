@@ -9,9 +9,12 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 import random
+from config_parser import load_config
 
-GRID_BITS = 4
+CFG = load_config()
 
+GRID_SIZE = CFG["GRID_SIZE"]
+GRID_BITS = GRID_SIZE.bit_length() - 1
 
 # ---------------------------------------------------------------------------
 # Golden reference model

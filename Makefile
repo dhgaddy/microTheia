@@ -23,8 +23,10 @@ endif
 
 .DEFAULT_GOAL := help
 
-# NEW
+# NEW ----------------------------------------------------------------------------
 SIM_DUTS = $(if $(strip $(DUT)),$(DUT),$(basename $(notdir $(wildcard src/*.sv))))
+
+SV_SRCS := $(shell find src -name "*.sv")
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -32,6 +34,16 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
 .PHONY: help
+
+# Default configuration
+CONFIG ?= voxel_default
+CONFIG_FILE := configs/$(CONFIG).txt
+
+# Ensure config exists
+ifeq ($(wildcard $(CONFIG_FILE)),)
+$(error Config file $(CONFIG_FILE) does not exist)
+endif
+# ---------------------------------------------------------------------------------
 
 all: librelane ## Build the project (runs LibreLane)
 .PHONY: all
@@ -69,8 +81,6 @@ librelane-padring: ## Only create the padring
 	PDK_ROOT=${PDK_ROOT} PDK=${PDK} python3 scripts/padring.py librelane/slots/slot_${SLOT}.yaml librelane/config.yaml
 .PHONY: librelane-padring
 
-SV_SRCS := $(shell find src -name "*.sv")
-
 lint: ## Lint all SystemVerilog files in src
 	verilator --lint-only \
 	          -Wall \
@@ -94,12 +104,14 @@ sim: ## Run RTL simulation with cocotb
 		else \
 			SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv"; \
 		fi; \
+		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m config_parser $$d); \
 		TOPLEVEL=$$d \
 		TOPLEVEL_LANG=verilog \
 		COCOTB_TEST_MODULES=$${d}_tb \
 		VERILOG_SOURCES="$$SRCS" \
-		IVERILOG_ARGS="-s $$d" \
+		COMPILE_ARGS="$$PARAMS" \
 		PYTHONPATH=cocotb \
+		SIM_CONFIG=$(CONFIG_FILE) \
 		make -f $$(cocotb-config --makefiles)/Makefile.sim || exit 1; \
 	done
 .PHONY: sim
@@ -112,6 +124,27 @@ sim-view: ## View simulation waveforms in GTKWave
 	gtkwave cocotb/sim_build/chip_top.fst
 .PHONY: sim-view
 
+sim-test:
+	$(MAKE) sim DUT=evt2_decoder
+	$(MAKE) sim DUT=input_fifo
+	$(MAKE) sim DUT=uart_debug
+	$(MAKE) sim DUT=uart_rx
+	$(MAKE) sim DUT=uart_tx
+	$(MAKE) sim DUT=MatMul
+	$(MAKE) sim DUT=voxel_gesture_classifier
+	$(MAKE) sim DUT=voxel_systolic_array
+	$(MAKE) sim DUT=voxel_weight_ram
+#	$(MAKE) sim DUT=voxel_binning # takes a while to run
+#	$(MAKE) sim DUT=voxel_bin_core # still broken
+#	$(MAKE) sim DUT=voxel_bin_top # still broken
+#	$(MAKE) sim DUT=gradient_map_core CONFIG=gradient_default# still broken
+#	$(MAKE) sim DUT=gradient_map_top CONFIG=gradient_default# still broken
+#	$(MAKE) sim DUT=gradient_gesture_classifier CONFIG=gradient_default# takes a while to run
+#	$(MAKE) sim DUT=gradient_mapping CONFIG=gradient_default
+#	$(MAKE) sim DUT=gradient_systolic_array CONFIG=gradient_default
+#	$(MAKE) sim DUT=gradient_weight_ram CONFIG=gradient_default
+.PHONY: sim-test
+
 copy-final: ## Copy final output files from the last run
 	rm -rf final/
 	cp -r librelane/runs/${RUN_TAG}/final/ final/
@@ -123,5 +156,5 @@ render-image: ## Render an image from the final layout (after copy-final)
 .PHONY: copy-final
 
 clean: ## Cleans the generated files
-	rm -rf results.xml
+	rm -rf results.xml sim_build/
 .PHONY: clean

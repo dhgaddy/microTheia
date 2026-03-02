@@ -12,28 +12,27 @@
 `timescale 1ns/1ps
 
 module voxel_bin_top #(
-    parameter CLK_FREQ_HZ         = 12_000_000,
-    parameter BAUD_RATE           = 115200,
-    parameter WINDOW_MS           = 400,
-    parameter GRID_SIZE           = 16,
-    parameter SENSOR_RES          = 320,
-    parameter PERSISTENCE_COUNT   = 2,
-    parameter CYCLES_PER_BIN      = 0,
+    parameter  CLK_FREQ_HZ         = 12_000_000,
+    parameter  BAUD_RATE           = 115200,
+    parameter  WINDOW_MS           = 400,
+    parameter  GRID_SIZE           = 16,
+    parameter  SENSOR_RES          = 320,
+    parameter  PERSISTENCE_COUNT   = 2,
+    parameter  CYCLES_PER_BIN      = 0,
     // Keep top-level synthesis BRAM usage within iCE40UP5K limits.
-    parameter CORE_PARALLEL_READS = 2,
-    parameter FIFO_DEPTH          = 128,
-    parameter MIN_EVENT_THRESH    = 20, // UNUSED PARAMETER
-    parameter MOTION_THRESH       = 8,  // UNUSED PARAMETER
-    parameter COUNTER_BITS        = 6,
-    parameter VALUE_BITS          = 6,
-    parameter NUM_CLASSES         = 4,
-    parameter NUM_BINS            = 4,
-    parameter READOUT_BINS        = 4,
-    parameter NUM_CELLS           = NUM_BINS * GRID_SIZE * GRID_SIZE,
-    parameter WEIGHT_BITS         = 8,
-    parameter ACC_BITS            = 24,
-    parameter MIN_SCORE_THRESH    = 30,
-    parameter ACC_SUM_BITS        = 18
+    parameter  PARALLEL_READS      = 2,
+    parameter  FIFO_DEPTH          = 128,
+    parameter  MIN_EVENT_THRESH    = 20, // UNUSED PARAMETER
+    parameter  MOTION_THRESH       = 8,  // UNUSED PARAMETER
+    parameter  COUNTER_BITS        = 6,
+    parameter  VALUE_BITS          = 6,
+    parameter  NUM_CLASSES         = 4,
+    parameter  NUM_BINS            = 4,
+    parameter  READOUT_BINS        = 4,
+    parameter  WEIGHT_BITS         = 8,
+    parameter  ACC_BITS            = 24,
+    parameter  MIN_SCORE_THRESH    = 30,
+    parameter  ACC_SUM_BITS        = 18
 )(
     input  logic clk,
     input  logic uart_rx,
@@ -68,7 +67,10 @@ module voxel_bin_top #(
     logic tx_valid;
     logic tx_busy;
 
-    uart_rx #(.CLKS_PER_BIT(CLKS_PER_BIT)) u_rx (
+    uart_rx #(
+        .CLK_FREQ_HZ(CLK_FREQ_HZ),
+        .BAUD_RATE(BAUD_RATE)
+    ) u_rx (
         .clk(clk), 
         .rst(rst), 
         .rx(uart_rx),
@@ -76,7 +78,10 @@ module voxel_bin_top #(
         .valid(rx_valid)
     );
 
-    uart_tx #(.CLKS_PER_BIT(CLKS_PER_BIT)) u_tx (
+    uart_tx #(
+        .CLK_FREQ_HZ(CLK_FREQ_HZ),
+        .BAUD_RATE(BAUD_RATE)
+    ) u_tx (
         .clk(clk), 
         .rst(rst), 
         .data(tx_data), 
@@ -107,13 +112,12 @@ module voxel_bin_top #(
         .MOTION_THRESH     (MOTION_THRESH),
         .PERSISTENCE_COUNT (PERSISTENCE_COUNT),
         .CYCLES_PER_BIN    (CYCLES_PER_BIN),
-        .PARALLEL_READS    (CORE_PARALLEL_READS),
+        .PARALLEL_READS    (PARALLEL_READS),
         .COUNTER_BITS      (COUNTER_BITS),
         .VALUE_BITS        (VALUE_BITS),
         .NUM_CLASSES       (NUM_CLASSES),
         .NUM_BINS          (NUM_BINS),
         .READOUT_BINS      (READOUT_BINS),
-        .NUM_CELLS         (NUM_CELLS),
         .WEIGHT_BITS       (WEIGHT_BITS),
         .ACC_BITS          (ACC_BITS),
         .MIN_SCORE_THRESH  (MIN_SCORE_THRESH),

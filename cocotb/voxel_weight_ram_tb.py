@@ -4,13 +4,17 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles
 import random
+from config_parser import load_config
 
-NUM_CELLS = 1024
-GRID_SIZE = 16
-WEIGHT_BITS = 8
+CFG = load_config()
+
+CLASS_IDX     = CFG["CLASS_IDX"] # UNUSED
+NUM_BINS      = CFG["NUM_BINS"]
+GRID_SIZE     = CFG["GRID_SIZE"]
+WEIGHT_BITS   = CFG["WEIGHT_BITS"]
+NUM_CELLS     = NUM_BINS * GRID_SIZE * GRID_SIZE
 CELLS_PER_BIN = GRID_SIZE * GRID_SIZE
-ADDR_BITS = (NUM_CELLS - 1).bit_length()
-
+ADDR_BITS     = (NUM_CELLS - 1).bit_length()
 
 # ---------------------------------------------------------------------------
 # Golden reference model

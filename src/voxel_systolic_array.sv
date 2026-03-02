@@ -4,12 +4,14 @@
 // Processes PARALLEL_READS cells per cycle; total cycles = ceil(NUM_CELLS / PARALLEL_READS).
 
 module voxel_systolic_array #(
-    parameter NUM_CLASSES    = 4,
-    parameter NUM_CELLS      = 1024,
-    parameter VALUE_BITS     = 6,
-    parameter WEIGHT_BITS    = 8,
-    parameter ACC_BITS       = 24,
-    parameter PARALLEL_READS = 4
+    parameter  NUM_CLASSES    = 4,
+    parameter  NUM_BINS       = 4,
+    parameter  GRID_SIZE      = 16,
+    localparam NUM_CELLS      = NUM_BINS * GRID_SIZE * GRID_SIZE,
+    parameter  VALUE_BITS     = 6,
+    parameter  WEIGHT_BITS    = 8,
+    parameter  ACC_BITS       = 24,
+    parameter  PARALLEL_READS = 4
 )(
     input  logic                                    clk,
     input  logic                                    rst,

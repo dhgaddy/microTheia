@@ -63,7 +63,8 @@ module uart_debug #(
     logic       tx_busy;
 
     uart_tx #(
-        .CLKS_PER_BIT(CLKS_PER_BIT)
+        .CLK_FREQ_HZ(CLK_FREQ_HZ),
+        .BAUD_RATE(BAUD_RATE)
     ) u_uart_tx (
         .clk   (clk),
         .rst   (rst),

@@ -3,7 +3,8 @@
 // UART Transmitter - 8N1, synchronous active-high reset
 
 module uart_tx #(
-    parameter CLKS_PER_BIT = 104  // 12MHz / 115200
+    parameter CLK_FREQ_HZ = 12_000_000,
+    parameter BAUD_RATE   = 115200
 )(
     input  logic clk,
     input  logic rst,
@@ -12,6 +13,8 @@ module uart_tx #(
     output logic tx,
     output logic busy
 );
+
+    localparam CLKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE;
 
     localparam IDLE  = 2'd0;
     localparam START = 2'd1;
