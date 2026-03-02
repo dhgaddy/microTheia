@@ -128,15 +128,21 @@ https://github.com/Jilin-Zhang/ASYNC-Chisel
 - voxel_bin_core
 - voxel_bin_top
 
+What needs to be done in cocotb-test-fix:
+- voxel_systolic_array_tb is running slow and needs to be diagnosed and hasn't been integrated to work with the config system
+- voxel_bin_core and voxel_bin_top are broken and need to be diagnosed and haven't been integrated to work with the config system
+- lower priority is getting gradient_map_core and gradient_map_top working
 
-- complete parameterization of gradient_map_core, gradient_map_top, voxel_bin_core, voxel_bin_top
-- update full explanation of step by step of design including evt2decoder doing downsampling
-- include update latex diagram
-- check requirements for deliverables and do it
+What needs/should be done overall after:
+cocotb-test-fix is done:
+- add in the ICE40 stuff? on a seperate branch
+- add full explanation of step by step of design including evt2decoder doing downsampling on a seperate branch maybe
+- include updated latex diagram on a seperate branch maybe(I'll do this since i got the old diagram)
+ 
+What other things must be done:
+- check requirements for deliverables and do what is left
 - clean up the README in scripts
 - add the new python files in scripts and have instructions on how to run
 - include a weights folder for storing the weights we use
 - include a link a google drive storing the video recordings
-- include the ice40 stuff and instructions
-- GRID_BITS and whatever calculated localparams should be localparams and not passed through
-- move all localparams out from the top definition
+- reenable github actions
