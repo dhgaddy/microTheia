@@ -6,7 +6,7 @@ from cocotb.triggers import RisingEdge, ClockCycles
 import random
 
 CLK_FREQ_HZ = 12_000_000
-BAUD_RATE = 3_000_000
+BAUD_RATE = 115200
 CLKS_PER_BIT = CLK_FREQ_HZ // BAUD_RATE  # = 4
 
 
