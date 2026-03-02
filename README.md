@@ -130,7 +130,11 @@ https://github.com/Jilin-Zhang/ASYNC-Chisel
 - voxel_binning
 
 
-- complete parameterization of gradient_map_core
+- complete parameterization of gradient_map_core, gradient_map_top, voxel_bin_core, voxel_bin_top
 - update full explanation of step by step of design including evt2decoder doing downsampling
 - include update latex diagram
 - check requirements for deliverables and do it
+- clean up the README in scripts
+- add the new python files in scripts and have instructions on how to run
+- include a weights folder for storing the weights we use
+- include a link a google drive storing the 
