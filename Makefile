@@ -80,9 +80,9 @@ sim: ## Run RTL simulation with cocotb
 		fi; \
 		rm -rf sim_build; \
 		if echo $$d | grep -q gradient; then \
-			SRCS="src/gradient_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv"; \
+			SRCS="src/gradient_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv"; \
 		else \
-			SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv"; \
+			SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv"; \
 		fi; \
 		TOPLEVEL=$$d \
 		TOPLEVEL_LANG=verilog \
