@@ -127,6 +127,7 @@ https://github.com/Jilin-Zhang/ASYNC-Chisel
 - gradient_map_top
 - gradient_systolic_array
 - input_fifo
+- MatMul.sv (ALSO NEEDS COCOTB TEST FILE)
 - uart_debug
 - uart_rx
 - uart_tx
