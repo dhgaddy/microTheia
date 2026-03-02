@@ -98,6 +98,13 @@ sim: ## Run RTL simulation with cocotb
 			echo "Skipping $$d (no testbench found)"; \
 			continue; \
 		fi; \
+		if [ "$$d" = "voxel_binning" ] || [ "$$d" = "voxel_bin_core" ]; then \
+			CARGS="-P $$d.CYCLES_PER_BIN=100"; \
+		elif [ "$$d" = "voxel_bin_top" ]; then \
+			CARGS="-P $$d.CYCLES_PER_BIN=100 -P $$d.CLK_FREQ=1000000 -P $$d.BAUD_RATE=250000 -P $$d.CORE_PARALLEL_READS=4"; \
+		else \
+			CARGS=""; \
+		fi; \
 		rm -rf sim_build; \
 		if echo $$d | grep -q gradient; then \
 			SRCS="src/gradient_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv"; \
@@ -109,7 +116,8 @@ sim: ## Run RTL simulation with cocotb
 		TOPLEVEL_LANG=verilog \
 		COCOTB_TEST_MODULES=$${d}_tb \
 		VERILOG_SOURCES="$$SRCS" \
-		COMPILE_ARGS="$$PARAMS" \
+#		COMPILE_ARGS="$$PARAMS" \
+		COMPILE_ARGS="$$CARGS" \
 		PYTHONPATH=cocotb \
 		SIM_CONFIG=$(CONFIG_FILE) \
 		make -f $$(cocotb-config --makefiles)/Makefile.sim || exit 1; \
