@@ -128,7 +128,6 @@ https://github.com/Jilin-Zhang/ASYNC-Chisel
 - MatMul.sv
 - uart_debug
 - uart_rx
-- uart_tx
 - voxel_bin_core
 - voxel_bin_top
 - voxel_binning

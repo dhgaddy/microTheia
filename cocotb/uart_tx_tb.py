@@ -5,7 +5,7 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles
 import random
 
-CLKS_PER_BIT = 4
+CLKS_PER_BIT = 104
 
 
 # ---------------------------------------------------------------------------
@@ -157,13 +157,18 @@ async def test_all_byte_values(dut):
     await setup(dut)
     for val in range(256):
         recv_task = cocotb.start_soon(receive_uart_byte(dut))
+
         dut.data.value = val
         dut.valid.value = 1
         await RisingEdge(dut.clk)
         dut.valid.value = 0
+
         result = await recv_task
-        assert result == val, f"Expected 0x{val:02X}, got 0x{result:02X}"
-        await ClockCycles(dut.clk, 4)
+        assert result == val, f"Expected 0x{val:02X}, got {result}"
+
+        # wait for transmitter to fully return to IDLE
+        while int(dut.busy.value) == 1:
+            await RisingEdge(dut.clk)
 
 
 @cocotb.test()
