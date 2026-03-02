@@ -69,6 +69,16 @@ librelane-padring: ## Only create the padring
 	PDK_ROOT=${PDK_ROOT} PDK=${PDK} python3 scripts/padring.py librelane/slots/slot_${SLOT}.yaml librelane/config.yaml
 .PHONY: librelane-padring
 
+SV_SRCS := $(shell find src -name "*.sv")
+
+lint: ## Lint all SystemVerilog files in src
+	verilator --lint-only \
+	          -Wall \
+	          -Wno-fatal \
+	          -flife lint.vlt \
+	          $(SV_SRCS)
+.PHONY: lint
+
 sim: ## Run RTL simulation with cocotb
 	@for d in $(SIM_DUTS); do \
 		echo "===================================================="; \
