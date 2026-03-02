@@ -2,7 +2,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, FallingEdge, ClockCycles, ReadOnly
 
-N = 8
+N = 8 # Size of the square matrices
 
 def matmul_expected(A, B):
     C = [[0 for _ in range(N)] for _ in range(N)]
@@ -11,7 +11,7 @@ def matmul_expected(A, B):
             total = 0
             for k in range(N):
                 total += A[i][k] * B[k][j]
-            C[i][j] = total & 0xFFFF  # keep your 16-bit truncation
+            C[i][j] = total & 0xFFFF  # 16-bit truncation
     return C
 
 def print_matrix(mat):
