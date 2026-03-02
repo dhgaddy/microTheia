@@ -1,16 +1,19 @@
-"""units testbench for input_fifo with golden reference model."""
+"""Unit testbench for input_fifo with golden reference model."""
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 import random
+import os
 from config_parser import load_config
 
-CFG = load_config()
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
 
 FIFO_DEPTH = CFG["FIFO_DEPTH"]
-PTR_BITS   = FIFO_DEPTH.bit_length() - 1
 DATA_WIDTH = CFG["DATA_WIDTH"]
+
+PTR_BITS = FIFO_DEPTH.bit_length() - 1
 
 # ---------------------------------------------------------------------------
 # Golden reference model
