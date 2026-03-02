@@ -121,7 +121,7 @@ always_ff @(posedge clk) begin : DFF
         acc49 <= acc49 + {8'd0, A_cell_7} * {8'd0, b_reg_6}; acc50 <= acc50 + {8'd0, a_reg_49} * {8'd0, b_reg_14};
         acc51 <= acc51 + {8'd0, a_reg_50} * {8'd0, b_reg_22}; acc52 <= acc52 + {8'd0, a_reg_51} * {8'd0, b_reg_30};
         acc53 <= acc53 + {8'd0, a_reg_52} * {8'd0, b_reg_38}; acc54 <= acc54 + {8'd0, a_reg_53} * {8'd0, b_reg_46};
-        acc55 <= acc55 + {8'd0, a_reg_54} * {8'd0, b_reg_54}; acc56 <= acc56 + {8'd0, a_reg_55} * {8'd0, b_reg_61};
+        acc55 <= acc55 + {8'd0, a_reg_54} * {8'd0, b_reg_54}; acc56 <= acc56 + {8'd0, a_reg_55} * {8'd0, b_reg_62};
 
         acc57 <= acc57 + {8'd0, A_cell_8} * {8'd0, b_reg_7}; acc58 <= acc58 + {8'd0, a_reg_57} * {8'd0, b_reg_15};
         acc59 <= acc59 + {8'd0, a_reg_58} * {8'd0, b_reg_23}; acc60 <= acc60 + {8'd0, a_reg_59} * {8'd0, b_reg_31};
