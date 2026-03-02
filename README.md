@@ -125,8 +125,6 @@ https://github.com/Jilin-Zhang/ASYNC-Chisel
 ### Modules currently failing tests
 - gradient_map_core
 - gradient_map_top
-- gradient_systolic_array
-- input_fifo
 - MatMul.sv
 - uart_debug
 - uart_rx
