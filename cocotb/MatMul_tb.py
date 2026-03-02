@@ -11,7 +11,7 @@ def matmul_expected(A, B):
             total = 0
             for k in range(N):
                 total += A[i][k] * B[k][j]
-            C[i][j] = total & 0xFFFF  # 16-bit truncation
+            C[i][j] = total
     return C
 
 def print_matrix(mat):
