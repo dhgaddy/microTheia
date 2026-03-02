@@ -1,4 +1,4 @@
-"""Unit testbench for gradient_mapping with golden reference model."""
+"""unitss testbench for gradient_mapping with golden reference model."""
 
 import cocotb
 from cocotb.clock import Clock
@@ -59,7 +59,7 @@ class GradientMappingModel:
 # Helpers
 # ---------------------------------------------------------------------------
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.event_valid.value = 0
     dut.event_x.value = 0

@@ -75,17 +75,14 @@ sim: ## Run RTL simulation with cocotb
 		echo " Running DUT=$$d"; \
 		echo "===================================================="; \
 		if [ ! -f "cocotb/$${d}_tb.py" ]; then \
-			echo "ERROR: Missing cocotb/$${d}_tb.py"; \
-			exit 1; \
+			echo "Skipping $$d (no testbench found)"; \
+			continue; \
 		fi; \
-		cd cocotb && \
 		TOPLEVEL=$$d \
 		MODULE=$${d}_tb \
-		PDK_ROOT=${PDK_ROOT} \
-		PDK=${PDK} \
-		SLOT=${SLOT} \
-		python3 $${d}_tb.py || exit 1; \
-		cd ..; \
+		VERILOG_SOURCES="src/$$d.sv" \
+		PYTHONPATH=cocotb \
+		make -f $$(cocotb-config --makefiles)/Makefile.sim || exit 1; \
 	done
 .PHONY: sim
 

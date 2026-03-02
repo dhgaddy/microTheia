@@ -146,7 +146,7 @@ class GradientCoreHarness:
         self.observed_gestures = []
 
     async def setup(self):
-        cocotb.start_soon(Clock(self.dut.clk, 10, unit="ns").start())
+        cocotb.start_soon(Clock(self.dut.clk, 10, "ns").start())
         await self.reset()
 
     async def reset(self):

@@ -1,4 +1,4 @@
-"""Unit testbench for input_fifo with golden reference model."""
+"""units testbench for input_fifo with golden reference model."""
 
 import cocotb
 from cocotb.clock import Clock
@@ -66,7 +66,7 @@ class FifoModel:
 # Helpers
 # ---------------------------------------------------------------------------
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.wr_en.value = 0
     dut.wr_data.value = 0

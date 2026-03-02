@@ -107,7 +107,7 @@ class GMGestureClassifierModel:
 # Helpers
 # ---------------------------------------------------------------------------
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.ts_read_value.value = 0
     await ClockCycles(dut.clk, 5)

@@ -1,4 +1,4 @@
-"""Unit testbench for uart_debug with golden reference model."""
+"""units testbench for uart_debug with golden reference model."""
 
 import cocotb
 from cocotb.clock import Clock
@@ -69,7 +69,7 @@ async def receive_message(dut, max_bytes=10, timeout_per_byte=2000):
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.gesture_class.value = 0
     dut.gesture_valid.value = 0

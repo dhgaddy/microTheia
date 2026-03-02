@@ -123,7 +123,7 @@ class VoxelCoreHarness:
         self.readout_starts = 0
 
     async def setup(self):
-        cocotb.start_soon(Clock(self.dut.clk, 10, unit="ns").start())
+        cocotb.start_soon(Clock(self.dut.clk, 10, units="ns").start())
         self.dut.rst.value = 1
         self.dut.evt_word.value = 0
         self.dut.evt_word_valid.value = 0

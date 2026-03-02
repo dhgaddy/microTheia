@@ -1,4 +1,4 @@
-"""Unit testbench for systolic_array with golden reference model."""
+"""units testbench for systolic_array with golden reference model."""
 
 import cocotb
 from cocotb.clock import Clock
@@ -69,7 +69,7 @@ class VBSystolicModel:
 # Helpers
 # ---------------------------------------------------------------------------
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.start.value = 0
     dut.feature_in.value = 0

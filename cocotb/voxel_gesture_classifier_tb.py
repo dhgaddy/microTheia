@@ -1,4 +1,4 @@
-"""Unit testbench for gesture_classifier with golden reference model."""
+"""units testbench for gesture_classifier with golden reference model."""
 
 import cocotb
 from cocotb.clock import Clock
@@ -71,7 +71,7 @@ class VBGestureClassifierModel:
 # Helpers
 # ---------------------------------------------------------------------------
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.class_gesture.value = 0
     dut.class_valid.value = 0

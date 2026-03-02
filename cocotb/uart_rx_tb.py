@@ -1,4 +1,4 @@
-"""Unit testbench for uart_rx with golden reference model."""
+"""units testbench for uart_rx with golden reference model."""
 
 import cocotb
 from cocotb.clock import Clock
@@ -97,7 +97,7 @@ async def send_uart_byte(dut, byte_val):
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.rx.value = 1
     await ClockCycles(dut.clk, 5)

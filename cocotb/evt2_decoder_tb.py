@@ -1,5 +1,10 @@
 """Unit testbench for evt2_decoder with golden reference model."""
 
+import os
+import random
+import logging
+from pathlib import Path
+
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
@@ -82,7 +87,7 @@ def build_evt2_time_high(payload):
 # Helpers
 # ---------------------------------------------------------------------------
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.data_in.value = 0
     dut.data_valid.value = 0

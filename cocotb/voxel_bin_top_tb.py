@@ -207,7 +207,7 @@ class VoxelTopHarness:
         self._uart_task = None
 
     async def setup(self):
-        cocotb.start_soon(Clock(self.dut.clk, 10, unit="ns").start())
+        cocotb.start_soon(Clock(self.dut.clk, 10, units="ns").start())
         self.dut.uart_rx.value = 1
         await ClockCycles(self.dut.clk, 16)
         await self._wait_por_release()

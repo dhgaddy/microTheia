@@ -1,4 +1,4 @@
-"""Unit testbench for weight_ram with golden reference model."""
+"""units testbench for weight_ram with golden reference model."""
 
 import cocotb
 from cocotb.clock import Clock
@@ -70,7 +70,7 @@ def to_signed_8(val):
 # Helpers
 # ---------------------------------------------------------------------------
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.we.value = 0
     dut.cell_addr.value = 0
