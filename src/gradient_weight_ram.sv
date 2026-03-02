@@ -5,7 +5,7 @@
 // to iCE40 block RAM. Weights are pre-initialised at configuration
 // time but a write port is provided for future reconfiguration.
 
-module weight_ram #(
+module gradient_weight_ram #(
     parameter CLASS_IDX   = 0,
     parameter NUM_CLASSES = 4,
     parameter NUM_CELLS   = 256,

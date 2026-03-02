@@ -6,7 +6,7 @@
 // block RAMs. Weights are pre-initialised but can be updated through
 // the write port if required.
 
-module weight_ram #(
+module voxel_weight_ram #(
     parameter CLASS_IDX   = 0,
     parameter NUM_CELLS   = 1024,
     parameter GRID_SIZE   = 16,

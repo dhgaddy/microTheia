@@ -3,7 +3,7 @@
 // Parallel-feed systolic array: 4 weight ROMs in parallel, one cell per cycle
 // Total latency: NUM_CELLS + 1 drain cycle
 
-module systolic_array #(
+module gradient_systolic_array #(
     parameter NUM_CLASSES = 4,
     parameter NUM_CELLS   = 1024,
     parameter VALUE_BITS  = 8,

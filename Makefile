@@ -1,7 +1,7 @@
 MAKEFILE_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
 RUN_TAG = $(shell ls librelane/runs/ | tail -n 1)
-TOP = chip_top
+TOP = voxel_bin_top
 
 PDK_ROOT ?= $(MAKEFILE_DIR)/gf180mcu
 PDK ?= gf180mcuD
@@ -78,9 +78,17 @@ sim: ## Run RTL simulation with cocotb
 			echo "Skipping $$d (no testbench found)"; \
 			continue; \
 		fi; \
+		rm -rf sim_build; \
+		if echo $$d | grep -q gradient; then \
+			SRCS="src/gradient_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv"; \
+		else \
+			SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv"; \
+		fi; \
 		TOPLEVEL=$$d \
-		MODULE=$${d}_tb \
-		VERILOG_SOURCES="src/$$d.sv" \
+		TOPLEVEL_LANG=verilog \
+		COCOTB_TEST_MODULES=$${d}_tb \
+		VERILOG_SOURCES="$$SRCS" \
+		IVERILOG_ARGS="-s $$d" \
 		PYTHONPATH=cocotb \
 		make -f $$(cocotb-config --makefiles)/Makefile.sim || exit 1; \
 	done

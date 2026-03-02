@@ -152,7 +152,7 @@ module voxel_bin_core #(
         .readout_valid (readout_valid)
     );
 
-    systolic_array #(
+    voxel_systolic_array #(
         .NUM_CLASSES    (NUM_CLASSES),
         .NUM_CELLS      (NUM_CELLS),
         .VALUE_BITS     (COUNTER_BITS),
@@ -183,7 +183,7 @@ module voxel_bin_core #(
         genvar p, k;
         for (p = 0; p < PARALLEL_READS; p = p + 1) begin : gen_parallel_rams
             for (k = 0; k < NUM_CLASSES; k = k + 1) begin : gen_class_rams
-                weight_ram #(
+                voxel_weight_ram #(
                     .CLASS_IDX  (k),
                     .NUM_CELLS  (NUM_CELLS),
                     .GRID_SIZE  (GRID_SIZE),
@@ -228,7 +228,7 @@ module voxel_bin_core #(
     assign pseudo_mag_x = {2'b0, abs_best_score[15:0]};
     assign pseudo_mag_y = 18'd0;
 
-    gesture_classifier #(
+    voxel_gesture_classifier #(
         .ACC_SUM_BITS     (18),
         .PERSISTENCE_COUNT(PERSISTENCE_COUNT)
     ) u_gesture_classifier (

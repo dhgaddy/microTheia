@@ -1,7 +1,7 @@
 // Persistence filter: requires PERSISTENCE_COUNT consecutive matching classifications
 // before asserting gesture_valid. Confidence = min(15, dominant_magnitude >> 4).
 
-module gesture_classifier #(
+module voxel_gesture_classifier #(
     parameter ACC_SUM_BITS      = 18,
     parameter PERSISTENCE_COUNT = 2
 )(

@@ -117,7 +117,7 @@ module gradient_map_core #(
         .read_ts_raw()
     );
 
-    gesture_classifier #(
+    gradient_gesture_classifier #(
         .CLK_FREQ_HZ    (CLK_FREQ_HZ),
         .FRAME_PERIOD_MS(FRAME_PERIOD_MS),
         .GRID_SIZE      (16),

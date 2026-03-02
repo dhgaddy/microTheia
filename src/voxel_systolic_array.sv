@@ -3,7 +3,7 @@
 // Parallel-input systolic matrix multiply for feature classification.
 // Processes PARALLEL_INPUTS cells per cycle; total cycles = ceil(NUM_CELLS / PARALLEL_INPUTS).
 
-module systolic_array #(
+module voxel_systolic_array #(
     parameter NUM_CLASSES    = 4,
     parameter NUM_CELLS      = 1024,
     parameter VALUE_BITS     = 6,
