@@ -4,9 +4,9 @@
 // Used in voxel_bin_raw_top to decouple UART packet assembly and EVT2 decode.
 
 module input_fifo #(
-    parameter DEPTH      = 128,
-    parameter PTR_BITS   = 7,
-    parameter DATA_WIDTH = 32
+    parameter  FIFO_DEPTH  = 128,
+    localparam PTR_BITS   = $clog2(FIFO_DEPTH),
+    parameter  DATA_WIDTH = 32
 )(
     input  logic                    clk,
     input  logic                    rst,
@@ -19,7 +19,7 @@ module input_fifo #(
     output logic [PTR_BITS:0]       count
 );
 
-    (* ram_style = "block" *) logic [DATA_WIDTH-1:0] mem [0:DEPTH-1];
+    (* ram_style = "block" *) logic [DATA_WIDTH-1:0] mem [0:FIFO_DEPTH-1];
 
     logic [PTR_BITS:0] wr_ptr;
     logic [PTR_BITS:0] rd_ptr;

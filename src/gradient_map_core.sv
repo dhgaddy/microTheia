@@ -8,8 +8,18 @@ module gradient_map_core #(
     parameter CLK_FREQ_HZ     = 12_000_000,
     parameter FRAME_PERIOD_MS = 50,
     parameter DECAY_SHIFT     = 6,
-    parameter MIN_MASS_THRESH = 2000,
-    parameter FIFO_DEPTH      = 128
+    parameter MIN_MASS_THRESH = 20,
+    parameter FIFO_DEPTH      = 128,
+    parameter GRID_SIZE       = 16,
+    parameter ADDR_BITS       = 8,
+    parameter VALUE_BITS      = 8,
+    parameter MOMENT_BITS     = 24,
+    parameter WEIGHT_BITS     = 8,
+    parameter SCORE_BITS      = 24,
+    parameter NUM_CLASSES     = 4,
+    parameter DATA_WIDTH      = 32,
+    parameter TS_BITS         = 16,
+    parameter MAX_VALUE       = 255
 )(
     input  logic        clk,
     input  logic        rst,
@@ -50,9 +60,9 @@ module gradient_map_core #(
     assign debug_fifo_full  = fifo_full;
 
     input_fifo #(
-        .DEPTH     (FIFO_DEPTH),
+        .FIFO_DEPTH(FIFO_DEPTH),
         .PTR_BITS  (FIFO_PTR_BITS),
-        .DATA_WIDTH(32)
+        .DATA_WIDTH(DATA_WIDTH)
     ) u_input_fifo (
         .clk     (clk),
         .rst     (rst),
@@ -97,11 +107,11 @@ module gradient_map_core #(
     logic [7:0]  ts_read_value;
 
     gradient_mapping #(
-        .GRID_SIZE  (16),
-        .ADDR_BITS  (8),
-        .TS_BITS    (16),
-        .VALUE_BITS (8),
-        .MAX_VALUE  (255),
+        .GRID_SIZE  (GRID_SIZE),
+        .ADDR_BITS  (ADDR_BITS),
+        .TS_BITS    (TS_BITS),
+        .VALUE_BITS (VALUE_BITS),
+        .MAX_VALUE  (MAX_VALUE),
         .DECAY_SHIFT(DECAY_SHIFT)
     ) u_gradient_mapping (
         .clk        (clk),
@@ -110,7 +120,7 @@ module gradient_map_core #(
         .event_valid(decoded_valid),
         .event_x    (decoded_x),
         .event_y    (decoded_y),
-        .event_ts   (global_timestamp),
+        .event_ts   (decoded_timestamp),
         .read_enable(ts_read_enable),
         .read_addr  (ts_read_addr),
         .read_value (ts_read_value),
@@ -120,13 +130,13 @@ module gradient_map_core #(
     gradient_gesture_classifier #(
         .CLK_FREQ_HZ    (CLK_FREQ_HZ),
         .FRAME_PERIOD_MS(FRAME_PERIOD_MS),
-        .GRID_SIZE      (16),
-        .ADDR_BITS      (8),
-        .VALUE_BITS     (8),
-        .MOMENT_BITS    (24),
-        .WEIGHT_BITS    (8),
-        .SCORE_BITS     (24),
-        .NUM_CLASSES    (4),
+        .GRID_SIZE      (GRID_SIZE),
+        .ADDR_BITS      (ADDR_BITS),
+        .VALUE_BITS     (VALUE_BITS),
+        .MOMENT_BITS    (MOMENT_BITS),
+        .WEIGHT_BITS    (WEIGHT_BITS),
+        .SCORE_BITS     (SCORE_BITS),
+        .NUM_CLASSES    (NUM_CLASSES),
         .MIN_MASS_THRESH(MIN_MASS_THRESH)
     ) u_gesture_classifier (
         .clk               (clk),

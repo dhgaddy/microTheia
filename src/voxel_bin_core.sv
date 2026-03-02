@@ -10,11 +10,21 @@ module voxel_bin_core #(
     parameter WINDOW_MS          = 400,
     parameter GRID_SIZE          = 16,
     parameter FIFO_DEPTH         = 128,
-    parameter MIN_EVENT_THRESH   = 20,
-    parameter MOTION_THRESH      = 8,
+    parameter MIN_EVENT_THRESH   = 20, // UNUSED PARAMETER
+    parameter MOTION_THRESH      = 8,  // UNUSED PARAMETER
     parameter PERSISTENCE_COUNT  = 2,
     parameter CYCLES_PER_BIN     = 0,
-    parameter PARALLEL_READS     = 4
+    parameter PARALLEL_READS     = 4,
+    parameter COUNTER_BITS       = 6,
+    parameter VALUE_BITS         = 6,
+    parameter NUM_CLASSES        = 4,
+    parameter NUM_BINS           = 4,
+    parameter READOUT_BINS       = 4,
+    parameter NUM_CELLS          = NUM_BINS * GRID_SIZE * GRID_SIZE,
+    parameter WEIGHT_BITS        = 8,
+    parameter ACC_BITS           = 24,
+    parameter MIN_SCORE_THRESH   = 30,
+    parameter ACC_SUM_BITS       = 18
 )(
     input  logic        clk,
     input  logic        rst,
@@ -30,15 +40,6 @@ module voxel_bin_core #(
     output logic        debug_fifo_full,
     output logic        debug_temporal_phase
 );
-
-    localparam integer FIFO_PTR_BITS   = $clog2(FIFO_DEPTH);
-    localparam integer COUNTER_BITS    = 6;
-    localparam integer NUM_CLASSES     = 4;
-    localparam integer NUM_BINS        = 4;
-    localparam integer NUM_CELLS       = NUM_BINS * GRID_SIZE * GRID_SIZE;
-    localparam integer WEIGHT_BITS     = 8;
-    localparam integer ACC_BITS        = 24;
-    localparam integer MIN_SCORE_THRESH = 30;
 
     logic        fifo_empty;
     logic        fifo_full;
@@ -97,8 +98,7 @@ module voxel_bin_core #(
     end
 
     input_fifo #(
-        .DEPTH     (FIFO_DEPTH),
-        .PTR_BITS  (FIFO_PTR_BITS),
+        .FIFO_DEPTH(FIFO_DEPTH),
         .DATA_WIDTH(32)
     ) u_input_fifo (
         .clk    (clk),
@@ -153,12 +153,12 @@ module voxel_bin_core #(
     );
 
     voxel_systolic_array #(
-        .NUM_CLASSES    (NUM_CLASSES),
-        .NUM_CELLS      (NUM_CELLS),
-        .VALUE_BITS     (COUNTER_BITS),
-        .WEIGHT_BITS    (WEIGHT_BITS),
-        .ACC_BITS       (ACC_BITS),
-        .PARALLEL_INPUTS(PARALLEL_READS)
+        .NUM_CLASSES   (NUM_CLASSES),
+        .NUM_CELLS     (NUM_CELLS),
+        .VALUE_BITS    (VALUE_BITS),
+        .WEIGHT_BITS   (WEIGHT_BITS),
+        .ACC_BITS      (ACC_BITS),
+        .PARALLEL_READS(PARALLEL_READS)
     ) u_systolic_array (
         .clk          (clk),
         .rst          (rst),
@@ -229,7 +229,7 @@ module voxel_bin_core #(
     assign pseudo_mag_y = 18'd0;
 
     voxel_gesture_classifier #(
-        .ACC_SUM_BITS     (18),
+        .ACC_SUM_BITS     (ACC_SUM_BITS),
         .PERSISTENCE_COUNT(PERSISTENCE_COUNT)
     ) u_gesture_classifier (
         .clk               (clk),

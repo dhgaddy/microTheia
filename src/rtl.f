@@ -22,6 +22,3 @@ src/rtl/gradient_map_architecture/gradient_map_top.sv
 src/rtl/gradient_map_architecture/gradient_mapping.sv
 src/rtl/gradient_map_architecture/gradient_systolic_array.sv
 src/rtl/gradient_map_architecture/gradient_weight_ram.sv
-
-# Include chisel files
--f rtl/chisel/filelist.f

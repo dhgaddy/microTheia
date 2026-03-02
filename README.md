@@ -128,4 +128,9 @@ https://github.com/Jilin-Zhang/ASYNC-Chisel
 - voxel_bin_core
 - voxel_bin_top
 - voxel_binning
-- voxel_systolic_array
+
+
+- complete parameterization of gradient_map_core
+- update full explanation of step by step of design including evt2decoder doing downsampling
+- include update latex diagram
+- check requirements for deliverables and do it
