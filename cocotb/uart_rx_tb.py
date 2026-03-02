@@ -5,6 +5,7 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles
 import random
 
+
 CLKS_PER_BIT = 4
 
 

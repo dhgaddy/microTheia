@@ -9,8 +9,10 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 import random
+import math
 
-GRID_BITS = 4
+GRID_SIZE = 16
+GRID_BITS = math.sqrt(GRID_SIZE)
 
 
 # ---------------------------------------------------------------------------
