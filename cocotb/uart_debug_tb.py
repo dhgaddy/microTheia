@@ -4,10 +4,11 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles
 import random
-
+import os
 from config_parser import load_config
 
-CFG = load_config()
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
 
 CLK_FREQ_HZ = CFG["CLK_FREQ_HZ"]
 BAUD_RATE = CFG["BAUD_RATE"]

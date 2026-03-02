@@ -99,12 +99,24 @@ sim: ## Run RTL simulation with cocotb
 		# ------------------ Default CARGS ------------------ \
 		if [ "$$d" = "evt2_decoder" ]; then \
 			CARGS="-P$$d.GRID_SIZE=8"; \
+		elif [ "$$d" = "input_fifo" ]; then \
+			CARGS="-P$$d.FIFO_DEPTH=8 -P$$d.DATA_WIDTH=32"; \
+		elif [ "$$d" = "uart_debug" ]; then \
+			CARGS="-P$$d.CLK_FREQ_HZ=12000000 -P$$d.BAUD_RATE=3000000"; \
+		elif [ "$$d" = "uart_rx" ]; then \
+			CARGS="-P$$d.CLK_FREQ_HZ=12000000 -P$$d.BAUD_RATE=3000000"; \
+		elif [ "$$d" = "uart_tx" ]; then \
+			CARGS="-P$$d.CLK_FREQ_HZ=12000000 -P$$d.BAUD_RATE=3000000"; \
+		elif [ "$$d" = "MatMul" ]; then \
+			CARGS="-P$$d.N=8 -P$$d.DATA_BIT_SIZE=16"; \
+			# 	$(MAKE) sim DUT=MatMul CONFIG=voxel_default \
+			# 	$(MAKE) sim DUT=voxel_gesture_classifier CONFIG=voxel_default \
+			# 	$(MAKE) sim DUT=voxel_systolic_array CONFIG=voxel_default \
+			# 	$(MAKE) sim DUT=voxel_weight_ram CONFIG=voxel_default \
 		elif [ "$$d" = "voxel_binning" ] || [ "$$d" = "voxel_bin_core" ]; then \
 			CARGS="-P$$d.CYCLES_PER_BIN=100"; \
 		elif [ "$$d" = "voxel_bin_top" ]; then \
 			CARGS="-P$$d.CYCLES_PER_BIN=100 -P$$d.CLK_FREQ=1000000 -P$$d.BAUD_RATE=250000 -P$$d.CORE_PARALLEL_READS=4"; \
-		elif [ "$$d" = "input_fifo" ]; then \
-			CARGS="-P$$d.FIFO_DEPTH=8 -P$$d.DATA_WIDTH=32"; \
 		else \
 			CARGS=""; \
 		fi; \

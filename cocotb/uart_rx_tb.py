@@ -4,9 +4,11 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles
 import random
+import os
 from config_parser import load_config
 
-CFG = load_config()
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
 
 CLK_FREQ_HZ = CFG["CLK_FREQ_HZ"]
 BAUD_RATE = CFG["BAUD_RATE"]
@@ -109,31 +111,26 @@ async def setup(dut):
     await ClockCycles(dut.clk, 2)
 
 async def send_uart_byte_and_capture(dut, byte_val):
-    captured = None
-
     # start bit
     dut.rx.value = 0
-    for _ in range(CLKS_PER_BIT):
-        await RisingEdge(dut.clk)
-        if dut.valid.value == 1:
-            captured = int(dut.data.value)
+    await ClockCycles(dut.clk, CLKS_PER_BIT)
 
     # data bits
     for i in range(8):
         dut.rx.value = (byte_val >> i) & 1
-        for _ in range(CLKS_PER_BIT):
-            await RisingEdge(dut.clk)
-            if dut.valid.value == 1:
-                captured = int(dut.data.value)
+        await ClockCycles(dut.clk, CLKS_PER_BIT)
 
     # stop bit
     dut.rx.value = 1
-    for _ in range(CLKS_PER_BIT):
+    await ClockCycles(dut.clk, CLKS_PER_BIT)
+
+    # Now wait for valid pulse
+    for _ in range(CLKS_PER_BIT * 2):
         await RisingEdge(dut.clk)
         if dut.valid.value == 1:
-            captured = int(dut.data.value)
+            return int(dut.data.value)
 
-    return captured
+    return None
 
 # ---------------------------------------------------------------------------
 # Tests

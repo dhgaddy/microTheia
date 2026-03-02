@@ -1,8 +1,14 @@
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, FallingEdge, ClockCycles, ReadOnly
+import os
+from config_parser import load_config
 
-N = 8 # Size of the square matrices
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
+
+N = CFG["N"] # Size of the square matrices
+DATA_BIT_SIZE = CFG["DATA_BIT_SIZE"]
 
 def matmul_expected(A, B):
     C = [[0 for _ in range(N)] for _ in range(N)]

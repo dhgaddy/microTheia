@@ -1,8 +1,8 @@
 module MatMul #(
     parameter int N = 8,
     parameter int DATA_BIT_SIZE = 16,
-    parameter int PRODUCT_BIT_SIZE = 2 * DATA_BIT_SIZE,
-    parameter int ACC_BIT_SIZE = PRODUCT_BIT_SIZE + $clog2(N)
+    localparam int PRODUCT_BIT_SIZE = 2 * DATA_BIT_SIZE,
+    localparam int ACC_BIT_SIZE = PRODUCT_BIT_SIZE + $clog2(N)
 )(
     input  logic clk,
     input  logic reset,

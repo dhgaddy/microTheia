@@ -22,3 +22,5 @@ ACC_SUM_BITS        = 18
 DATA_WIDTH          = 32
 PARALLEL_READS      = 4
 CLASS_IDX           = 0
+N                   = 8
+DATA_BIT_SIZE       = 16
