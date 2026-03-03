@@ -24,7 +24,7 @@ endif
 .DEFAULT_GOAL := help
 
 # NEW ----------------------------------------------------------------------------
-SIM_DUTS = $(if $(strip $(DUT)),$(DUT),$(basename $(notdir $(wildcard src/*.sv))))
+SIM_DUTS = $(strip $(DUT))
 
 SV_SRCS := $(shell find src -name "*.sv")
 
@@ -32,7 +32,7 @@ help: ## Show this help message
 	@echo 'Usage: make [target]'
 	@echo ''
 	@echo 'Available targets:'
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:[^#]*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":[^#]*## "}; {printf "  %-20s %s\n", $$1, $$2}'
 .PHONY: help
 
 # Optional configuration file
@@ -40,6 +40,9 @@ CONFIG ?=
 CONFIG_FILE := $(if $(CONFIG),configs/$(CONFIG).txt,)
 
 HAS_CONFIG := $(if $(CONFIG),1,0)
+
+# iCE40 FPGA Flow Wrapper
+ICE40_MAKEFILE := ice40/ice40.mk
 # ---------------------------------------------------------------------------------
 
 all: librelane ## Build the project (runs LibreLane)
@@ -87,6 +90,11 @@ lint: ## Lint all SystemVerilog files in src
 .PHONY: lint
 
 sim: ## Run RTL simulation with cocotb
+	@if [ -z "$(DUT)" ]; then \
+		echo "Error: You must specify DUT=<module_name>"; \
+		echo "Example: make sim DUT=voxel_bin_top"; \
+		exit 1; \
+	fi; 
 	@for d in $(SIM_DUTS); do \
 		echo "===================================================="; \
 		echo " Running DUT=$$d"; \
@@ -154,15 +162,7 @@ sim: ## Run RTL simulation with cocotb
 	done
 .PHONY: sim
 
-sim-gl: ## Run gate-level simulation with cocotb (after copy-final)
-	cd cocotb; GL=1 PDK_ROOT=${PDK_ROOT} PDK=${PDK} SLOT=${SLOT} python3 chip_top_tb.py
-.PHONY: sim-gl
-
-sim-view: ## View simulation waveforms in GTKWave
-	gtkwave cocotb/sim_build/chip_top.fst
-.PHONY: sim-view
-
-sim-test:
+sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=evt2_decoder
 	$(MAKE) sim DUT=input_fifo
 	$(MAKE) sim DUT=uart_debug
@@ -195,7 +195,15 @@ sim-test:
 #	$(MAKE) sim DUT=gradient_mapping CONFIG=gradient_default
 #	$(MAKE) sim DUT=gradient_systolic_array CONFIG=gradient_default
 #	$(MAKE) sim DUT=gradient_weight_ram CONFIG=gradient_default
-.PHONY: sim-test
+.PHONY: sim-all
+
+sim-gl: ## Run gate-level simulation with cocotb (after copy-final)
+	cd cocotb; GL=1 PDK_ROOT=${PDK_ROOT} PDK=${PDK} SLOT=${SLOT} python3 chip_top_tb.py
+.PHONY: sim-gl
+
+sim-view: ## View simulation waveforms in GTKWave
+	gtkwave cocotb/sim_build/chip_top.fst
+.PHONY: sim-view
 
 copy-final: ## Copy final output files from the last run
 	rm -rf final/
@@ -206,6 +214,18 @@ render-image: ## Render an image from the final layout (after copy-final)
 	mkdir -p img/
 	PDK_ROOT=${PDK_ROOT} PDK=${PDK} python3 scripts/lay2img.py final/gds/${TOP}.gds img/${TOP}.png --width 2048 --oversampling 4
 .PHONY: copy-final
+
+ice40: ## Run ice40 FPGA build
+	$(MAKE) -C ice40 -f ice40.mk ARCH=$(ARCH)
+
+ice40-prog: ## Program ice40 board
+	$(MAKE) -C ice40 -f ice40.mk prog ARCH=$(ARCH)
+
+ice40-timing: ## Timing report for ice40 build
+	$(MAKE) -C ice40 -f ice40.mk timing ARCH=$(ARCH)
+
+ice40-clean: ## Cleans out all ice40 logic
+	$(MAKE) -C ice40 -f ice40.mk clean
 
 clean: ## Cleans the generated files
 	rm -rf results.xml sim_build/

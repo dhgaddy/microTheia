@@ -1,0 +1,53 @@
+# =============================================================================
+# Pin Constraints — gradient_map_processed_top
+# Target: Lattice iCE40UP5K on iCEBreaker board
+# Mode: Pre-decoded, grid-mapped event bus from upstream MCU/deserializer
+#
+# Bus: event_x[3:0], event_y[3:0], event_polarity, event_valid, event_ready
+# = 10 pins, all fully constrained.  No unconstrained IOs.
+#
+# Pin allocation:
+#   PMOD1A (8 pins): event_x[3:0], event_y[3:0]
+#   PMOD1B (3 pins): event_polarity, event_valid, event_ready
+# =============================================================================
+
+# Clock (12 MHz oscillator)
+set_io clk 35
+
+# UART TX — gesture result output to PC/host
+set_io uart_tx 9
+
+# -----------------------------------------------------------------------------
+# Status LEDs
+# -----------------------------------------------------------------------------
+set_io led_heartbeat 39
+set_io led_activity  40
+
+# -----------------------------------------------------------------------------
+# Gesture Direction LEDs (PMOD2)
+# -----------------------------------------------------------------------------
+set_io led_up    23
+set_io led_down  26
+set_io led_left  25
+set_io led_right 21
+
+# -----------------------------------------------------------------------------
+# Event bus — PMOD1A: event_x[3:0] and event_y[3:0]
+# PMOD1A pins: 4, 2, 47, 45, 3, 48, 46, 44
+# -----------------------------------------------------------------------------
+set_io event_x[0] 4
+set_io event_x[1] 2
+set_io event_x[2] 47
+set_io event_x[3] 45
+set_io event_y[0] 3
+set_io event_y[1] 48
+set_io event_y[2] 46
+set_io event_y[3] 44
+
+# -----------------------------------------------------------------------------
+# Handshake + polarity — PMOD1B
+# PMOD1B pins: 43, 38, 34
+# -----------------------------------------------------------------------------
+set_io event_polarity 43
+set_io event_valid    38
+set_io event_ready    34
