@@ -141,6 +141,7 @@ To check whether our design is suitable for manufacturing, run the [gf180mcu-pre
 - https://github.com/jasonwaseq/FPGA-DVS-Gesture-Classifier
 - https://github.com/jasonwaseq/Verilog-Memory-Hardware
 - https://github.com/jasonwaseq/GenX320_STM32F746G-DISCO
+- https://github.com/google/gf180mcu-pdk/
 - https://github.com/google/globalfoundries-pdk-ip-gf180mcu_fd_ip_sram
 - [GF180MCU Tutorial - Single Video](https://www.youtube.com/watch?v=USCmZuREMTE)
 - https://github.com/mithro/gf180mcu-sram-forge
