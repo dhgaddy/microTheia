@@ -58,7 +58,7 @@ RUN echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" \
     apt-get install -y sbt && \
     rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --no-cache-dir --break-system-packages numpy opencv-python matplotlib cocotb
+RUN python3 -m pip install --no-cache-dir --break-system-packages numpy opencv-python matplotlib cocotb pyserial
 
 USER vscode
 
