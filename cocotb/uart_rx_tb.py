@@ -125,7 +125,8 @@ async def send_uart_byte_and_capture(dut, byte_val):
     await ClockCycles(dut.clk, CLKS_PER_BIT)
 
     # Now wait for valid pulse
-    for _ in range(CLKS_PER_BIT * 2):
+    FRAME_BITS = 10
+    for _ in range(CLKS_PER_BIT * FRAME_BITS + CLKS_PER_BIT):
         await RisingEdge(dut.clk)
         if dut.valid.value == 1:
             return int(dut.data.value)

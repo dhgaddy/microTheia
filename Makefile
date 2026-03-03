@@ -178,16 +178,17 @@ sim-test:
 
 # 	$(MAKE) sim DUT=input_fifo CONFIG=voxel_default
 # 	$(MAKE) sim DUT=uart_debug CONFIG=voxel_default
-# 	$(MAKE) sim DUT=uart_rx CONFIG=voxel_default
+# # 	$(MAKE) sim DUT=uart_rx CONFIG=voxel_default 				  # failing
 # 	$(MAKE) sim DUT=uart_tx CONFIG=voxel_default
 # 	$(MAKE) sim DUT=MatMul CONFIG=voxel_default
 # 	$(MAKE) sim DUT=evt2_decoder CONFIG=voxel_default
 # 	$(MAKE) sim DUT=voxel_gesture_classifier CONFIG=voxel_default
 # 	$(MAKE) sim DUT=voxel_systolic_array CONFIG=voxel_default
 # 	$(MAKE) sim DUT=voxel_weight_ram CONFIG=voxel_default
-#	$(MAKE) sim DUT=voxel_binning # takes a while to run
-#	$(MAKE) sim DUT=voxel_bin_core # still broken
-#	$(MAKE) sim DUT=voxel_bin_top # still broken
+# 	$(MAKE) sim DUT=voxel_binning CONFIG=voxel_default 			  # takes a while to run
+# 	$(MAKE) sim DUT=voxel_bin_core CONFIG=voxel_default
+# # 	$(MAKE) sim DUT=voxel_bin_top CONFIG=voxel_default  		  # failing
+
 #	$(MAKE) sim DUT=gradient_map_core CONFIG=gradient_default# still broken
 #	$(MAKE) sim DUT=gradient_map_top CONFIG=gradient_default# still broken
 #	$(MAKE) sim DUT=gradient_gesture_classifier CONFIG=gradient_default# takes a while to run

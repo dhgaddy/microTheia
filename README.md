@@ -129,8 +129,7 @@ https://github.com/Jilin-Zhang/ASYNC-Chisel
 - voxel_bin_top
 
 What needs to be done in cocotb-test-fix:
-- voxel_binning_tb is running slow and needs to be diagnosed and hasn't been integrated to work with the config system
-- voxel_bin_core and voxel_bin_top are broken and need to be diagnosed and haven't been integrated to work with the config system
+- config usage of voxel_bin_top and uart_rx
 - lower priority is getting gradient_map_core and gradient_map_top working
 
 What needs/should be done overall after:
