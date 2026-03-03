@@ -58,12 +58,10 @@ RUN echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" \
     apt-get install -y sbt && \
     rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --no-cache-dir --break-system-packages cocotb
+RUN python3 -m pip install --no-cache-dir --break-system-packages numpy opencv-python matplotlib cocotb
 
 USER vscode
 
 #install Rust (So far no tools need rust, so do we need it?)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/home/vscode/.cargo/bin:${PATH}"
-
-RUN curl -sSLf https://scala-cli.virtuslab.org/get | sh

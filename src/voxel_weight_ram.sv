@@ -7,10 +7,11 @@
 // the write port if required.
 
 module voxel_weight_ram #(
-    parameter CLASS_IDX   = 0,
-    parameter NUM_CELLS   = 1024,
-    parameter GRID_SIZE   = 16,
-    parameter WEIGHT_BITS = 8
+    parameter  CLASS_IDX   = 0,
+    parameter  GRID_SIZE   = 16,
+    parameter  NUM_BINS    = 4,
+    localparam NUM_CELLS   = GRID_SIZE * GRID_SIZE * NUM_BINS,
+    parameter  WEIGHT_BITS = 8
 )(
     input  logic                          clk,
     input  logic                          rst,
@@ -112,4 +113,3 @@ module voxel_weight_ram #(
     end
 
 endmodule
-

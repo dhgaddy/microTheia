@@ -9,10 +9,15 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 import random
+from config_parser import load_config
 
-GRID_BITS = 4
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
 
+GRID_SIZE = CFG["GRID_SIZE"]
+GRID_BITS = GRID_SIZE.bit_length() - 1
 
+MAX_COORD = GRID_SIZE - 1
 # ---------------------------------------------------------------------------
 # Golden reference model
 # ---------------------------------------------------------------------------
@@ -48,8 +53,8 @@ class Evt2DecoderModel:
 
             x_grid_raw5 = (x_raw >> 4) & 0x1F
             y_grid_raw5 = (y_raw >> 4) & 0x1F
-            x_grid = min(x_grid_raw5, 15)
-            y_grid = min(y_grid_raw5, 15)
+            x_grid = min(x_grid_raw5, MAX_COORD)
+            y_grid = min(y_grid_raw5, MAX_COORD)
 
             full_ts = ((self.time_high_reg & 0x3FF) << 6) | ts_lsb
 
@@ -127,8 +132,8 @@ async def test_cd_on_event(dut):
 
     assert int(dut.event_valid.value) == 1
     assert int(dut.polarity.value) == 1
-    assert int(dut.x_out.value) == min((x_sensor >> 4) & 0x1F, 15)
-    assert int(dut.y_out.value) == min((y_sensor >> 4) & 0x1F, 15)
+    assert int(dut.x_out.value) == min((x_sensor >> 4) & 0x1F, MAX_COORD)
+    assert int(dut.y_out.value) == min((y_sensor >> 4) & 0x1F, MAX_COORD)
 
 
 @cocotb.test()
@@ -169,7 +174,7 @@ async def test_time_high_update(dut):
 
 @cocotb.test()
 async def test_coordinate_clamping(dut):
-    """Coordinates above 15 should be clamped to 15."""
+    """Coordinates above MAX_COORD should be clamped to MAX_COORD."""
     await setup(dut)
     x_large = 0x7FF  # max 11-bit: grid_raw5 = (0x7FF >> 4) & 0x1F = 31
     y_large = 0x7FF
@@ -177,8 +182,8 @@ async def test_coordinate_clamping(dut):
     await drive_word(dut, word)
     await RisingEdge(dut.clk)
 
-    assert int(dut.x_out.value) == 15
-    assert int(dut.y_out.value) == 15
+    assert int(dut.x_out.value) == MAX_COORD
+    assert int(dut.y_out.value) == MAX_COORD
 
 
 @cocotb.test()

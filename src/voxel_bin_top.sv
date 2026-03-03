@@ -12,17 +12,21 @@
 `timescale 1ns/1ps
 
 module voxel_bin_top #(
-    parameter CLK_FREQ          = 12_000_000,
+    parameter CLK_FREQ_HZ       = 12_000_000,
     parameter BAUD_RATE         = 115200,
     parameter WINDOW_MS         = 400,
     parameter GRID_SIZE         = 16,
+    parameter NUM_BINS          = 4,
     parameter SENSOR_RES        = 320,
     parameter MIN_EVENT_THRESH  = 20,
     parameter MOTION_THRESH     = 8,
     parameter PERSISTENCE_COUNT = 2,
     parameter CYCLES_PER_BIN    = 0,
+    parameter FIFO_DEPTH        = 128,
+    parameter DATA_WIDTH        = 32,
+    parameter ACC_SUM_BITS      = 18,
     // Keep top-level synthesis BRAM usage within iCE40UP5K limits.
-    parameter CORE_PARALLEL_READS = 2
+    parameter PARALLEL_READS    = 2 // 4
 )(
     input  logic clk,
     input  logic uart_rx,
@@ -36,7 +40,7 @@ module voxel_bin_top #(
     output logic led_right
 );
 
-    localparam CLKS_PER_BIT = CLK_FREQ / BAUD_RATE;
+    localparam CLKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE;
     localparam integer BYTE_CYCLES = CLKS_PER_BIT * 10;
     localparam integer CMD_GAP_BYTES = 2;
     localparam integer CMD_GAP_CYCLES = BYTE_CYCLES * CMD_GAP_BYTES;
@@ -57,14 +61,27 @@ module voxel_bin_top #(
     logic tx_valid;
     logic tx_busy;
 
-    uart_rx #(.CLKS_PER_BIT(CLKS_PER_BIT)) u_rx (
-        .clk(clk), .rst(rst), .rx(uart_rx),
-        .data(rx_data), .valid(rx_valid)
+    uart_rx #(
+        .CLK_FREQ_HZ(CLK_FREQ_HZ),
+        .BAUD_RATE(BAUD_RATE)
+    ) u_rx (
+        .clk(clk), 
+        .rst(rst), 
+        .rx(uart_rx),
+        .data(rx_data), 
+        .valid(rx_valid)
     );
 
-    uart_tx #(.CLKS_PER_BIT(CLKS_PER_BIT)) u_tx (
-        .clk(clk), .rst(rst), .data(tx_data), .valid(tx_valid),
-        .tx(uart_tx), .busy(tx_busy)
+    uart_tx #(
+        .CLK_FREQ_HZ(CLK_FREQ_HZ),
+        .BAUD_RATE(BAUD_RATE)
+    ) u_tx (
+        .clk(clk), 
+        .rst(rst), 
+        .data(tx_data), 
+        .valid(tx_valid),
+        .tx(uart_tx), 
+        .busy(tx_busy)
     );
 
     logic [1:0]  gesture;
@@ -81,15 +98,18 @@ module voxel_bin_top #(
     logic        core_evt_valid;
 
     voxel_bin_core #(
-        .CLK_FREQ_HZ       (CLK_FREQ),
+        .CLK_FREQ_HZ       (CLK_FREQ_HZ),
         .WINDOW_MS         (WINDOW_MS),
         .GRID_SIZE         (GRID_SIZE),
-        .FIFO_DEPTH        (128),
+        .NUM_BINS          (NUM_BINS),
+        .FIFO_DEPTH        (FIFO_DEPTH),
         .MIN_EVENT_THRESH  (MIN_EVENT_THRESH),
         .MOTION_THRESH     (MOTION_THRESH),
         .PERSISTENCE_COUNT (PERSISTENCE_COUNT),
         .CYCLES_PER_BIN    (CYCLES_PER_BIN),
-        .PARALLEL_READS    (CORE_PARALLEL_READS)
+        .PARALLEL_READS    (PARALLEL_READS),
+        .DATA_WIDTH        (DATA_WIDTH),
+        .ACC_SUM_BITS      (ACC_SUM_BITS)
     ) u_core (
         .clk                 (clk),
         .rst                 (rst),

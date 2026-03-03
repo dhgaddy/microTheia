@@ -14,8 +14,8 @@ VALUE_BITS = 8
 MAX_VALUE = 255
 TS_MASK = 0xFFFF
 
-DECAY_SHIFT = 15
-MIN_MASS_THRESH = 20
+DECAY_SHIFT = 6 # 15
+MIN_MASS_THRESH = 20 # 20
 
 EVT_CD_OFF = 0x0
 EVT_CD_ON = 0x1
@@ -171,9 +171,9 @@ class GradientCoreHarness:
                 f"Observed decoded event {obs} with empty expected queue"
             exp = self.model.expected_decoded.popleft()
             assert obs == exp, f"Decoded mismatch: DUT={obs}, model={exp}"
-            t_now = int(self.dut.global_timestamp.value)
+            # t_now = int(self.dut.global_timestamp.value)
             # Drive the golden surface from expected decoded events derived from input words.
-            self.model.surface.write_event(exp[0], exp[1], t_now)
+            self.model.surface.write_event(exp[0], exp[1], exp[3])
 
         if int(self.dut.gesture_valid.value):
             t_now = int(self.dut.global_timestamp.value)

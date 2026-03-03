@@ -1,14 +1,19 @@
-"""units testbench for input_fifo with golden reference model."""
+"""Unit testbench for input_fifo with golden reference model."""
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 import random
+import os
+from config_parser import load_config
 
-DEPTH = 8
-PTR_BITS = 3
-DATA_WIDTH = 32
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
 
+FIFO_DEPTH = CFG["FIFO_DEPTH"]
+DATA_WIDTH = CFG["DATA_WIDTH"]
+
+PTR_BITS = FIFO_DEPTH.bit_length() - 1
 
 # ---------------------------------------------------------------------------
 # Golden reference model
@@ -16,7 +21,7 @@ DATA_WIDTH = 32
 class FifoModel:
     """Cycle-accurate model of the synchronous ring-buffer FIFO."""
 
-    def __init__(self, depth=DEPTH, ptr_bits=PTR_BITS):
+    def __init__(self, depth=FIFO_DEPTH, ptr_bits=PTR_BITS):
         self.depth = depth
         self.ptr_bits = ptr_bits
         self.reset()
@@ -112,10 +117,10 @@ async def test_single_write_read(dut):
 
 @cocotb.test()
 async def test_fill_to_capacity(dut):
-    """Fill FIFO to DEPTH, verify full flag, then drain."""
+    """Fill FIFO to FIFO_DEPTH, verify full flag, then drain."""
     await setup(dut)
 
-    for i in range(DEPTH):
+    for i in range(FIFO_DEPTH):
         dut.wr_en.value = 1
         dut.wr_data.value = i + 1
         await RisingEdge(dut.clk)
@@ -123,17 +128,17 @@ async def test_fill_to_capacity(dut):
     await RisingEdge(dut.clk)
 
     assert int(dut.full.value) == 1
-    assert int(dut.count.value) == DEPTH
+    assert int(dut.count.value) == FIFO_DEPTH
 
     read_values = []
-    for i in range(DEPTH):
+    for i in range(FIFO_DEPTH):
         dut.rd_en.value = 1
         await RisingEdge(dut.clk)
         dut.rd_en.value = 0
         await RisingEdge(dut.clk)
         read_values.append(int(dut.rd_data.value))
 
-    assert read_values == list(range(1, DEPTH + 1)), f"Read back: {read_values}"
+    assert read_values == list(range(1, FIFO_DEPTH + 1)), f"Read back: {read_values}"
 
 
 @cocotb.test()
@@ -141,7 +146,7 @@ async def test_overflow_protection(dut):
     """Writes to a full FIFO should be silently dropped."""
     await setup(dut)
 
-    for i in range(DEPTH):
+    for i in range(FIFO_DEPTH):
         dut.wr_en.value = 1
         dut.wr_data.value = 0xAA
         await RisingEdge(dut.clk)
@@ -152,7 +157,7 @@ async def test_overflow_protection(dut):
     await RisingEdge(dut.clk)
 
     assert int(dut.full.value) == 1
-    assert int(dut.count.value) == DEPTH
+    assert int(dut.count.value) == FIFO_DEPTH
 
 
 @cocotb.test()
@@ -183,7 +188,7 @@ async def test_simultaneous_read_write(dut):
 async def test_underflow_does_not_advance(dut):
     """Reads on an empty FIFO must not change pointers or count."""
     await setup(dut)
-    model = FifoModel(DEPTH, PTR_BITS)
+    model = FifoModel(FIFO_DEPTH, PTR_BITS)
 
     for _ in range(6):
         dut.wr_en.value = 0
@@ -204,14 +209,14 @@ async def test_wraparound_ordering(dut):
     await setup(dut)
 
     # Fill FIFO, pop half, then push half again to force pointer wrap.
-    for i in range(DEPTH):
+    for i in range(FIFO_DEPTH):
         dut.wr_en.value = 1
         dut.wr_data.value = i + 1
         dut.rd_en.value = 0
         await RisingEdge(dut.clk)
 
     popped = []
-    for _ in range(DEPTH // 2):
+    for _ in range(FIFO_DEPTH // 2):
         dut.wr_en.value = 0
         dut.rd_en.value = 1
         await RisingEdge(dut.clk)
@@ -219,7 +224,7 @@ async def test_wraparound_ordering(dut):
         await RisingEdge(dut.clk)
         popped.append(int(dut.rd_data.value))
 
-    for i in range(DEPTH // 2):
+    for i in range(FIFO_DEPTH // 2):
         dut.wr_en.value = 1
         dut.wr_data.value = 100 + i
         dut.rd_en.value = 0
@@ -234,8 +239,13 @@ async def test_wraparound_ordering(dut):
         await RisingEdge(dut.clk)
         drained.append(int(dut.rd_data.value))
 
-    assert popped == [1, 2, 3, 4], f"Unexpected popped values: {popped}"
-    assert drained == [5, 6, 7, 8, 100, 101, 102, 103], \
+    expected_popped = list(range(1, FIFO_DEPTH // 2 + 1))
+    assert popped == expected_popped, f"Unexpected popped values: {popped}"
+    expected_remaining = list(range(FIFO_DEPTH // 2 + 1, FIFO_DEPTH + 1))
+    expected_new = [100 + i for i in range(FIFO_DEPTH // 2)]
+    expected_drained = expected_remaining + expected_new
+
+    assert drained == expected_drained, \
         f"Unexpected drained ordering: {drained}"
 
 
@@ -243,7 +253,7 @@ async def test_wraparound_ordering(dut):
 async def test_golden_model_random(dut):
     """Cycle-by-cycle randomized scoreboarding against the golden model."""
     await setup(dut)
-    model = FifoModel(DEPTH, PTR_BITS)
+    model = FifoModel(FIFO_DEPTH, PTR_BITS)
     rng = random.Random(0xC0C0F1F0)
 
     for cycle in range(1000):

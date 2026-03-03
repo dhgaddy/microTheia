@@ -1,23 +1,25 @@
 `timescale 1ns/1ps
 
 // Parallel-input systolic matrix multiply for feature classification.
-// Processes PARALLEL_INPUTS cells per cycle; total cycles = ceil(NUM_CELLS / PARALLEL_INPUTS).
+// Processes PARALLEL_READS cells per cycle; total cycles = ceil(NUM_CELLS / PARALLEL_READS).
 
 module voxel_systolic_array #(
-    parameter NUM_CLASSES    = 4,
-    parameter NUM_CELLS      = 1024,
-    parameter VALUE_BITS     = 6,
-    parameter WEIGHT_BITS    = 8,
-    parameter ACC_BITS       = 24,
-    parameter PARALLEL_INPUTS = 4
+    parameter  NUM_CLASSES     = 4,
+    parameter  GRID_SIZE       = 16,
+    parameter  NUM_BINS        = 4,
+    localparam NUM_CELLS       = GRID_SIZE * GRID_SIZE * NUM_BINS,
+    parameter  VALUE_BITS      = 6,
+    parameter  WEIGHT_BITS     = 8,
+    parameter  ACC_BITS        = 24,
+    parameter  PARALLEL_READS  = 4
 )(
     input  logic                                    clk,
     input  logic                                    rst,
     input  logic                                    start,
-    input  logic [PARALLEL_INPUTS*VALUE_BITS-1:0]   feature_in,
+    input  logic [PARALLEL_READS*VALUE_BITS-1:0]   feature_in,
     input  logic                                    feature_valid,
-    output logic [PARALLEL_INPUTS*$clog2(NUM_CELLS)-1:0]            w_addr_flat,
-    input  logic [PARALLEL_INPUTS*NUM_CLASSES*WEIGHT_BITS-1:0]      w_data_flat,
+    output logic [PARALLEL_READS*$clog2(NUM_CELLS)-1:0]            w_addr_flat,
+    input  logic [PARALLEL_READS*NUM_CLASSES*WEIGHT_BITS-1:0]      w_data_flat,
     output logic                                    result_valid,
     output logic [1:0]                              best_class,
     output logic [NUM_CLASSES*ACC_BITS-1:0]         scores_flat
@@ -25,8 +27,8 @@ module voxel_systolic_array #(
 
     localparam CNT_BITS      = $clog2(NUM_CELLS + 4);
     localparam ADDR_BITS     = $clog2(NUM_CELLS);
-    localparam PARALLEL_BITS = $clog2(PARALLEL_INPUTS);
-    localparam CYCLES_NEEDED = (NUM_CELLS + PARALLEL_INPUTS - 1) / PARALLEL_INPUTS;
+    localparam PARALLEL_BITS = $clog2(PARALLEL_READS);
+    localparam CYCLES_NEEDED = (NUM_CELLS + PARALLEL_READS - 1) / PARALLEL_READS;
 
     typedef enum logic [1:0] {
         S_IDLE    = 2'd0,
@@ -44,34 +46,34 @@ module voxel_systolic_array #(
     logic signed [ACC_BITS-1:0] acc_r [0:NUM_CLASSES-1];
     logic signed [ACC_BITS-1:0] acc_tmp [0:NUM_CLASSES-1];
 
-    logic [PARALLEL_INPUTS*VALUE_BITS-1:0] feat_pipe_r;
+    logic [PARALLEL_READS*VALUE_BITS-1:0] feat_pipe_r;
     logic                                   pipe_valid_r;
 
-    wire [$clog2(NUM_CELLS)-1:0] w_addr [0:PARALLEL_INPUTS-1];
-    wire [NUM_CLASSES*WEIGHT_BITS-1:0] w_data [0:PARALLEL_INPUTS-1];
+    wire [$clog2(NUM_CELLS)-1:0] w_addr [0:PARALLEL_READS-1];
+    wire [NUM_CLASSES*WEIGHT_BITS-1:0] w_data [0:PARALLEL_READS-1];
 
     generate
         genvar pa;
-        for (pa = 0; pa < PARALLEL_INPUTS; pa = pa + 1) begin : gen_unpack_addr
+        for (pa = 0; pa < PARALLEL_READS; pa = pa + 1) begin : gen_unpack_addr
             assign w_addr[pa] = w_addr_flat[(pa+1)*$clog2(NUM_CELLS)-1 : pa*$clog2(NUM_CELLS)];
             assign w_data[pa] = w_data_flat[(pa+1)*NUM_CLASSES*WEIGHT_BITS-1 : pa*NUM_CLASSES*WEIGHT_BITS];
         end
     endgenerate
 
-    wire signed [WEIGHT_BITS-1:0] w [0:PARALLEL_INPUTS-1][0:NUM_CLASSES-1];
+    wire signed [WEIGHT_BITS-1:0] w [0:PARALLEL_READS-1][0:NUM_CLASSES-1];
     generate
         genvar pi, gk;
-        for (pi = 0; pi < PARALLEL_INPUTS; pi = pi + 1) begin : gen_parallel_weights
+        for (pi = 0; pi < PARALLEL_READS; pi = pi + 1) begin : gen_parallel_weights
             for (gk = 0; gk < NUM_CLASSES; gk = gk + 1) begin : gen_w_unpack
                 assign w[pi][gk] = $signed(w_data[pi][(gk+1)*WEIGHT_BITS-1 : gk*WEIGHT_BITS]);
             end
         end
     endgenerate
 
-    wire signed [VALUE_BITS-1:0] feat_vals [0:PARALLEL_INPUTS-1];
+    wire signed [VALUE_BITS-1:0] feat_vals [0:PARALLEL_READS-1];
     generate
         genvar fi;
-        for (fi = 0; fi < PARALLEL_INPUTS; fi = fi + 1) begin : gen_feat_unpack
+        for (fi = 0; fi < PARALLEL_READS; fi = fi + 1) begin : gen_feat_unpack
             assign feat_vals[fi] = $signed(feat_pipe_r[(fi+1)*VALUE_BITS-1 : fi*VALUE_BITS]);
         end
     endgenerate
@@ -107,8 +109,8 @@ module voxel_systolic_array #(
                             acc[k] <= '0;
                         cell_cnt <= '0;
                         acc_cnt  <= '0;
-                        // Pre-load address for first batch (cell 0..PARALLEL_INPUTS-1)
-                        for (int p = 0; p < PARALLEL_INPUTS; p = p + 1)
+                        // Pre-load address for first batch (cell 0..PARALLEL_READS-1)
+                        for (int p = 0; p < PARALLEL_READS; p = p + 1)
                             w_addr_flat[p*ADDR_BITS +: ADDR_BITS] <= p;
                         state <= S_RUNNING;
                     end
@@ -122,8 +124,8 @@ module voxel_systolic_array #(
                         for (k = 0; k < NUM_CLASSES; k = k + 1)
                             acc_tmp[k] = acc[k];
 
-                        for (int p = 0; p < PARALLEL_INPUTS; p = p + 1) begin
-                            if ((acc_cnt * PARALLEL_INPUTS + p) < NUM_CELLS) begin
+                        for (int p = 0; p < PARALLEL_READS; p = p + 1) begin
+                            if ((acc_cnt * PARALLEL_READS + p) < NUM_CELLS) begin
                                 for (k = 0; k < NUM_CLASSES; k = k + 1) begin
                                     acc_tmp[k] = acc_tmp[k] +
                                         ACC_BITS'($signed({1'b0, feat_vals[p]}) * $signed(w[p][k]));
@@ -140,8 +142,8 @@ module voxel_systolic_array #(
                         pipe_valid_r <= 1'b1;
                         cell_cnt <= cell_cnt + 1'b1;
                         // Load address for current batch; data arrives next cycle when pipe_valid_r=1
-                        for (int p = 0; p < PARALLEL_INPUTS; p = p + 1) begin
-                            w_addr_flat[p*ADDR_BITS +: ADDR_BITS] <= cell_cnt * PARALLEL_INPUTS + p;
+                        for (int p = 0; p < PARALLEL_READS; p = p + 1) begin
+                            w_addr_flat[p*ADDR_BITS +: ADDR_BITS] <= cell_cnt * PARALLEL_READS + p;
                         end
 
                         if (cell_cnt >= CNT_BITS'(CYCLES_NEEDED - 1))
@@ -155,8 +157,8 @@ module voxel_systolic_array #(
                         for (k = 0; k < NUM_CLASSES; k = k + 1)
                             acc_tmp[k] = acc[k];
 
-                        for (int p = 0; p < PARALLEL_INPUTS; p = p + 1) begin
-                            if ((acc_cnt * PARALLEL_INPUTS + p) < NUM_CELLS) begin
+                        for (int p = 0; p < PARALLEL_READS; p = p + 1) begin
+                            if ((acc_cnt * PARALLEL_READS + p) < NUM_CELLS) begin
                                 for (k = 0; k < NUM_CLASSES; k = k + 1) begin
                                     acc_tmp[k] = acc_tmp[k] +
                                         ACC_BITS'($signed({1'b0, feat_vals[p]}) * $signed(w[p][k]));

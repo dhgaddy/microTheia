@@ -6,7 +6,7 @@ from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 import random
 
 NUM_CLASSES = 4
-NUM_CELLS = 16
+NUM_CELLS = 1024
 VALUE_BITS = 8
 WEIGHT_BITS = 8
 ACC_BITS = 24

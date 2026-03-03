@@ -1,0 +1,43 @@
+name: sim
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  Test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Download Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-dev
+          pip3 install -r scripts/requirements.txt
+          wget -O - https://raw.githubusercontent.com/sifferman/hdl-tool-installer/main/install | bash -s -- . --oss-cad-suite --zachjs-sv2v
+          echo "$GITHUB_WORKSPACE/oss-cad-suite/bin" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/zachjs-sv2v" >> $GITHUB_PATH
+
+      # - run: make lint
+
+      - run: make sim DUT=evt2_decoder
+      - run: make sim DUT=input_fifo
+      - run: make sim DUT=MatMul
+
+      - run: make sim DUT=uart_debug
+      - run: make sim DUT=uart_rx
+      - run: make sim DUT=uart_tx
+
+      - run: make sim DUT=voxel_bin_core
+      - run: make sim DUT=voxel_bin_top
+      - run: make sim DUT=voxel_binning
+      - run: make sim DUT=voxel_gesture_classifier
+      - run: make sim DUT=voxel_systolic_array
+      - run: make sim DUT=voxel_weight_ram
+
+      - run: make clean

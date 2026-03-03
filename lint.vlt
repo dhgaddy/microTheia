@@ -1,0 +1,26 @@
+`verilator_config
+
+lint_off -file "*third_party/*" -match "*"
+lint_off -rule EOFNEWLINE -file "*third_party/*"
+
+lint_off -file "*yosys/*" -match "*"
+
+lint_off -rule DECLFILENAME -file "*synth/*build/*"
+lint_off -rule PINMISSING -file "*synth/*build/*"
+lint_off -rule UNUSEDSIGNAL -file "*synth/*build/*"
+lint_off -rule UNDRIVEN -file "*synth/*build/*"
+
+lint_off -rule WIDTH
+lint_off -rule PINCONNECTEMPTY
+lint_off -rule GENUNNAMED
+lint_off -rule UNUSEDPARAM -file "*pkg.sv"
+lint_off -rule UNOPTFLAT
+lint_off -rule TIMESCALEMOD
+lint_off -rule CASEINCOMPLETE
+lint_off -rule WIDTHCONCAT
+lint_off -rule UNUSEDSIGNAL
+lint_off -rule UNDRIVEN
+
+lint_off -rule VARHIDDEN -file "*dv/*"
+lint_off -rule PINMISSING -file "*dv/*"
+lint_off -rule SYNCASYNCNET -file "*dv/*"

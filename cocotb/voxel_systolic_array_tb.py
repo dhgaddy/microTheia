@@ -4,15 +4,20 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 import random
+from config_parser import load_config
 
-NUM_CLASSES = 4
-NUM_CELLS = 16
-VALUE_BITS = 6
-WEIGHT_BITS = 8
-ACC_BITS = 24
-PARALLEL_INPUTS = 4
-ADDR_BITS = NUM_CELLS.bit_length()  # clog2(16) = 4
-CYCLES_NEEDED = (NUM_CELLS + PARALLEL_INPUTS - 1) // PARALLEL_INPUTS  # 4
+CFG = load_config()
+
+NUM_CLASSES     = CFG["NUM_CLASSES"]
+NUM_BINS        = CFG["NUM_BINS"]
+GRID_SIZE       = CFG["GRID_SIZE"]
+VALUE_BITS      = CFG["VALUE_BITS"]
+WEIGHT_BITS     = CFG["WEIGHT_BITS"]
+ACC_BITS        = CFG["ACC_BITS"]
+PARALLEL_READS  = CFG["PARALLEL_READS"]
+NUM_CELLS       = NUM_BINS * GRID_SIZE * GRID_SIZE
+ADDR_BITS       = (NUM_CELLS - 1).bit_length() # clog2(1024) = 10
+CYCLES_NEEDED   = (NUM_CELLS + PARALLEL_READS - 1) // PARALLEL_READS  # 256
 
 
 # ---------------------------------------------------------------------------
@@ -23,13 +28,13 @@ class VBSystolicModel:
 
     def __init__(self, num_classes=NUM_CLASSES, num_cells=NUM_CELLS,
                  value_bits=VALUE_BITS, weight_bits=WEIGHT_BITS,
-                 acc_bits=ACC_BITS, parallel_inputs=PARALLEL_INPUTS):
+                 acc_bits=ACC_BITS, PARALLEL_READS=PARALLEL_READS):
         self.num_classes = num_classes
         self.num_cells = num_cells
         self.value_bits = value_bits
         self.weight_bits = weight_bits
         self.acc_bits = acc_bits
-        self.parallel_inputs = parallel_inputs
+        self.PARALLEL_READS = PARALLEL_READS
         self.acc_mask = (1 << acc_bits) - 1
         self.acc_sign = 1 << (acc_bits - 1)
 
@@ -81,7 +86,7 @@ async def setup(dut):
 
 
 def pack_features(values):
-    """Pack PARALLEL_INPUTS feature values into a flat bus."""
+    """Pack PARALLEL_READS feature values into a flat bus."""
     result = 0
     for i, v in enumerate(values):
         result |= (v & ((1 << VALUE_BITS) - 1)) << (i * VALUE_BITS)
@@ -90,7 +95,7 @@ def pack_features(values):
 
 def pack_weights(weight_matrix, addrs):
     """
-    Pack PARALLEL_INPUTS * NUM_CLASSES weights into w_data_flat.
+    Pack PARALLEL_READS * NUM_CLASSES weights into w_data_flat.
     weight_matrix[cell][class] -> signed WEIGHT_BITS.
     """
     result = 0
@@ -103,10 +108,10 @@ def pack_weights(weight_matrix, addrs):
 
 
 def unpack_addrs(flat):
-    """Unpack PARALLEL_INPUTS addresses from w_addr_flat."""
+    """Unpack PARALLEL_READS addresses from w_addr_flat."""
     addrs = []
     mask = (1 << ADDR_BITS) - 1
-    for p in range(PARALLEL_INPUTS):
+    for p in range(PARALLEL_READS):
         addrs.append((flat >> (p * ADDR_BITS)) & mask)
     return addrs
 
@@ -129,12 +134,12 @@ async def run_inference(dut, features, weights):
     dut.start.value = 0
 
     for cycle in range(CYCLES_NEEDED):
-        feat_base = cycle * PARALLEL_INPUTS
+        feat_base = cycle * PARALLEL_READS
         feat_vals = [features[feat_base + p] if (feat_base + p) < NUM_CELLS else 0
-                     for p in range(PARALLEL_INPUTS)]
+                     for p in range(PARALLEL_READS)]
         weight_cycle = cycle - 1 if cycle > 0 else 0
-        weight_base = weight_cycle * PARALLEL_INPUTS
-        weight_addrs = [weight_base + p for p in range(PARALLEL_INPUTS)]
+        weight_base = weight_cycle * PARALLEL_READS
+        weight_addrs = [weight_base + p for p in range(PARALLEL_READS)]
         w_packed = pack_weights(weights, [min(a, NUM_CELLS - 1) for a in weight_addrs])
 
         dut.feature_in.value = pack_features(feat_vals)
@@ -143,8 +148,8 @@ async def run_inference(dut, features, weights):
         await RisingEdge(dut.clk)
 
     dut.feature_valid.value = 0
-    last_base = (CYCLES_NEEDED - 1) * PARALLEL_INPUTS
-    last_addrs = [last_base + p for p in range(PARALLEL_INPUTS)]
+    last_base = (CYCLES_NEEDED - 1) * PARALLEL_READS
+    last_addrs = [last_base + p for p in range(PARALLEL_READS)]
     dut.w_data_flat.value = pack_weights(weights, [min(a, NUM_CELLS - 1) for a in last_addrs])
 
     result_class = None

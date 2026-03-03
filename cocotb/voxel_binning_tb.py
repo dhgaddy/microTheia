@@ -5,7 +5,6 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles
 import random
 
-CYCLES_PER_BIN = 100
 NUM_BINS = 4
 READOUT_BINS = 4
 GRID_SIZE = 16
@@ -76,24 +75,37 @@ async def setup(dut):
     dut.event_x.value = 0
     dut.event_y.value = 0
     dut.event_polarity.value = 0
+
     await ClockCycles(dut.clk, 5)
     dut.rst.value = 0
-    await ClockCycles(dut.clk, CELLS_PER_BIN + 10)
+
+    # RTL starts in S_CLEAR and clears one full bin first.
+    await ClockCycles(dut.clk, CELLS_PER_BIN + 2)
 
 
 async def inject_event(dut, x_signed, y_signed, pol=1):
     x_val = x_signed & 0x1F
-    dut.event_x.value = x_val
     y_val = y_signed & 0x1F
+
+    # Wait until the DUT can accept an event.
+    while int(dut.event_ready.value) == 0:
+        await RisingEdge(dut.clk)
+
+    dut.event_x.value = x_val
     dut.event_y.value = y_val
     dut.event_polarity.value = pol
     dut.event_valid.value = 1
+
     await RisingEdge(dut.clk)
+
     dut.event_valid.value = 0
     await RisingEdge(dut.clk)
 
 
-async def wait_for_readout_start(dut, timeout=CYCLES_PER_BIN + CELLS_PER_BIN + 500):
+async def wait_for_readout_start(dut, timeout=None):
+    if timeout is None:
+        timeout = get_cycles_per_bin(dut) + CELLS_PER_BIN + 50
+
     for _ in range(timeout):
         await RisingEdge(dut.clk)
         if int(dut.readout_start.value) == 1:
@@ -101,8 +113,12 @@ async def wait_for_readout_start(dut, timeout=CYCLES_PER_BIN + CELLS_PER_BIN + 5
     return False
 
 
-async def collect_readout(dut, timeout=CYCLES_PER_BIN * READOUT_BINS + 500):
+async def collect_readout(dut, timeout=None):
     """Collect all readout_data while readout_valid is asserted."""
+    if timeout is None:
+        cycles_per_bin_read = (CELLS_PER_BIN + PARALLEL_READS - 1) // PARALLEL_READS
+        timeout = cycles_per_bin_read * READOUT_BINS + 50
+
     values = []
     for _ in range(timeout):
         await RisingEdge(dut.clk)
@@ -140,6 +156,23 @@ async def expect_next_readout_matches(dut, model, tag):
     assert_readout_equal(readout, expected, tag)
     return readout, expected
 
+def get_cycles_per_bin(dut):
+    """
+    Match the RTL's effective CYCLES_PER_BIN_USE.
+    If CYCLES_PER_BIN is nonzero, use it directly.
+    Otherwise compute the auto value from CLK_FREQ_HZ, WINDOW_MS, NUM_BINS.
+    """
+    cpb = int(dut.CYCLES_PER_BIN.value)
+    if cpb != 0:
+        return cpb
+
+    clk_hz = int(dut.CLK_FREQ_HZ.value)
+    window_ms = int(dut.WINDOW_MS.value)
+    num_bins = int(dut.NUM_BINS.value)
+
+    bin_duration_ms = window_ms // num_bins
+    return (clk_hz // 1000) * bin_duration_ms
+
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -172,7 +205,8 @@ async def test_bin_rotation(dut):
     """Multiple bin rotations should produce readout_start pulses."""
     await setup(dut)
     starts_seen = 0
-    for _ in range((CYCLES_PER_BIN + CELLS_PER_BIN) * (NUM_BINS + 1) + 500):
+    cycles_per_bin = get_cycles_per_bin(dut)
+    for _ in range((cycles_per_bin + CELLS_PER_BIN) * (NUM_BINS + 1) + 50):
         await RisingEdge(dut.clk)
         if int(dut.readout_start.value) == 1:
             starts_seen += 1

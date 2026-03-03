@@ -65,10 +65,10 @@ The underlying simulator is Icarus Verilog (https://github.com/steveicarus/iveri
 The testbenchs are located in `cocotb`. To run the RTL simulation, run the following command:
 
 ```
-make sim DUT=module_name
+make sim DUT=module_name CONFIG=config_name
 ```
 
-If a design name isn't provided the simulation of all modules will be done instead.
+If a design name isn't provided the simulation of all modules will be done instead. If CONFIG isn't provided it will default to voxel_default.txt. Configs are stored in the configs folder.
 
 To run the GL (gate-level) simulation, run the following command:
 
@@ -125,13 +125,23 @@ https://github.com/Jilin-Zhang/ASYNC-Chisel
 ### Modules currently failing tests
 - gradient_map_core
 - gradient_map_top
-- gradient_systolic_array
-- input_fifo
-- MatMul.sv (ALSO NEEDS COCOTB TEST FILE)
-- uart_debug
-- uart_rx
-- uart_tx
 - voxel_bin_core
 - voxel_bin_top
-- voxel_binning
-- voxel_systolic_array
+
+What needs to be done in cocotb-test-fix:
+- config usage of voxel_bin_top and uart_rx
+- lower priority is getting gradient_map_core and gradient_map_top working
+
+What needs/should be done overall after:
+cocotb-test-fix is done:
+- add in the ICE40 stuff? on a seperate branch
+- add full explanation of step by step of design including evt2decoder doing downsampling on a seperate branch maybe
+- include updated latex diagram on a seperate branch maybe(I'll do this since i got the old diagram)
+ 
+What other things must be done:
+- check requirements for deliverables and do what is left
+- clean up the README in scripts
+- add the new python files in scripts and have instructions on how to run
+- include a weights folder for storing the weights we use
+- include a link a google drive storing the video recordings
+- reenable github actions

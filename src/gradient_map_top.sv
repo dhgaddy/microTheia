@@ -5,7 +5,7 @@
 // (four bytes per word, MSB first). This top handles UART
 // reception/word assembly and UART transmission of gesture results.
 // All gesture processing is inside gradient_map_core, which owns:
-//   input_fifo → evt2_decoder → gradient_mapping → systolic_array → gesture_classifier.
+//   input_fifo -> evt2_decoder -> gradient_mapping -> systolic_array -> gesture_classifier.
 // Target: Lattice iCE40UP5K on iCEBreaker board.
 
 module gradient_map_top #(
@@ -13,7 +13,18 @@ module gradient_map_top #(
     parameter BAUD_RATE       = 115200,
     parameter FRAME_PERIOD_MS = 50,
     parameter DECAY_SHIFT     = 6,
-    parameter MIN_MASS_THRESH = 2000
+    parameter MIN_MASS_THRESH = 2000,
+    parameter FIFO_DEPTH      = 128,
+    parameter GRID_SIZE       = 16,
+    parameter ADDR_BITS       = 8,
+    parameter VALUE_BITS      = 8,
+    parameter MOMENT_BITS     = 24,
+    parameter WEIGHT_BITS     = 8,
+    parameter SCORE_BITS      = 24,
+    parameter NUM_CLASSES     = 4,
+    parameter DATA_WIDTH      = 32,
+    parameter TS_BITS         = 16,
+    parameter MAX_VALUE       = 255
 )(
     input  logic clk,
     input  logic uart_rx,
@@ -108,10 +119,21 @@ module gradient_map_top #(
     logic        decoded_valid;
 
     gradient_map_core #(
-        .CLK_FREQ_HZ    (CLK_FREQ_HZ),
+        .CLK_FREQ_HZ(CLK_FREQ_HZ),
         .FRAME_PERIOD_MS(FRAME_PERIOD_MS),
-        .DECAY_SHIFT    (DECAY_SHIFT),
-        .MIN_MASS_THRESH(MIN_MASS_THRESH)
+        .DECAY_SHIFT(DECAY_SHIFT),
+        .MIN_MASS_THRESH(MIN_MASS_THRESH),
+        .FIFO_DEPTH(FIFO_DEPTH),
+        .GRID_SIZE(GRID_SIZE),
+        .ADDR_BITS(ADDR_BITS),
+        .VALUE_BITS(VALUE_BITS),
+        .MOMENT_BITS(MOMENT_BITS),
+        .WEIGHT_BITS(WEIGHT_BITS),
+        .SCORE_BITS(SCORE_BITS),
+        .NUM_CLASSES(NUM_CLASSES),
+        .DATA_WIDTH(DATA_WIDTH),
+        .TS_BITS(TS_BITS),
+        .MAX_VALUE(MAX_VALUE)
     ) u_core (
         .clk                (clk),
         .rst                (rst),
