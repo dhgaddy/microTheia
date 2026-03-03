@@ -4,15 +4,10 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles
 import random
-import os
-from config_parser import load_config
 
-MODULE = os.environ.get("TOPLEVEL")
-CFG = load_config(MODULE)
-
-CLK_FREQ_HZ = CFG["CLK_FREQ_HZ"]
-BAUD_RATE = CFG["BAUD_RATE"]
-CLKS_PER_BIT = CLK_FREQ_HZ // BAUD_RATE
+CLK_FREQ_HZ = 12_000_000
+BAUD_RATE = 3_000_000
+CLKS_PER_BIT = CLK_FREQ_HZ // BAUD_RATE  # = 4
 
 
 # ---------------------------------------------------------------------------

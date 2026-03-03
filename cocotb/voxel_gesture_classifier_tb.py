@@ -4,14 +4,10 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 import random
-import os
-from config_parser import load_config
 
-MODULE = os.environ.get("TOPLEVEL")
-CFG    = load_config(MODULE)
+ACC_SUM_BITS = 18
+PERSISTENCE_COUNT = 2
 
-ACC_SUM_BITS      = CFG["ACC_SUM_BITS"]
-PERSISTENCE_COUNT = CFG["PERSISTENCE_COUNT"]
 
 # ---------------------------------------------------------------------------
 # Golden reference model

@@ -5,8 +5,7 @@
 // Spatial compression matches gradient-map behavior (320x320 -> 16x16).
 
 module evt2_decoder #(
-    parameter  GRID_SIZE = 16,
-    localparam GRID_BITS = $clog2(GRID_SIZE)
+    parameter GRID_BITS = 4
 )(
     input  logic                    clk,
     input  logic                    rst,

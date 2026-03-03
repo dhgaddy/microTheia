@@ -4,15 +4,9 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles
 import random
-import os
-from config_parser import load_config
 
-MODULE = os.environ.get("TOPLEVEL")
-CFG = load_config(MODULE)
+CLKS_PER_BIT = 4
 
-CLK_FREQ_HZ = CFG["CLK_FREQ_HZ"]
-BAUD_RATE = CFG["BAUD_RATE"]
-CLKS_PER_BIT = CLK_FREQ_HZ // BAUD_RATE
 
 # ---------------------------------------------------------------------------
 # Golden reference model
@@ -110,28 +104,6 @@ async def setup(dut):
     dut.rst.value = 0
     await ClockCycles(dut.clk, 2)
 
-async def send_uart_byte_and_capture(dut, byte_val):
-    # start bit
-    dut.rx.value = 0
-    await ClockCycles(dut.clk, CLKS_PER_BIT)
-
-    # data bits
-    for i in range(8):
-        dut.rx.value = (byte_val >> i) & 1
-        await ClockCycles(dut.clk, CLKS_PER_BIT)
-
-    # stop bit
-    dut.rx.value = 1
-    await ClockCycles(dut.clk, CLKS_PER_BIT)
-
-    # Now wait for valid pulse
-    FRAME_BITS = 10
-    for _ in range(CLKS_PER_BIT * FRAME_BITS + CLKS_PER_BIT):
-        await RisingEdge(dut.clk)
-        if dut.valid.value == 1:
-            return int(dut.data.value)
-
-    return None
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -146,17 +118,33 @@ async def test_reset(dut):
 
 @cocotb.test()
 async def test_single_byte(dut):
+    """Send 0xA5 and verify data/valid."""
     await setup(dut)
-    result = await send_uart_byte_and_capture(dut, 0xA5)
-    assert result == 0xA5
+    await send_uart_byte(dut, 0xA5)
+    found = False
+    for _ in range(CLKS_PER_BIT * 2):
+        await RisingEdge(dut.clk)
+        if int(dut.valid.value) == 1:
+            assert int(dut.data.value) == 0xA5
+            found = True
+            break
+    assert found, "valid never asserted"
+
 
 @cocotb.test()
 async def test_all_byte_values(dut):
     """Send every possible byte value and verify correct reception."""
     await setup(dut)
     for val in range(256):
-        result = await send_uart_byte_and_capture(dut, val)
-        assert result == val
+        await send_uart_byte(dut, val)
+        found = False
+        for _ in range(CLKS_PER_BIT * 4):
+            await RisingEdge(dut.clk)
+            if int(dut.valid.value) == 1:
+                assert int(dut.data.value) == val, f"Expected 0x{val:02X}, got 0x{int(dut.data.value):02X}"
+                found = True
+                break
+        assert found, f"valid not asserted for byte 0x{val:02X}"
         await ClockCycles(dut.clk, 2)
 
 
@@ -229,12 +217,16 @@ async def test_golden_model_random(dut):
 
 @cocotb.test()
 async def test_back_to_back_bytes(dut):
+    """Receive bytes with minimal idle gap between them."""
     await setup(dut)
     test_bytes = [0x00, 0xFF, 0x55, 0xAA, 0x42]
     received = []
-
     for b in test_bytes:
-        result = await send_uart_byte_and_capture(dut, b)
-        received.append(result)
+        await send_uart_byte(dut, b)
+        for _ in range(CLKS_PER_BIT * 4):
+            await RisingEdge(dut.clk)
+            if int(dut.valid.value) == 1:
+                received.append(int(dut.data.value))
+                break
+    assert received == test_bytes, f"Expected {test_bytes}, got {received}"
 
-    assert received == test_bytes
