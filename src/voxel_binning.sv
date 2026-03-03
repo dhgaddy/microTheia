@@ -7,9 +7,9 @@
 module voxel_binning #(
     parameter CLK_FREQ_HZ    = 12_000_000,
     parameter WINDOW_MS      = 400,
+    parameter GRID_SIZE      = 16,
     parameter NUM_BINS       = 4,
     parameter READOUT_BINS   = 4,
-    parameter GRID_SIZE      = 16,
     parameter COUNTER_BITS   = 6,
     parameter PARALLEL_READS = 4,
     parameter CYCLES_PER_BIN = 0  // 0 = auto-compute from WINDOW_MS/NUM_BINS

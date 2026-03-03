@@ -39,3 +39,6 @@ final/
 img/
 *.lyrdb
 results.xml
+
+# third_party
+third_party/

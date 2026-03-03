@@ -8,9 +8,9 @@
 
 module voxel_weight_ram #(
     parameter  CLASS_IDX   = 0,
-    parameter  NUM_BINS    = 4,
     parameter  GRID_SIZE   = 16,
-    localparam NUM_CELLS   = NUM_BINS * GRID_SIZE * GRID_SIZE,
+    parameter  NUM_BINS    = 4,
+    localparam NUM_CELLS   = GRID_SIZE * GRID_SIZE * NUM_BINS,
     parameter  WEIGHT_BITS = 8
 )(
     input  logic                          clk,
@@ -113,4 +113,3 @@ module voxel_weight_ram #(
     end
 
 endmodule
-

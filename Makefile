@@ -98,7 +98,7 @@ sim: ## Run RTL simulation with cocotb
 		\
 		# ------------------ Default CARGS ------------------ \
 		if [ "$$d" = "evt2_decoder" ]; then \
-			CARGS="-P$$d.GRID_SIZE=8"; \
+			CARGS="-P$$d.GRID_SIZE=16"; \
 		elif [ "$$d" = "input_fifo" ]; then \
 			CARGS="-P$$d.FIFO_DEPTH=8 -P$$d.DATA_WIDTH=32"; \
 		elif [ "$$d" = "uart_debug" ]; then \
@@ -112,13 +112,15 @@ sim: ## Run RTL simulation with cocotb
 		elif [ "$$d" = "voxel_gesture_classifier" ]; then \
 			CARGS="-P$$d.ACC_SUM_BITS=18 -P$$d.PERSISTENCE_COUNT=2"; \
 		elif [ "$$d" = "voxel_systolic_array" ]; then \
-			CARGS="-P$$d.NUM_CELLS=16"; \
+			CARGS="-P$$d.GRID_SIZE=16 -P$$d.NUM_BINS=4 -P$$d.NUM_CLASSES=4 -P$$d.VALUE_BITS=6 -P$$d.WEIGHT_BITS=8 -P$$d.ACC_BITS=24 -P$$d.PARALLEL_READS=4"; \
 		elif [ "$$d" = "voxel_weight_ram" ]; then \
-			CARGS="-P$$d.CLASS_IDX=0"; \
-		elif [ "$$d" = "voxel_binning" ] || [ "$$d" = "voxel_bin_core" ]; then \
+			CARGS="-P$$d.CLASS_IDX=0 -P$$d.GRID_SIZE=16 -P$$d.NUM_BINS=4 -P$$d.WEIGHT_BITS=8"; \
+		elif [ "$$d" = "voxel_binning" ]; then \
+			CARGS="-P$$d.CYCLES_PER_BIN=100"; \
+		elif [ "$$d" = "voxel_bin_core" ]; then \
 			CARGS="-P$$d.CYCLES_PER_BIN=100"; \
 		elif [ "$$d" = "voxel_bin_top" ]; then \
-			CARGS="-P$$d.CYCLES_PER_BIN=100 -P$$d.CLK_FREQ=1000000 -P$$d.BAUD_RATE=250000 -P$$d.CORE_PARALLEL_READS=4"; \
+			CARGS="-P$$d.CYCLES_PER_BIN=100 -P$$d.CLK_FREQ_HZ=1000000 -P$$d.BAUD_RATE=250000 -P$$d.PARALLEL_READS=4"; \
 		else \
 			CARGS=""; \
 		fi; \
@@ -162,17 +164,24 @@ sim-view: ## View simulation waveforms in GTKWave
 
 sim-test:
 	$(MAKE) sim DUT=evt2_decoder
-	$(MAKE) sim DUT=evt2_decoder CONFIG=voxel_default
 	$(MAKE) sim DUT=input_fifo
-	$(MAKE) sim DUT=input_fifo CONFIG=voxel_default
 	$(MAKE) sim DUT=uart_debug
-	$(MAKE) sim DUT=uart_debug CONFIG=voxel_default
 	$(MAKE) sim DUT=uart_rx
-	$(MAKE) sim DUT=uart_rx CONFIG=voxel_default
 	$(MAKE) sim DUT=uart_tx
-	$(MAKE) sim DUT=uart_tx CONFIG=voxel_default
 	$(MAKE) sim DUT=MatMul
-	$(MAKE) sim DUT=MatMul CONFIG=voxel_default
+	$(MAKE) sim DUT=voxel_gesture_classifier
+	$(MAKE) sim DUT=voxel_systolic_array
+	$(MAKE) sim DUT=voxel_weight_ram
+	$(MAKE) sim DUT=voxel_binning
+	$(MAKE) sim DUT=voxel_bin_core
+	$(MAKE) sim DUT=voxel_bin_top
+
+# 	$(MAKE) sim DUT=input_fifo CONFIG=voxel_default
+# 	$(MAKE) sim DUT=uart_debug CONFIG=voxel_default
+# 	$(MAKE) sim DUT=uart_rx CONFIG=voxel_default
+# 	$(MAKE) sim DUT=uart_tx CONFIG=voxel_default
+# 	$(MAKE) sim DUT=MatMul CONFIG=voxel_default
+# 	$(MAKE) sim DUT=evt2_decoder CONFIG=voxel_default
 # 	$(MAKE) sim DUT=voxel_gesture_classifier CONFIG=voxel_default
 # 	$(MAKE) sim DUT=voxel_systolic_array CONFIG=voxel_default
 # 	$(MAKE) sim DUT=voxel_weight_ram CONFIG=voxel_default

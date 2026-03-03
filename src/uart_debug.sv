@@ -14,7 +14,7 @@ module uart_debug #(
     output logic        uart_tx
 );
 
-    localparam CLKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE;
+    localparam CLKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE; // 12MHz / 115200
 
     localparam MSG_UP_LEN    = 4;
     localparam MSG_DOWN_LEN  = 6;
@@ -140,4 +140,3 @@ module uart_debug #(
     end
 
 endmodule
-

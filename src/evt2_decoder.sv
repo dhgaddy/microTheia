@@ -24,8 +24,6 @@ module evt2_decoder #(
     localparam [3:0] EVT_CD_ON     = 4'h1;
     localparam [3:0] EVT_TIME_HIGH = 4'h8;
 
-    localparam [4:0] MAX_COORD     = GRID_SIZE - 1;
-
     wire [3:0]  pkt_type          = data_in[31:28];
     wire [5:0]  ts_lsb            = data_in[27:22];
     wire [10:0] x_raw             = data_in[21:11];
@@ -36,8 +34,8 @@ module evt2_decoder #(
 
     wire [4:0] x_grid_raw5 = x_raw[8:4];
     wire [4:0] y_grid_raw5 = y_raw[8:4];
-    wire [GRID_BITS-1:0] x_grid = (x_grid_raw5 > MAX_COORD) ? MAX_COORD : x_grid_raw5[GRID_BITS-1:0];
-    wire [GRID_BITS-1:0] y_grid = (y_grid_raw5 > MAX_COORD) ? MAX_COORD : y_grid_raw5[GRID_BITS-1:0];
+    wire [GRID_BITS-1:0] x_grid = (x_grid_raw5 > 5'd15) ? 4'd15 : x_grid_raw5[GRID_BITS-1:0];
+    wire [GRID_BITS-1:0] y_grid = (y_grid_raw5 > 5'd15) ? 4'd15 : y_grid_raw5[GRID_BITS-1:0];
 
     wire [15:0] full_ts = {time_high_reg[9:0], ts_lsb};
 
