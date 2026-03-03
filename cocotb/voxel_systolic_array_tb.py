@@ -6,13 +6,16 @@ from cocotb.triggers import RisingEdge, ClockCycles, ReadOnly, NextTimeStep
 import random
 
 NUM_CLASSES = 4
-NUM_CELLS = 16
+GRID_SIZE = 16
+NUM_BINS = 4
 VALUE_BITS = 6
 WEIGHT_BITS = 8
 ACC_BITS = 24
 PARALLEL_INPUTS = 4
-ADDR_BITS = NUM_CELLS.bit_length()  # clog2(16) = 4
-CYCLES_NEEDED = (NUM_CELLS + PARALLEL_INPUTS - 1) // PARALLEL_INPUTS  # 4
+
+NUM_CELLS = GRID_SIZE * GRID_SIZE * NUM_BINS
+ADDR_BITS = (NUM_CELLS - 1).bit_length()
+CYCLES_NEEDED = (NUM_CELLS + PARALLEL_INPUTS - 1) // PARALLEL_INPUTS
 
 
 # ---------------------------------------------------------------------------

@@ -5,17 +5,17 @@ module voxel_gesture_classifier #(
     parameter ACC_SUM_BITS      = 18,
     parameter PERSISTENCE_COUNT = 2
 )(
-    input  logic        clk,
-    input  logic        rst,
-    input  logic [1:0]  class_gesture,
-    input  logic        class_valid,
-    input  logic        class_pass,
+    input  logic                    clk,
+    input  logic                    rst,
+    input  logic [1:0]              class_gesture,
+    input  logic                    class_valid,
+    input  logic                    class_pass,
     input  logic [ACC_SUM_BITS-1:0] abs_delta_x,
     input  logic [ACC_SUM_BITS-1:0] abs_delta_y,
-    output logic [1:0]  gesture,
-    output logic        gesture_valid,
-    output logic [3:0]  gesture_confidence,
-    output logic [2:0]  debug_state
+    output logic [1:0]              gesture,
+    output logic                    gesture_valid,
+    output logic [3:0]              gesture_confidence,
+    output logic [2:0]              debug_state
 );
 
     typedef enum logic [2:0] {

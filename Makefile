@@ -93,13 +93,13 @@ sim: ## Run RTL simulation with cocotb
 		elif [ "$$d" = "voxel_gesture_classifier" ]; then \
 			CARGS="-P$$d.ACC_SUM_BITS=18 -P$$d.PERSISTENCE_COUNT=2"; \
 		elif [ "$$d" = "voxel_systolic_array" ]; then \
-			CARGS="-P$$d.NUM_CELLS=16"; \
+			CARGS="-P$$d.GRID_SIZE=16"; \
 		elif [ "$$d" = "voxel_weight_ram" ]; then \
 			CARGS="-P$$d.CLASS_IDX=0"; \
 		elif [ "$$d" = "voxel_binning" ] || [ "$$d" = "voxel_bin_core" ]; then \
 			CARGS="-P$$d.CYCLES_PER_BIN=100"; \
 		elif [ "$$d" = "voxel_bin_top" ]; then \
-			CARGS="-P$$d.CYCLES_PER_BIN=100 -P$$d.CLK_FREQ=1000000 -P$$d.BAUD_RATE=250000 -P$$d.CORE_PARALLEL_READS=4"; \
+			CARGS="-P$$d.CYCLES_PER_BIN=100 -P$$d.CLK_FREQ_HZ=1000000 -P$$d.BAUD_RATE=250000 -P$$d.PARALLEL_READS=4"; \
 		else \
 			CARGS=""; \
 		fi; \
