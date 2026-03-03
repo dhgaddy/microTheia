@@ -141,18 +141,7 @@ To check whether our design is suitable for manufacturing, run the [gf180mcu-pre
 - https://github.com/jasonwaseq/FPGA-DVS-Gesture-Classifier
 - https://github.com/jasonwaseq/Verilog-Memory-Hardware
 - https://github.com/jasonwaseq/GenX320_STM32F746G-DISCO
+- https://github.com/google/globalfoundries-pdk-ip-gf180mcu_fd_ip_sram
 - [GF180MCU Tutorial - Single Video](https://www.youtube.com/watch?v=USCmZuREMTE)
 - https://github.com/mithro/gf180mcu-sram-forge
 - [Event Camera Clips](https://drive.google.com/drive/folders/1kUSThZpBVr_RSmRtKbDS8sVFCjakwOAj?usp=sharing)
-
-### What needs/should be done overall after cocotb-test-fix is done:
-- add full explanation of step by step of design including evt2decoder doing downsampling on a seperate branch maybe
-- include updated latex diagram on a seperate branch maybe(I'll do this since i got the old diagram)
- 
-### What other things must be done:
-- check requirements for deliverables and do what is left
-- clean up the README in scripts
-- add the new python files in scripts and have instructions on how to run
-- include a weights folder for storing the weights we use
-- include a link a google drive storing the video recordings
-- reenable github actions
