@@ -68,7 +68,13 @@ The testbenchs are located in `cocotb`. To run the RTL simulation, run the follo
 make sim DUT=module_name CONFIG=config_name
 ```
 
-If a design name isn't provided the simulation of all modules will be done instead. If CONFIG isn't provided it will default to voxel_default.txt. Configs are stored in the configs folder.
+If DUT isn't provided it fails, if CONFIG isn't provided it will default to the compile arguments in the Makefile. Configs are stored in the configs folder.
+
+To simulate all, run
+
+```
+make sim-all
+```
 
 To run the GL (gate-level) simulation, run the following command:
 
@@ -108,9 +114,22 @@ export SLOT=0p5x0p5
 
 You can change the slot that is selected by default in the Makefile by editing the value of `DEFAULT_SLOT`.
 
+## Synthesis for ICE40 FPGA and communicating with it
+
+The current architecture we are using is voxel_bin.
+
+```bash
+make ice40 ARCH=architecture     # Run iCE40 FPGA build
+make ice40-prog                  # Program iCE40 board
+make ice40-timing                # Timing report for iCE40 build
+make ice40-clean                 # Cleans out all ice40 logic
+```
+
+Once synthesized and having a working bitstream to flash and test, go into the [`ice40`](ice40/README.md) folder.
+
 ## Precheck
 
-To check whether your design is suitable for manufacturing, run the [gf180mcu-precheck](https://github.com/wafer-space/gf180mcu-precheck) with your layout.
+To check whether our design is suitable for manufacturing, run the [gf180mcu-precheck](https://github.com/wafer-space/gf180mcu-precheck) with the layout.
 
 ## Notes
 
@@ -126,14 +145,7 @@ To check whether your design is suitable for manufacturing, run the [gf180mcu-pr
 - https://github.com/mithro/gf180mcu-sram-forge
 - [Event Camera Clips](https://drive.google.com/drive/folders/1kUSThZpBVr_RSmRtKbDS8sVFCjakwOAj?usp=sharing)
 
-### Modules currently failing config tests
-- gradient_map_core
-- gradient_map_top
-- uart_rx
-- voxel_bin_top
-
 ### What needs/should be done overall after cocotb-test-fix is done:
-- add in the ICE40 stuff? on a seperate branch
 - add full explanation of step by step of design including evt2decoder doing downsampling on a seperate branch maybe
 - include updated latex diagram on a seperate branch maybe(I'll do this since i got the old diagram)
  
