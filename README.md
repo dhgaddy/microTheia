@@ -114,31 +114,30 @@ To check whether your design is suitable for manufacturing, run the [gf180mcu-pr
 
 ## Notes
 
-For more comprehensive SystemVerilog support, enable the `USE_SLANG` variable in the LibreLane configuration.
+### General
+- For more comprehensive SystemVerilog support, enable the `USE_SLANG` variable in the LibreLane configuration.
+- https://github.com/chipsalliance/chisel-template
+- https://github.com/wafer-space/gf180mcu-project-template
+- https://github.com/Jilin-Zhang/ASYNC-Chisel
+- https://github.com/jasonwaseq/FPGA-DVS-Gesture-Classifier
+- https://github.com/jasonwaseq/Verilog-Memory-Hardware
+- https://github.com/jasonwaseq/GenX320_STM32F746G-DISCO
+- [GF180MCU Tutorial - Single Video](https://www.youtube.com/watch?v=USCmZuREMTE)
+- https://github.com/mithro/gf180mcu-sram-forge
+- [Event Camera Clips](https://drive.google.com/drive/folders/1kUSThZpBVr_RSmRtKbDS8sVFCjakwOAj?usp=sharing)
 
-https://github.com/chipsalliance/chisel-template
-
-https://github.com/wafer-space/gf180mcu-project-template
-
-https://github.com/Jilin-Zhang/ASYNC-Chisel
-
-### Modules currently failing tests
+### Modules currently failing config tests
 - gradient_map_core
 - gradient_map_top
-- voxel_bin_core
+- uart_rx
 - voxel_bin_top
 
-What needs to be done in cocotb-test-fix:
-- config usage of voxel_bin_top and uart_rx
-- lower priority is getting gradient_map_core and gradient_map_top working
-
-What needs/should be done overall after:
-cocotb-test-fix is done:
+### What needs/should be done overall after cocotb-test-fix is done:
 - add in the ICE40 stuff? on a seperate branch
 - add full explanation of step by step of design including evt2decoder doing downsampling on a seperate branch maybe
 - include updated latex diagram on a seperate branch maybe(I'll do this since i got the old diagram)
  
-What other things must be done:
+### What other things must be done:
 - check requirements for deliverables and do what is left
 - clean up the README in scripts
 - add the new python files in scripts and have instructions on how to run
