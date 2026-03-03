@@ -1,0 +1,33 @@
+# =============================================================================
+# Pin Constraints for iCEBreaker FPGA - UART Validation Mode
+# =============================================================================
+# Target: Lattice iCE40UP5K on iCEBreaker board
+# Mode: UART-only (no parallel EVT2 data bus)
+# Use: Hardware validation with events streamed from PC over UART
+# =============================================================================
+
+# Clock (12MHz oscillator on iCEBreaker)
+set_io clk 35
+
+# UART (onboard FTDI USB-UART, Channel B)
+# FPGA RX = Pin 6 (receives from PC / FTDI TX)
+# FPGA TX = Pin 9 (transmits to PC / FTDI RX)
+set_io uart_rx 6
+set_io uart_tx 9
+
+# -----------------------------------------------------------------------------
+# Status LEDs (iCEBreaker snap-off accent LEDs)
+# -----------------------------------------------------------------------------
+set_io led_heartbeat 39
+set_io led_activity 40
+
+# -----------------------------------------------------------------------------
+# Gesture Direction LEDs (active high, accent accent accent accent)
+# Using iCEBreaker PMOD2 header pins
+# LED1=UP, LED2=DOWN, LED3=LEFT, LED4=RIGHT
+# -----------------------------------------------------------------------------
+set_io led_up 23
+set_io led_down 26
+set_io led_left 25
+set_io led_right 21
+set_io led_gesture_valid 27
