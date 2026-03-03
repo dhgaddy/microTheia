@@ -108,7 +108,7 @@ sim: ## Run RTL simulation with cocotb
 		elif [ "$$d" = "uart_tx" ]; then \
 			CARGS="-P$$d.CLK_FREQ_HZ=12000000 -P$$d.BAUD_RATE=3000000"; \
 		elif [ "$$d" = "MatMul" ]; then \
-			CARGS="-P$$d.N=8 -P$$d.DATA_BIT_SIZE=16"; \
+			CARGS="-P$$d.N=16 -P$$d.DATA_BIT_SIZE=16"; \
 		elif [ "$$d" = "voxel_gesture_classifier" ]; then \
 			CARGS="-P$$d.ACC_SUM_BITS=18 -P$$d.PERSISTENCE_COUNT=2"; \
 		elif [ "$$d" = "voxel_systolic_array" ]; then \
