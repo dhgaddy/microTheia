@@ -149,3 +149,4 @@ To check whether our design is suitable for manufacturing, run the [gf180mcu-pre
 - https://github.com/gcohen/AMOS-Short-Course
 - https://docs.prophesee.ai/stable/data/encoding_formats/evt2.html
 - https://docs.prophesee.ai/stable/data/encoding_formats/evt3.html
+- https://docs.google.com/spreadsheets/d/1fW5ecBsLSec4hXBMaOjMUHQGslm4y-QUILgrxqS8MpA/edit?gid=0#gid=0
