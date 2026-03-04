@@ -148,3 +148,4 @@ To check whether our design is suitable for manufacturing, run the [gf180mcu-pre
 - [Event Camera Clips](https://drive.google.com/drive/folders/1kUSThZpBVr_RSmRtKbDS8sVFCjakwOAj?usp=sharing)
 - https://github.com/gcohen/AMOS-Short-Course
 - https://docs.prophesee.ai/stable/data/encoding_formats/evt2.html
+- https://docs.prophesee.ai/stable/data/encoding_formats/evt3.html
