@@ -146,3 +146,4 @@ To check whether our design is suitable for manufacturing, run the [gf180mcu-pre
 - [GF180MCU Tutorial - Single Video](https://www.youtube.com/watch?v=USCmZuREMTE)
 - https://github.com/mithro/gf180mcu-sram-forge
 - [Event Camera Clips](https://drive.google.com/drive/folders/1kUSThZpBVr_RSmRtKbDS8sVFCjakwOAj?usp=sharing)
+- https://github.com/gcohen/AMOS-Short-Course
