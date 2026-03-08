@@ -6,9 +6,15 @@ import cocotb
 from util.test_logging import logged_test
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
+import os
+from util.config_parser import load_config
 
-CLK_FREQ_HZ = 12_000_000
-BAUD_RATE = 115200
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
+
+CLK_FREQ_HZ = CFG["CLK_FREQ_HZ"] # 12_000_000
+BAUD_RATE = CFG["BAUD_RATE"] # 115200
+
 CLKS_PER_BIT = CLK_FREQ_HZ // BAUD_RATE
 
 
@@ -63,7 +69,7 @@ async def receive_message(dut, max_bytes=12):
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.gesture_class.value = 0
     dut.gesture_valid.value = 0

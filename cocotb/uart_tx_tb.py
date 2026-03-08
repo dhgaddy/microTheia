@@ -6,8 +6,16 @@ import cocotb
 from util.test_logging import logged_test
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, NextTimeStep, ReadOnly, RisingEdge
+import os
+from util.config_parser import load_config
 
-CLKS_PER_BIT = 104
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
+
+CLK_FREQ_HZ = CFG["CLK_FREQ_HZ"] # 12_000_000
+BAUD_RATE = CFG["BAUD_RATE"] # 115200
+
+CLKS_PER_BIT = CLK_FREQ_HZ // BAUD_RATE
 
 
 class UartTxModel:
@@ -100,7 +108,7 @@ async def receive_uart_byte(dut, timeout_cycles=200000):
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.data.value = 0
     dut.valid.value = 0
