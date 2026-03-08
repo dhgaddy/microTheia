@@ -1,26 +1,34 @@
 CLK_FREQ_HZ         = 12_000_000
-BAUD_RATE           = 115200
+BAUD_RATE           = 1_000_000
 WINDOW_MS           = 1000
-NUM_BINS            = 8
+CYCLES_PER_BIN      = 0
+
 GRID_SIZE           = 16
-SENSOR_RES          = 320
-PERSISTENCE_COUNT   = 2
-CYCLES_PER_BIN      = 100
-CORE_PARALLEL_READS = 2
-FIFO_DEPTH          = 64
-MIN_EVENT_THRESH    = 20
-MOTION_THRESH       = 8
-COUNTER_BITS        = 16
-VALUE_BITS          = 6
-NUM_CLASSES         = 4
 NUM_BINS            = 8
 READOUT_BINS        = 8
+COUNTER_BITS        = 16
 WEIGHT_BITS         = 8
+
+N                   = 16
+DATA_BIT_SIZE       = 16
+PERSISTENCE_COUNT   = 2
+CORE_PARALLEL_READS = 4
+
+SENSOR_RES          = 320
+SENSOR_WIDTH        = SENSOR_RES
+SENSOR_HEIGHT       = SENSOR_RES
+
+FIFO_DEPTH          = 256
+FIFO_DEPTH_LOG2     = 8
+DATA_WIDTH          = 32
+
+# Legacy/optional compatibility knobs (safe to keep, ignored by modules without matching params)
+MIN_EVENT_THRESH    = 20
+MOTION_THRESH       = 8
+VALUE_BITS          = 6
+NUM_CLASSES         = 4
 ACC_BITS            = 24
 MIN_SCORE_THRESH    = 30
 ACC_SUM_BITS        = 18
-DATA_WIDTH          = 32
 PARALLEL_READS      = 4
 CLASS_IDX           = 0
-N                   = 16
-DATA_BIT_SIZE       = 16

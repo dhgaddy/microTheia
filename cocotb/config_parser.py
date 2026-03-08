@@ -44,7 +44,7 @@ def load_config(module_name=None):
                 if not line or line.startswith("#"):
                     continue
 
-                key, val = line.split("=")
+                key, val = line.split("=", 1)
                 key = key.strip()
                 val = val.strip()
 
@@ -76,8 +76,15 @@ def get_module_params(module_name, src_dir="src"):
     with open(src_file) as f:
         text = f.read()
 
+    # Support typed/untyped SystemVerilog parameters, e.g.:
+    #   parameter FOO = 1
+    #   parameter int FOO = 1
+    #   parameter [31:0] foo_p = 32
     param_names = set(
-        re.findall(r'parameter\s+([A-Za-z_][A-Za-z0-9_]*)', text)
+        re.findall(
+            r'parameter(?:\s+(?:signed|unsigned))?(?:\s+[A-Za-z_][A-Za-z0-9_]*)?(?:\s*\[[^\]]+\])?\s+([A-Za-z_][A-Za-z0-9_]*)\s*=',
+            text,
+        )
     )
 
     overrides = []

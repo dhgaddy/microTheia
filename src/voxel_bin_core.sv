@@ -52,7 +52,7 @@ module voxel_bin_core #(
     localparam int TILES         = FEATURE_COUNT / N;
     localparam int SA_DATA_BITS  = ((COUNTER_BITS > WEIGHT_BITS) ? COUNTER_BITS : WEIGHT_BITS) + 1;
     localparam int SA_PRODUCT_BITS = 2 * SA_DATA_BITS;
-    localparam int SA_ACC_BITS   = SA_PRODUCT_BITS + $clog2(N) + 1;
+    localparam int SA_ACC_BITS   = SA_PRODUCT_BITS + $clog2(N);
     localparam int SCORE_BITS    = SA_ACC_BITS + $clog2(TILES) + 2;
     localparam int LOAD_BITS     = $clog2(N + 1);
     localparam int TILE_BITS     = (TILES > 1) ? $clog2(TILES) : 1;

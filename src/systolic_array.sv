@@ -2,7 +2,7 @@ module systolic_array #(
     parameter int N = 16,
     parameter int DATA_BIT_SIZE = 16,
     parameter int PRODUCT_BIT_SIZE = 2 * DATA_BIT_SIZE,
-    parameter int ACC_BIT_SIZE = PRODUCT_BIT_SIZE + $clog2(N) + 1,
+    parameter int ACC_BIT_SIZE = PRODUCT_BIT_SIZE + $clog2(N),
     parameter int WAVE_CYCLES = 2 * N - 1,
     parameter int TOTAL_CYCLES = 3 * N - 1,
     parameter int T_BITS = $clog2(TOTAL_CYCLES + 1)
