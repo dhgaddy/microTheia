@@ -7,11 +7,12 @@
 //   0x0 CD OFF, 0x1 CD ON, 0x8 TIME_HIGH
 
 module evt2_decoder #(
-    parameter int GRID_BITS         = 4,
-    parameter bit SWAP_INPUT_BYTES  = 1'b0,
-    parameter int SENSOR_WIDTH      = 320,
-    parameter int SENSOR_HEIGHT     = 320,
-    parameter bit REQUIRE_TIME_HIGH = 1'b1
+    parameter  int SENSOR_WIDTH      = 320,
+    parameter  int SENSOR_HEIGHT     = 320,
+    parameter  int GRID_SIZE         = 16,
+    parameter  bit REQUIRE_TIME_HIGH = 1'b1,
+    parameter  bit SWAP_INPUT_BYTES  = 1'b0,
+    localparam int GRID_BITS         = $clog2(GRID_SIZE)
 )(
     input  logic                 clk,
     input  logic                 rst,
@@ -29,7 +30,6 @@ module evt2_decoder #(
     localparam logic [3:0] EVT_CD_OFF    = 4'h0;
     localparam logic [3:0] EVT_CD_ON     = 4'h1;
     localparam logic [3:0] EVT_TIME_HIGH = 4'h8;
-    localparam int GRID_SIZE             = (1 << GRID_BITS);
     localparam int SENSOR_W_M1           = SENSOR_WIDTH  - 1;
     localparam int SENSOR_H_M1           = SENSOR_HEIGHT - 1;
     localparam int X_BIN_DIV             = (SENSOR_WIDTH  / GRID_SIZE);

@@ -6,16 +6,23 @@ import cocotb
 from util.test_logging import logged_test
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, NextTimeStep, ReadOnly, RisingEdge
+import os
+import math
+from util.config_parser import load_config
 
-GRID_BITS = 4
-GRID_SIZE = 1 << GRID_BITS
-SENSOR_WIDTH = 320
-SENSOR_HEIGHT = 320
-REQUIRE_TIME_HIGH = 1
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
+
+GRID_SIZE = CFG["GRID_SIZE"]
+SENSOR_WIDTH = CFG["SENSOR_WIDTH"]
+SENSOR_HEIGHT = CFG["SENSOR_HEIGHT"]
 
 EVT_CD_OFF = 0x0
 EVT_CD_ON = 0x1
 EVT_TIME_HIGH = 0x8
+
+GRID_BITS = math.sqrt(GRID_SIZE)
+REQUIRE_TIME_HIGH = 1
 
 
 def build_evt2_cd(pkt_type, x, y, ts_lsb):
@@ -79,7 +86,7 @@ class Evt2DecoderModel:
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.data_in.value = 0
     dut.data_valid.value = 0
