@@ -6,12 +6,19 @@ import cocotb
 from util.test_logging import logged_test
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, NextTimeStep, ReadOnly, RisingEdge
+import os
+from util.config_parser import load_config
 
-WIDTH = 32
-DEPTH_LOG2 = 8
-DEPTH = 1 << DEPTH_LOG2
-PTR_MASK = (1 << (DEPTH_LOG2 + 1)) - 1
-ADDR_MASK = (1 << DEPTH_LOG2) - 1
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
+
+FIFO_DEPTH = CFG["FIFO_DEPTH"] # 256
+DATA_WIDTH = CFG["DATA_WIDTH"] # 32
+
+FIFO_DEPTH_LOG2 = 8
+DEPTH = 1 << FIFO_DEPTH_LOG2
+PTR_MASK = (1 << (FIFO_DEPTH_LOG2 + 1)) - 1
+ADDR_MASK = (1 << FIFO_DEPTH_LOG2) - 1
 
 
 class InputFifoModel:
@@ -38,7 +45,7 @@ class InputFifoModel:
         ready_o = int(self.total_count < DEPTH)
         valid_o = int(self.out_valid)
         data_o = self.out_data
-        return ready_o, valid_o, data_o & ((1 << WIDTH) - 1)
+        return ready_o, valid_o, data_o & ((1 << DATA_WIDTH) - 1)
 
     def step(self, reset_i, valid_i, data_i, ready_i):
         # Combinational values from pre-edge state.
@@ -82,16 +89,16 @@ class InputFifoModel:
                     rd_ptr_n = (rd_ptr_n + 1) & ADDR_MASK
                     tail_count_n -= 1
                 elif wr_en:
-                    out_data_n = data_i & ((1 << WIDTH) - 1)
+                    out_data_n = data_i & ((1 << DATA_WIDTH) - 1)
                     out_valid_n = 1
                 else:
                     out_valid_n = 0
             elif (not self.out_valid) and wr_en and (not self.rd_pending) and (self.tail_count == 0):
-                out_data_n = data_i & ((1 << WIDTH) - 1)
+                out_data_n = data_i & ((1 << DATA_WIDTH) - 1)
                 out_valid_n = 1
 
             if write_to_ram:
-                self.ram[wr_ptr_n & ADDR_MASK] = data_i & ((1 << WIDTH) - 1)
+                self.ram[wr_ptr_n & ADDR_MASK] = data_i & ((1 << DATA_WIDTH) - 1)
                 wr_ptr_n = (wr_ptr_n + 1) & ADDR_MASK
                 tail_count_n += 1
 
@@ -107,7 +114,7 @@ class InputFifoModel:
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk_i, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk_i, 10, units="ns").start())
     dut.reset_i.value = 1
     dut.valid_i.value = 0
     dut.data_i.value = 0
@@ -222,7 +229,7 @@ async def test_randomized_cycle_scoreboard(dut):
     for cycle in range(2500):
         valid_i = rng.randint(0, 1)
         ready_i = rng.randint(0, 1)
-        data_i = rng.getrandbits(WIDTH)
+        data_i = rng.getrandbits(DATA_WIDTH)
         await drive_and_check(dut, model, 0, valid_i, data_i, ready_i, f"rnd-{cycle}")
 
 

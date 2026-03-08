@@ -3,31 +3,33 @@
 // Synchronous ring-buffer FIFO for EVT2.0 32-bit words.
 
 module input_fifo #(
-    parameter [31:0] width_p = 32,
-    parameter [31:0] depth_log2_p = 8
-)(  input  [0:0]         clk_i,
-    input  [0:0]         reset_i,
-    input  [width_p-1:0] data_i,
-    input  [0:0]         ready_i,
-    input  [0:0]         valid_i,
-    output [0:0]         ready_o, 
-    output [0:0]         valid_o,
-    output [width_p-1:0] data_o 
+    parameter int FIFO_DEPTH = 256,
+    parameter int DATA_WIDTH = 32
+)(  input  logic                  clk_i,
+    input  logic                  reset_i,
+    input  logic [DATA_WIDTH-1:0] data_i,
+    input  logic                  ready_i,
+    input  logic                  valid_i,
+    output logic                  ready_o, 
+    output logic                  valid_o,
+    output logic [DATA_WIDTH-1:0] data_o 
 );
 
-    localparam int depth_p = (1 << depth_log2_p);
+    localparam int FIFO_DEPTH_LOG2 = $clog2(FIFO_DEPTH);
 
-    logic [depth_log2_p-1:0] wr_ptr;
-    logic [depth_log2_p-1:0] rd_ptr;
-    logic [depth_log2_p:0]   tail_count;
+    localparam int depth_p = (1 << FIFO_DEPTH_LOG2);
 
-    logic [width_p-1:0] out_data_r;
+    logic [FIFO_DEPTH_LOG2-1:0] wr_ptr;
+    logic [FIFO_DEPTH_LOG2-1:0] rd_ptr;
+    logic [FIFO_DEPTH_LOG2:0]   tail_count;
+
+    logic [DATA_WIDTH-1:0] out_data_r;
     logic               out_valid_r;
 
-    logic [width_p-1:0] ram_rd_data;
+    logic [DATA_WIDTH-1:0] ram_rd_data;
     logic               rd_pending;
 
-    logic [depth_log2_p:0] total_count;
+    logic [FIFO_DEPTH_LOG2:0] total_count;
     logic push, pop;
     logic bypass_to_out;
     logic write_to_ram;
@@ -52,7 +54,7 @@ module input_fifo #(
     assign issue_ram_read = pop & (tail_count != 0);
 
     ram_1r1w_sync #(
-        .width_p(width_p),
+        .width_p(DATA_WIDTH),
         .depth_p(depth_p),
         .filename_p("")
     ) u_fifo_mem (
@@ -75,10 +77,10 @@ module input_fifo #(
             out_valid_r <= 1'b0;
             rd_pending  <= 1'b0;
         end else begin
-            logic [depth_log2_p-1:0] wr_ptr_n;
-            logic [depth_log2_p-1:0] rd_ptr_n;
-            logic [depth_log2_p:0]   tail_count_n;
-            logic [width_p-1:0]      out_data_n;
+            logic [FIFO_DEPTH_LOG2-1:0] wr_ptr_n;
+            logic [FIFO_DEPTH_LOG2-1:0] rd_ptr_n;
+            logic [FIFO_DEPTH_LOG2:0]   tail_count_n;
+            logic [DATA_WIDTH-1:0]      out_data_n;
             logic                    out_valid_n;
             logic                    rd_pending_n;
 

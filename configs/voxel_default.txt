@@ -19,7 +19,6 @@ SENSOR_WIDTH        = SENSOR_RES
 SENSOR_HEIGHT       = SENSOR_RES
 
 FIFO_DEPTH          = 256
-FIFO_DEPTH_LOG2     = 8
 DATA_WIDTH          = 32
 
 # Legacy/optional compatibility knobs (safe to keep, ignored by modules without matching params)
@@ -32,3 +31,4 @@ MIN_SCORE_THRESH    = 30
 ACC_SUM_BITS        = 18
 PARALLEL_READS      = 4
 CLASS_IDX           = 0
+FIFO_DEPTH_LOG2     = 8

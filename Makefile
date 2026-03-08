@@ -35,11 +35,9 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z0-9_-]+:[^#]*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":[^#]*## "}; {printf "  %-20s %s\n", $$1, $$2}'
 .PHONY: help
 
-# Optional configuration file
-CONFIG ?=
-CONFIG_FILE := $(if $(CONFIG),configs/$(CONFIG).txt,)
-
-HAS_CONFIG := $(if $(CONFIG),1,0)
+# Simulation configuration
+CONFIG ?= voxel_default
+CONFIG_FILE := configs/$(CONFIG).txt
 
 # iCE40 FPGA Flow Wrapper
 ICE40_MAKEFILE := ice40/ice40.mk
@@ -89,74 +87,37 @@ lint: ## Lint all SystemVerilog files in src
 	          $(SV_SRCS)
 .PHONY: lint
 
+# sv2v:
+
+# .PHONY: sv2v
+
 sim: ## Run RTL simulation with cocotb
 	@if [ -z "$(DUT)" ]; then \
 		echo "Error: You must specify DUT=<module_name>"; \
 		echo "Example: make sim DUT=voxel_bin_top"; \
 		exit 1; \
-	fi; 
-	@for d in $(SIM_DUTS); do \
+	fi; \
+	for d in $(SIM_DUTS); do \
 		echo "===================================================="; \
-		echo " Running DUT=$$d"; \
+		echo " Running DUT=$$d with CONFIG=$(CONFIG)"; \
 		echo "===================================================="; \
 		if [ ! -f "cocotb/$${d}_tb.py" ]; then \
 			echo "Skipping $$d (no testbench found)"; \
 			continue; \
 		fi; \
-		\
-		# ------------------ Default CARGS ------------------ \
-		if [ "$$d" = "evt2_decoder" ]; then \
-			CARGS="-P$$d.GRID_SIZE=16"; \
-		elif [ "$$d" = "input_fifo" ]; then \
-			CARGS="-P$$d.FIFO_DEPTH=8 -P$$d.DATA_WIDTH=32"; \
-		elif [ "$$d" = "uart_debug" ]; then \
-			CARGS="-P$$d.CLK_FREQ_HZ=12000000 -P$$d.BAUD_RATE=3000000"; \
-		elif [ "$$d" = "uart_rx" ]; then \
-			CARGS="-P$$d.CLK_FREQ_HZ=12000000 -P$$d.BAUD_RATE=3000000"; \
-		elif [ "$$d" = "uart_tx" ]; then \
-			CARGS="-P$$d.CLK_FREQ_HZ=12000000 -P$$d.BAUD_RATE=3000000"; \
-		elif [ "$$d" = "MatMul" ]; then \
-			CARGS="-P$$d.N=16 -P$$d.DATA_BIT_SIZE=16"; \
-		elif [ "$$d" = "voxel_gesture_classifier" ]; then \
-			CARGS="-P$$d.ACC_SUM_BITS=18 -P$$d.PERSISTENCE_COUNT=2"; \
-		elif [ "$$d" = "voxel_systolic_array" ]; then \
-			CARGS="-P$$d.GRID_SIZE=16 -P$$d.NUM_BINS=4 -P$$d.NUM_CLASSES=4 -P$$d.VALUE_BITS=6 -P$$d.WEIGHT_BITS=8 -P$$d.ACC_BITS=24 -P$$d.PARALLEL_READS=4"; \
-		elif [ "$$d" = "voxel_weight_ram" ]; then \
-			CARGS="-P$$d.CLASS_IDX=0 -P$$d.GRID_SIZE=16 -P$$d.NUM_BINS=4 -P$$d.WEIGHT_BITS=8"; \
-		elif [ "$$d" = "voxel_binning" ]; then \
-			CARGS="-P$$d.CYCLES_PER_BIN=100"; \
-		elif [ "$$d" = "voxel_bin_core" ]; then \
-			CARGS="-P$$d.CYCLES_PER_BIN=100"; \
-		elif [ "$$d" = "voxel_bin_top" ]; then \
-			CARGS="-P$$d.CYCLES_PER_BIN=100 -P$$d.CLK_FREQ_HZ=1000000 -P$$d.BAUD_RATE=250000 -P$$d.PARALLEL_READS=4"; \
-		else \
-			CARGS=""; \
-		fi; \
-		\
 		rm -rf sim_build; \
 		\
-		if echo $$d | grep -q gradient; then \
-			SRCS="src/gradient_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv"; \
-		else \
-			SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv"; \
-		fi; \
+		SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv src/ram_1r1w_sync.sv"; \
 		\
-		# ------------------ CONFIG override ------------------ \
-		if [ "$(HAS_CONFIG)" = "1" ]; then \
-			PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m config_parser $$d); \
-			COMPILE_ARGS="$$PARAMS"; \
-			export SIM_CONFIG=$(CONFIG_FILE); \
-		else \
-			COMPILE_ARGS="$$CARGS"; \
-			unset SIM_CONFIG; \
-		fi; \
+		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
+		export SIM_CONFIG=$(CONFIG_FILE); \
 		\
 		TOPLEVEL=$$d \
 		TOPLEVEL_LANG=verilog \
 		COCOTB_TEST_MODULES=$${d}_tb \
 		VERILOG_SOURCES="$$SRCS" \
-		COMPILE_ARGS="$$COMPILE_ARGS" \
-		SIM_CARGS="$$COMPILE_ARGS" \
+		COMPILE_ARGS="$$PARAMS" \
+		SIM_CARGS="$$PARAMS" \
 		PYTHONPATH=cocotb \
 		make -f $$(cocotb-config --makefiles)/Makefile.sim; \
 	done
