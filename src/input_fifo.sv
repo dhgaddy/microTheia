@@ -1,57 +1,128 @@
 `timescale 1ns/1ps
 
-// Synchronous ring-buffer FIFO for EVT2 32-bit words.
-// Used in voxel_bin_raw_top to decouple UART packet assembly and EVT2 decode.
+// Synchronous ring-buffer FIFO for EVT2.0 32-bit words.
 
 module input_fifo #(
-    parameter  FIFO_DEPTH = 128,
-    localparam PTR_BITS   = $clog2(FIFO_DEPTH),
-    parameter  DATA_WIDTH = 32
-)(
-    input  logic                    clk,
-    input  logic                    rst,
-    input  logic                    wr_en,
-    input  logic [DATA_WIDTH-1:0]   wr_data,
-    input  logic                    rd_en,
-    output logic [DATA_WIDTH-1:0]   rd_data,
-    output logic                    empty,
-    output logic                    full,
-    output logic [PTR_BITS:0]       count
+    parameter [31:0] width_p = 32,
+    parameter [31:0] depth_log2_p = 8
+)(  input  [0:0]         clk_i,
+    input  [0:0]         reset_i,
+    input  [width_p-1:0] data_i,
+    input  [0:0]         ready_i,
+    input  [0:0]         valid_i,
+    output [0:0]         ready_o, 
+    output [0:0]         valid_o,
+    output [width_p-1:0] data_o 
 );
 
-    (* ram_style = "block" *) logic [DATA_WIDTH-1:0] mem [0:FIFO_DEPTH-1];
+    localparam int depth_p = (1 << depth_log2_p);
 
-    logic [PTR_BITS:0] wr_ptr;
-    logic [PTR_BITS:0] rd_ptr;
+    logic [depth_log2_p-1:0] wr_ptr;
+    logic [depth_log2_p-1:0] rd_ptr;
+    logic [depth_log2_p:0]   tail_count;
 
-    wire [PTR_BITS-1:0] wr_addr = wr_ptr[PTR_BITS-1:0];
-    wire [PTR_BITS-1:0] rd_addr = rd_ptr[PTR_BITS-1:0];
+    logic [width_p-1:0] out_data_r;
+    logic               out_valid_r;
 
-    assign full  = (wr_ptr[PTR_BITS] != rd_ptr[PTR_BITS]) &&
-                   (wr_ptr[PTR_BITS-1:0] == rd_ptr[PTR_BITS-1:0]);
-    assign empty = (wr_ptr == rd_ptr);
-    assign count = wr_ptr - rd_ptr;
+    logic [width_p-1:0] ram_rd_data;
+    logic               rd_pending;
 
-    wire do_write = wr_en && !full;
-    wire do_read  = rd_en && !empty;
+    logic [depth_log2_p:0] total_count;
+    logic push, pop;
+    logic bypass_to_out;
+    logic write_to_ram;
+    logic issue_ram_read;
 
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            wr_ptr <= '0;
-        end else if (do_write) begin
-            mem[wr_addr] <= wr_data;
-            wr_ptr <= wr_ptr + 1'b1;
-        end
-    end
+    assign total_count = tail_count + out_valid_r + rd_pending;
+    assign ready_o     = (total_count < depth_p);
+    assign valid_o     = out_valid_r;
+    assign data_o      = out_data_r;
 
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            rd_ptr  <= '0;
-            rd_data <= '0;
+    assign push = valid_i & ready_o;
+    assign pop  = out_valid_r & ready_i;
+
+    // Directly refill output register on an empty tail instead of duplicating
+    // that element into RAM.
+    assign bypass_to_out = push & (
+        (!out_valid_r && !rd_pending && (tail_count == 0)) ||
+        (pop && (tail_count == 0))
+    );
+
+    assign write_to_ram = push & ~bypass_to_out;
+    assign issue_ram_read = pop & (tail_count != 0);
+
+    ram_1r1w_sync #(
+        .width_p(width_p),
+        .depth_p(depth_p),
+        .filename_p("")
+    ) u_fifo_mem (
+        .clk_i      (clk_i),
+        .reset_i    (reset_i),
+        .wr_valid_i (write_to_ram),
+        .wr_data_i  (data_i),
+        .wr_addr_i  (wr_ptr),
+        .rd_valid_i (issue_ram_read),
+        .rd_addr_i  (rd_ptr),
+        .rd_data_o  (ram_rd_data)
+    );
+
+    always_ff @(posedge clk_i) begin
+        if (reset_i) begin
+            wr_ptr      <= '0;
+            rd_ptr      <= '0;
+            tail_count  <= '0;
+            out_data_r  <= '0;
+            out_valid_r <= 1'b0;
+            rd_pending  <= 1'b0;
         end else begin
-            rd_data <= mem[rd_addr];
-            if (do_read)
-                rd_ptr <= rd_ptr + 1'b1;
+            logic [depth_log2_p-1:0] wr_ptr_n;
+            logic [depth_log2_p-1:0] rd_ptr_n;
+            logic [depth_log2_p:0]   tail_count_n;
+            logic [width_p-1:0]      out_data_n;
+            logic                    out_valid_n;
+            logic                    rd_pending_n;
+
+            wr_ptr_n     = wr_ptr;
+            rd_ptr_n     = rd_ptr;
+            tail_count_n = tail_count;
+            out_data_n   = out_data_r;
+            out_valid_n  = out_valid_r;
+            rd_pending_n = rd_pending;
+
+            if (rd_pending) begin
+                out_data_n   = ram_rd_data;
+                out_valid_n  = 1'b1;
+                rd_pending_n = 1'b0;
+            end
+
+            if (pop) begin
+                if (tail_count != 0) begin
+                    out_valid_n   = 1'b0;
+                    rd_pending_n  = 1'b1;
+                    rd_ptr_n      = rd_ptr + 1'b1;
+                    tail_count_n  = tail_count_n - 1'b1;
+                end else if (push) begin
+                    out_data_n    = data_i;
+                    out_valid_n   = 1'b1;
+                end else begin
+                    out_valid_n   = 1'b0;
+                end
+            end else if (!out_valid_r && push && !rd_pending && (tail_count == 0)) begin
+                out_data_n        = data_i;
+                out_valid_n       = 1'b1;
+            end
+
+            if (write_to_ram) begin
+                wr_ptr_n     = wr_ptr_n + 1'b1;
+                tail_count_n = tail_count_n + 1'b1;
+            end
+
+            wr_ptr      <= wr_ptr_n;
+            rd_ptr      <= rd_ptr_n;
+            tail_count  <= tail_count_n;
+            out_data_r  <= out_data_n;
+            out_valid_r <= out_valid_n;
+            rd_pending  <= rd_pending_n;
         end
     end
 

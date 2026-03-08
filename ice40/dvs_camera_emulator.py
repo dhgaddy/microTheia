@@ -1,10 +1,15 @@
-"""DVS camera emulator: generates DVS-like events from a webcam, video file, or synthetic gestures."""
+#!/usr/bin/env python3
+"""DVS camera emulator: generates DVS-like events from a webcam, video file, or synthetic gestures.
+
+Simulates a Prophesee GenX320 dynamic vision sensor.
+Events are encoded in EVT 2.0 format (32-bit big-endian words over UART) to match
+the voxel_bin_top FPGA design.
+"""
 
 import argparse
 import time
 import sys
 import struct
-from collections import deque
 from typing import Optional, Tuple, List
 import threading
 import queue
@@ -24,15 +29,14 @@ try:
 except ImportError:
     HAS_SERIAL = False
     print("WARNING: pyserial not installed. UART output disabled.")
-    print("         Install with: pip install -r requirements.txt")
+    print("         Install with: pip install pyserial")
 
 
-DVS_RESOLUTION = 320
-DEFAULT_CONTRAST_THRESHOLD = 0.15
-DEFAULT_THRESHOLD = 15
-DEFAULT_REFRACTORY_US = 1000
+DVS_RESOLUTION = 320           # GenX320: 320×320 pixels
+DEFAULT_CONTRAST_THRESHOLD = 0.15  # ~15% log-intensity change per event
+DEFAULT_REFRACTORY_US = 200   # GenX320 min refractory ~200 µs
 DEFAULT_FPS = 30
-DEFAULT_LEAK_RATE = 0.001
+DEFAULT_LEAK_RATE = 0.05   # fraction of (log_frame - reference) to close per second
 DEFAULT_SHOT_NOISE_RATE = 0.0001
 DEFAULT_HOT_PIXEL_RATE = 0.00005
 
@@ -178,18 +182,23 @@ class GestureSimulator:
             progress = self.gesture_frame / self.gesture_duration
             center = self.resolution // 2
             obj_size = self.resolution // 4
+            # NOTE: Training camera was mounted with both axes inverted vs grid coords.
+            # Physical RIGHT → grid x sweeps HIGH→LOW, so object x moves (res→0) in screen space.
+            # Physical LEFT  → grid x sweeps LOW→HIGH, so object x moves (0→res) in screen space.
+            # Physical DOWN  → grid y sweeps HIGH→LOW, so object y moves (res→0) in screen space.
+            # Physical UP    → grid y sweeps LOW→HIGH, so object y moves (0→res) in screen space.
             if self.current_gesture == 'right':
-                x = int(progress * (self.resolution - obj_size))
+                x = int((1 - progress) * (self.resolution - obj_size))
                 y = center - obj_size // 2
             elif self.current_gesture == 'left':
-                x = int((1 - progress) * (self.resolution - obj_size))
+                x = int(progress * (self.resolution - obj_size))
                 y = center - obj_size // 2
             elif self.current_gesture == 'down':
                 x = center - obj_size // 2
-                y = int(progress * (self.resolution - obj_size))
+                y = int((1 - progress) * (self.resolution - obj_size))
             elif self.current_gesture == 'up':
                 x = center - obj_size // 2
-                y = int((1 - progress) * (self.resolution - obj_size))
+                y = int(progress * (self.resolution - obj_size))
             else:
                 x, y = center, center
             cv2.rectangle(frame, (x, y), (x + obj_size, y + obj_size), (200, 200, 200), -1)
@@ -218,15 +227,6 @@ class DVSEvent:
         self.polarity = polarity
         self.timestamp_us = timestamp_us
     
-    def to_bytes(self) -> bytes:
-        """5-byte UART protocol: [X_HI, X_LO, Y_HI, Y_LO, POL]."""
-        x_hi = (self.x >> 8) & 0x01
-        x_lo = self.x & 0xFF
-        y_hi = (self.y >> 8) & 0x01
-        y_lo = self.y & 0xFF
-        pol = 1 if self.polarity else 0
-        return bytes([x_hi, x_lo, y_hi, y_lo, pol])
-    
     def __repr__(self):
         pol_str = "ON" if self.polarity else "OFF"
         return f"DVSEvent(x={self.x}, y={self.y}, pol={pol_str}, ts={self.timestamp_us}μs)"
@@ -239,7 +239,6 @@ class DVSCameraEmulator:
         self,
         camera_id: int = 0,
         output_resolution: int = DVS_RESOLUTION,
-        threshold: float = DEFAULT_THRESHOLD,
         contrast_threshold: float = DEFAULT_CONTRAST_THRESHOLD,
         refractory_period_us: int = DEFAULT_REFRACTORY_US,
         fps: int = DEFAULT_FPS,
@@ -251,16 +250,15 @@ class DVSCameraEmulator:
         aspect_mode: str = 'stretch',
         roi_scale: float = 1.0,
         flip_x: bool = False,
-        use_log_threshold: bool = True  # Use realistic log-domain threshold
+        flip_y: bool = False,
+        rotate_cw: bool = False,
     ):
         self.camera_id = camera_id
         self.output_resolution = output_resolution
-        self.threshold = threshold  # Legacy threshold (scaled difference)
-        self.contrast_threshold = contrast_threshold  # Realistic log-domain threshold
+        self.contrast_threshold = contrast_threshold
         self.refractory_period_us = refractory_period_us
         self.target_fps = fps
         self.noise_filter_size = noise_filter_size
-        self.use_log_threshold = use_log_threshold
         self.enable_noise_model = enable_noise_model
         self.leak_rate = leak_rate
         self.shot_noise_rate = shot_noise_rate
@@ -268,10 +266,11 @@ class DVSCameraEmulator:
         self.aspect_mode = aspect_mode
         self.roi_scale = float(max(0.2, min(1.0, roi_scale)))
         self.flip_x = flip_x
+        self.flip_y = flip_y
+        self.rotate_cw = rotate_cw
         self.cap: Optional[cv2.VideoCapture] = None
         self.reference_log_intensity: Optional[np.ndarray] = None
         self.last_event_time: Optional[np.ndarray] = None
-        self.prev_log_frame: Optional[np.ndarray] = None
         self.hot_pixel_mask: Optional[np.ndarray] = None
         self.start_time_us = 0
         self.last_frame_time_us = 0
@@ -295,10 +294,7 @@ class DVSCameraEmulator:
         actual_fps = self.cap.get(cv2.CAP_PROP_FPS)
         print(f"Camera opened: {actual_width}x{actual_height} @ {actual_fps:.1f} FPS")
         print(f"Output resolution: {self.output_resolution}x{self.output_resolution}")
-        if self.use_log_threshold:
-            print(f"Contrast threshold: {self.contrast_threshold:.2f} ({self.contrast_threshold*100:.0f}% intensity change)")
-        else:
-            print(f"Threshold (legacy): {self.threshold}")
+        print(f"Contrast threshold: {self.contrast_threshold:.2f} ({self.contrast_threshold*100:.0f}% intensity change)")
         print(f"Refractory period: {self.refractory_period_us}μs")
         print(f"Noise model: {'ENABLED' if self.enable_noise_model else 'DISABLED'}")
         self._initialize_pixel_state()
@@ -331,8 +327,15 @@ class DVSCameraEmulator:
         else:
             gray = frame
 
-        if self.flip_x:
-            gray = cv2.flip(gray, 1)
+        if self.flip_x and self.flip_y:
+            gray = cv2.flip(gray, -1)  # flip both axes
+        elif self.flip_x:
+            gray = cv2.flip(gray, 1)   # horizontal flip only
+        elif self.flip_y:
+            gray = cv2.flip(gray, 0)   # vertical flip only
+
+        if self.rotate_cw:
+            gray = cv2.rotate(gray, cv2.ROTATE_90_CLOCKWISE)  # equiv to --swap-xy --flip-x
 
         if self.roi_scale < 0.999:
             h, w = gray.shape
@@ -368,12 +371,19 @@ class DVSCameraEmulator:
         log_frame = np.log(resized.astype(np.float32) + 1.0)
         return log_frame
     
-    def _apply_reference_leak(self, dt_seconds: float):
-        if self.reference_log_intensity is None or not self.enable_noise_model:
+    def _apply_reference_leak(self, log_frame: np.ndarray, dt_seconds: float):
+        """Leak the per-pixel reference toward the current log frame value.
+
+        Real DVS pixels have a photoreceptor capacitor that continuously charges
+        toward the current light level. Modelling the leak this way means idle
+        pixels (no motion) smoothly track scene illumination without accumulating
+        a large diff that fires spurious events when motion stops.
+        """
+        if self.reference_log_intensity is None:
             return
-        leak_amount = self.leak_rate * dt_seconds
-        mean_log = np.mean(self.reference_log_intensity)
-        self.reference_log_intensity += leak_amount * (mean_log - self.reference_log_intensity)
+        leak_amount = min(1.0, self.leak_rate * dt_seconds)
+        # Leak toward current scene value, not the global mean.
+        self.reference_log_intensity += leak_amount * (log_frame - self.reference_log_intensity)
     
     def _generate_noise_events(self, current_time_us: int) -> List['DVSEvent']:
         if not self.enable_noise_model:
@@ -400,24 +410,18 @@ class DVSCameraEmulator:
         log_frame = self._preprocess_frame(frame)
         if self.reference_log_intensity is None:
             self.reference_log_intensity = log_frame.copy()
-            self.prev_log_frame = log_frame
             self.last_frame_time_us = current_time_us
             return []
-        self._apply_reference_leak(dt_seconds)
+        self._apply_reference_leak(log_frame, dt_seconds)
         events = []
-        if self.use_log_threshold:
-            diff = log_frame - self.reference_log_intensity
-            on_mask = diff > self.contrast_threshold
-            off_mask = diff < -self.contrast_threshold
-        else:
-            diff = log_frame - self.prev_log_frame
-            diff_scaled = diff * 46.0
-            on_mask = diff_scaled > self.threshold
-            off_mask = diff_scaled < -self.threshold
+        diff = log_frame - self.reference_log_intensity
+        on_mask = diff > self.contrast_threshold
+        off_mask = diff < -self.contrast_threshold
         time_since_last = current_time_us - self.last_event_time
         refractory_mask = time_since_last >= self.refractory_period_us
         on_mask = on_mask & refractory_mask
         off_mask = off_mask & refractory_mask
+        # Pixels that fired snap their reference to current log intensity immediately.
         on_coords = np.argwhere(on_mask)
         for y, x in on_coords:
             event = DVSEvent(x=int(x), y=int(y), polarity=True, timestamp_us=current_time_us)
@@ -434,7 +438,6 @@ class DVSCameraEmulator:
             self.off_events += 1
         noise_events = self._generate_noise_events(current_time_us)
         events.extend(noise_events)
-        self.prev_log_frame = log_frame
         self.total_events += len(events)
         self.frame_count += 1
         self.last_frame_time_us = current_time_us
@@ -506,11 +509,11 @@ def create_combined_preview(
 
 
 class UARTOutputHandler:
-    def __init__(self, port: str, baud_rate: int = 115200, architecture: str = 'auto'):
+    """Sends EVT 2.0 events to the voxel_bin_top FPGA over UART and receives gesture packets."""
+
+    def __init__(self, port: str, baud_rate: int = 115200):
         self.port = port
         self.baud_rate = baud_rate
-        self.architecture = architecture
-        self.detected_architecture = architecture
         self.serial: Optional[serial.Serial] = None
         self.event_queue: queue.Queue = queue.Queue(maxsize=10000)
         self.running = False
@@ -522,7 +525,6 @@ class UARTOutputHandler:
         self.queue_high_watermark = 0
         self.gestures_received = []
         self.rx_buffer = bytearray()
-        self._ascii_line_buffer = bytearray()
         self._last_time_high = -1
         self.lock = threading.Lock()
 
@@ -617,7 +619,8 @@ class UARTOutputHandler:
                 print(f"TX Error: {e}")
     
     def _rx_loop(self):
-        gesture_names = ['UP', 'DOWN', 'LEFT', 'RIGHT']
+        # FPGA gesture encoding: 0=Down, 1=Left, 2=Right, 3=Up (matches voxel_bin_top TX)
+        gesture_names = ['Down', 'Left', 'Right', 'Up']
         while self.running:
             try:
                 if self.serial and self.serial.is_open and self.serial.in_waiting > 0:
@@ -642,26 +645,8 @@ class UARTOutputHandler:
                             print(f"\n*** GESTURE DETECTED: {gesture_str} (conf={confidence}) ***")
                             continue
 
-                        # ASCII gesture output (gradient_map uart_debug)
-                        b = self.rx_buffer[0]
+                        # Unexpected byte — discard
                         del self.rx_buffer[0]
-
-                        if b in (0x0D, 0x0A):
-                            if len(self._ascii_line_buffer) == 0:
-                                continue
-                            line = self._ascii_line_buffer.decode('ascii', errors='ignore').strip()
-                            self._ascii_line_buffer.clear()
-                            if line in gesture_names:
-                                with self.lock:
-                                    self.gestures_received.append((line, time.time()))
-                                print(f"\n*** GESTURE DETECTED: {line} ***")
-                        elif 32 <= b <= 126:
-                            self._ascii_line_buffer.append(b)
-                            if len(self._ascii_line_buffer) > 64:
-                                self._ascii_line_buffer.clear()
-                        else:
-                            # Ignore non-printable bytes that are neither gesture packet nor ASCII text.
-                            pass
                 else:
                     time.sleep(0.01)
             except Exception as e:
@@ -694,12 +679,9 @@ class UARTOutputHandler:
         return enqueued
     
     def test_connection(self) -> bool:
+        """Send echo command (0xFF) and verify voxel_bin_top responds with 0x55."""
         if not self.serial or not self.serial.is_open:
             return False
-        if self.architecture == 'gradient_map':
-            self.detected_architecture = 'gradient_map'
-            print("FPGA architecture: gradient_map (echo probe skipped)")
-            return True
         try:
             self.serial.reset_input_buffer()
             self.serial.write(bytes([0xFF]))
@@ -707,48 +689,13 @@ class UARTOutputHandler:
             if self.serial.in_waiting > 0:
                 response = self.serial.read(1)
                 if response[0] == 0x55:
-                    self.detected_architecture = 'voxel_bin'
-                    print("FPGA architecture: voxel_bin")
-                    print("FPGA connection verified (echo test passed)")
+                    print("FPGA connection verified (echo 0xFF → 0x55)")
                     return True
-            if self.architecture == 'voxel_bin':
-                print("WARNING: voxel_bin selected, but echo test did not return 0x55")
-                return False
-            self.detected_architecture = 'gradient_map'
-            print("FPGA architecture: gradient_map (no echo response, expected)")
-            return True
+            print("WARNING: echo test did not return 0x55 — check bitstream and baud rate")
+            return False
         except Exception as e:
             print(f"Connection test failed: {e}")
             return False
-
-
-class FileOutputHandler:
-    """Saves DVS events to a binary file in DVS1 custom format."""
-    
-    def __init__(self, filename: str):
-        self.filename = filename
-        self.file = None
-        self.events_written = 0
-    
-    def open(self):
-        self.file = open(self.filename, 'wb')
-        self.file.write(b'DVS1')
-        print(f"Saving events to: {self.filename} (DVS1 format)")
-    
-    def close(self):
-        if self.file:
-            self.file.close()
-            print(f"Saved {self.events_written} events to {self.filename}")
-    
-    def write_event(self, event: DVSEvent):
-        if self.file:
-            data = struct.pack('<HHBI', event.x, event.y, 1 if event.polarity else 0, event.timestamp_us)
-            self.file.write(data)
-            self.events_written += 1
-    
-    def write_events(self, events: List[DVSEvent]):
-        for event in events:
-            self.write_event(event)
 
 
 class EVT2FileOutputHandler:
@@ -821,14 +768,10 @@ def main():
                         help='Simulate gestures without camera (for testing)')
     parser.add_argument('--port', type=str, default=None,
                         help='Serial port for UART output (e.g., /dev/ttyUSB0, COM3)')
-    parser.add_argument('--arch', type=str, default='auto', choices=['auto', 'voxel_bin', 'gradient_map'],
-                        help='FPGA UART architecture (default: auto)')
     parser.add_argument('--baud', type=int, default=115200,
                         help='UART baud rate (default: 115200)')
-    parser.add_argument('--threshold', type=float, default=DEFAULT_THRESHOLD,
-                        help=f'Event threshold - legacy mode (default: {DEFAULT_THRESHOLD})')
     parser.add_argument('--contrast', type=float, default=DEFAULT_CONTRAST_THRESHOLD,
-                        help=f'Contrast threshold - realistic log-domain (default: {DEFAULT_CONTRAST_THRESHOLD}, ~15%% change)')
+                        help=f'Contrast threshold: log-intensity change per event (default: {DEFAULT_CONTRAST_THRESHOLD}, ~15%% change)')
     parser.add_argument('--refractory', type=int, default=DEFAULT_REFRACTORY_US,
                         help=f'Refractory period in μs (default: {DEFAULT_REFRACTORY_US})')
     parser.add_argument('--resolution', type=int, default=DVS_RESOLUTION,
@@ -838,9 +781,7 @@ def main():
     parser.add_argument('--preview', action='store_true',
                         help='Show preview window')
     parser.add_argument('--save', type=str, default=None,
-                        help='Save events to binary file')
-    parser.add_argument('--format', type=str, default='evt2', choices=['dvs1', 'evt2'],
-                        help='Output file format: evt2 (Prophesee EVT 2.0, default) or dvs1 (legacy custom)')
+                        help='Save events to EVT 2.0 binary file (.raw)')
     parser.add_argument('--noise-filter', type=int, default=3,
                         help='Gaussian blur kernel size for noise filtering (default: 3, 0=disabled)')
     parser.add_argument('--max-events', type=int, default=1000,
@@ -849,14 +790,18 @@ def main():
                         help='UART downsampling strategy when events exceed per-frame budget (default: spatial)')
     parser.add_argument('--loop', action='store_true',
                         help='Loop video file playback')
-    parser.add_argument('--legacy-mode', action='store_true',
-                        help='Use legacy frame-difference mode instead of realistic per-pixel reference')
     parser.add_argument('--aspect-mode', type=str, default='crop', choices=['crop', 'stretch'],
                         help='Input resize mode before DVS conversion (default: crop to preserve motion geometry)')
     parser.add_argument('--roi-scale', type=float, default=1.0,
                         help='Center ROI scale in (0.2..1.0], lower removes peripheral background (default: 1.0)')
     parser.add_argument('--flip-x', action='store_true',
                         help='Horizontally flip input before DVS conversion')
+    parser.add_argument('--flip-y', action='store_true',
+                        help='Vertically flip input before DVS conversion')
+    parser.add_argument('--flip-both', action='store_true',
+                        help='Flip both axes (equivalent to --flip-x --flip-y); use when camera is mounted upside-down or both axes are inverted')
+    parser.add_argument('--rotate-cw', action='store_true',
+                        help='Rotate image 90° clockwise before DVS conversion (equivalent to --swap-xy --flip-x at EVT2 level; use for this camera orientation)')
     parser.add_argument('--no-noise', action='store_true',
                         help='Disable background noise model')
     parser.add_argument('--leak-rate', type=float, default=DEFAULT_LEAK_RATE,
@@ -876,10 +821,12 @@ def main():
     use_video = args.video is not None
     video_cap = None
     simulator = None
+    do_flip_x = args.flip_x or args.flip_both
+    do_flip_y = args.flip_y or args.flip_both
+    do_rotate_cw = args.rotate_cw
     emulator = DVSCameraEmulator(
         camera_id=args.camera,
         output_resolution=args.resolution,
-        threshold=args.threshold,
         contrast_threshold=args.contrast,
         refractory_period_us=args.refractory,
         fps=args.fps,
@@ -889,11 +836,12 @@ def main():
         shot_noise_rate=args.shot_noise,
         aspect_mode=args.aspect_mode,
         roi_scale=args.roi_scale,
-        flip_x=args.flip_x,
-        use_log_threshold=not args.legacy_mode
+        flip_x=do_flip_x,
+        flip_y=do_flip_y,
+        rotate_cw=do_rotate_cw,
     )
 
-    print(f"Input geometry: aspect={args.aspect_mode}, roi_scale={max(0.2, min(1.0, args.roi_scale)):.2f}, flip_x={'ON' if args.flip_x else 'OFF'}")
+    print(f"Input geometry: aspect={args.aspect_mode}, roi_scale={max(0.2, min(1.0, args.roi_scale)):.2f}, flip_x={'ON' if do_flip_x else 'OFF'}, flip_y={'ON' if do_flip_y else 'OFF'}, rotate_cw={'ON' if do_rotate_cw else 'OFF'}")
     print(f"UART subsampling: {args.subsample_mode}")
     
     if use_simulator:
@@ -921,15 +869,13 @@ def main():
     file_handler = None
     
     if args.port:
-        uart_handler = UARTOutputHandler(args.port, args.baud, architecture=args.arch)
+        uart_handler = UARTOutputHandler(args.port, args.baud)
         if uart_handler.open():
-            if not uart_handler.test_connection() and args.arch == 'voxel_bin':
-                print("ERROR: voxel_bin echo test failed; check bitstream/baud/port.")
+            if not uart_handler.test_connection():
+                print("ERROR: voxel_bin_top echo test failed; check bitstream/baud/port.")
                 uart_handler.close()
                 uart_handler = None
-            elif uart_handler is not None:
-                if args.arch == 'auto':
-                    print(f"UART mode: {uart_handler.detected_architecture}")
+            else:
                 uart_handler.start_tx_thread()
         else:
             uart_handler = None
@@ -946,10 +892,7 @@ def main():
             uart_budget = args.max_events
     
     if args.save:
-        if args.format == 'evt2':
-            file_handler = EVT2FileOutputHandler(args.save)
-        else:
-            file_handler = FileOutputHandler(args.save)
+        file_handler = EVT2FileOutputHandler(args.save)
         file_handler.open()
     
     paused = False
@@ -1019,19 +962,11 @@ def main():
                 if key == ord('q'):
                     break
                 elif key == ord('+') or key == ord('='):
-                    if emulator.use_log_threshold:
-                        emulator.contrast_threshold += 0.02
-                        print(f"Contrast threshold: {emulator.contrast_threshold:.2f} (~{emulator.contrast_threshold*100:.0f}%)")
-                    else:
-                        emulator.threshold += 2
-                        print(f"Threshold: {emulator.threshold}")
+                    emulator.contrast_threshold += 0.02
+                    print(f"Contrast threshold: {emulator.contrast_threshold:.2f} (~{emulator.contrast_threshold*100:.0f}%)")
                 elif key == ord('-'):
-                    if emulator.use_log_threshold:
-                        emulator.contrast_threshold = max(0.02, emulator.contrast_threshold - 0.02)
-                        print(f"Contrast threshold: {emulator.contrast_threshold:.2f} (~{emulator.contrast_threshold*100:.0f}%)")
-                    else:
-                        emulator.threshold = max(1, emulator.threshold - 2)
-                        print(f"Threshold: {emulator.threshold}")
+                    emulator.contrast_threshold = max(0.02, emulator.contrast_threshold - 0.02)
+                    print(f"Contrast threshold: {emulator.contrast_threshold:.2f} (~{emulator.contrast_threshold*100:.0f}%)")
                 elif key == ord('n'):
                     emulator.enable_noise_model = not emulator.enable_noise_model
                     print(f"Noise model: {'ENABLED' if emulator.enable_noise_model else 'DISABLED'}")
