@@ -1,11 +1,8 @@
-module systolic_array #(
-    parameter int N = 16,
-    parameter int DATA_BIT_SIZE = 16,
-    parameter int PRODUCT_BIT_SIZE = 2 * DATA_BIT_SIZE,
-    parameter int ACC_BIT_SIZE = PRODUCT_BIT_SIZE + $clog2(N),
-    parameter int WAVE_CYCLES = 2 * N - 1,
-    parameter int TOTAL_CYCLES = 3 * N - 1,
-    parameter int T_BITS = $clog2(TOTAL_CYCLES + 1)
+module voxel_systolic_array #(
+    parameter  int N = 16,
+    parameter  int DATA_BIT_SIZE = 16,
+    localparam int PRODUCT_BIT_SIZE = 2 * DATA_BIT_SIZE,
+    localparam int ACC_BIT_SIZE = PRODUCT_BIT_SIZE + $clog2(N)
 )(
     input  logic clk,
     input  logic reset,
@@ -21,6 +18,10 @@ module systolic_array #(
     output logic busy,
     output logic done
 );
+
+    localparam int WAVE_CYCLES = 2 * N - 1;
+    localparam int TOTAL_CYCLES = 3 * N - 1;
+    localparam int T_BITS = $clog2(TOTAL_CYCLES + 1);
 
     logic [DATA_BIT_SIZE-1:0] A_matrix [0:N-1][0:N-1];
     logic [DATA_BIT_SIZE-1:0] B_matrix [0:N-1][0:N-1];

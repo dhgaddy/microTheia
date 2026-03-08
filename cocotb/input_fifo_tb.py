@@ -15,10 +15,9 @@ CFG = load_config(MODULE)
 FIFO_DEPTH = CFG["FIFO_DEPTH"] # 256
 DATA_WIDTH = CFG["DATA_WIDTH"] # 32
 
-FIFO_DEPTH_LOG2 = 8
-DEPTH = 1 << FIFO_DEPTH_LOG2
-PTR_MASK = (1 << (FIFO_DEPTH_LOG2 + 1)) - 1
-ADDR_MASK = (1 << FIFO_DEPTH_LOG2) - 1
+FIFO_DEPTH_LOG2 = FIFO_DEPTH.bit_length() - 1
+PTR_MASK        = (1 << (FIFO_DEPTH_LOG2 + 1)) - 1
+ADDR_MASK       = (1 << FIFO_DEPTH_LOG2) - 1
 
 
 class InputFifoModel:
@@ -35,14 +34,14 @@ class InputFifoModel:
         self.out_valid = 0
         self.rd_pending = 0
         self.last_rd_data = 0
-        self.ram = [0] * DEPTH
+        self.ram = [0] * FIFO_DEPTH
 
     @property
     def total_count(self):
         return self.tail_count + self.out_valid + self.rd_pending
 
     def outputs(self):
-        ready_o = int(self.total_count < DEPTH)
+        ready_o = int(self.total_count < FIFO_DEPTH)
         valid_o = int(self.out_valid)
         data_o = self.out_data
         return ready_o, valid_o, data_o & ((1 << DATA_WIDTH) - 1)
@@ -193,7 +192,7 @@ async def test_full_and_overflow_drop(dut):
         model.step(0, 0, 0, 0)
 
     # Fill FIFO to capacity.
-    for i in range(DEPTH):
+    for i in range(FIFO_DEPTH):
         await drive_and_check(dut, model, 0, 1, i, 0, f"fill-{i}")
 
     assert int(dut.ready_o.value) == 0, "ready_o should deassert when full"
@@ -204,15 +203,15 @@ async def test_full_and_overflow_drop(dut):
 
     # Drain and check first values are original fill data.
     drained = []
-    for _ in range(DEPTH * 4):
+    for _ in range(FIFO_DEPTH * 4):
         if int(dut.valid_o.value):
             drained.append(int(dut.data_o.value))
         await drive_and_check(dut, model, 0, 0, 0, 1, f"drain-{len(drained)}")
-        if len(drained) >= DEPTH:
+        if len(drained) >= FIFO_DEPTH:
             break
 
-    assert len(drained) >= DEPTH, f"Timed out draining full FIFO, drained={len(drained)}"
-    assert drained == list(range(DEPTH)), "Overflow attempts corrupted FIFO content"
+    assert len(drained) >= FIFO_DEPTH, f"Timed out draining full FIFO, drained={len(drained)}"
+    assert drained == list(range(FIFO_DEPTH)), "Overflow attempts corrupted FIFO content"
 
 
 @logged_test()
@@ -293,7 +292,7 @@ async def test_fill_drain_cycle(dut):
         model.step(0, 0, 0, 0)
 
     def fill_once(base):
-        return [base + i for i in range(DEPTH)]
+        return [base + i for i in range(FIFO_DEPTH)]
 
     async def fill(base):
         for v in fill_once(base):
@@ -302,11 +301,11 @@ async def test_fill_drain_cycle(dut):
 
     async def drain():
         drained = []
-        for _ in range(DEPTH * 2):
+        for _ in range(FIFO_DEPTH * 2):
             if int(dut.valid_o.value):
                 drained.append(int(dut.data_o.value))
             await drive_and_check(dut, model, 0, 0, 0, 1, f"drain-{len(drained)}")
-            if len(drained) >= DEPTH:
+            if len(drained) >= FIFO_DEPTH:
                 break
         return drained
 

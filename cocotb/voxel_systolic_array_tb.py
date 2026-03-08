@@ -7,19 +7,25 @@ import cocotb
 from util.test_logging import logged_test
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, NextTimeStep, ReadOnly, RisingEdge
+import os
+from util.config_parser import load_config
 
-N = 16
-DATA_BITS = 16
-ACC_BITS = (2 * DATA_BITS) + (N - 1).bit_length() + 1
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
+
+N             = CFG["N"]
+DATA_BIT_SIZE = CFG["DATA_BIT_SIZE"]
+
+ACC_BITS     = (2 * DATA_BIT_SIZE) + (N - 1).bit_length() + 1
 TOTAL_CYCLES = (3 * N) - 1
-DATA_MASK = (1 << DATA_BITS) - 1
-ACC_MASK = (1 << ACC_BITS) - 1
+DATA_MASK    = (1 << DATA_BIT_SIZE) - 1
+ACC_MASK     = (1 << ACC_BITS) - 1
 
 
 def configure_from_dut(dut):
     global N, ACC_BITS, TOTAL_CYCLES, DATA_MASK, ACC_MASK
 
-    n_sq = len(dut.A_matrix_flat) // DATA_BITS
+    n_sq = len(dut.A_matrix_flat) // DATA_BIT_SIZE
     n = math.isqrt(n_sq)
     assert n * n == n_sq, f"Non-square matrix flattening: bits={len(dut.A_matrix_flat)}"
     N = n
@@ -27,7 +33,7 @@ def configure_from_dut(dut):
     acc_bits = len(dut.Out_matrix_flat) // (N * N)
     ACC_BITS = acc_bits
     TOTAL_CYCLES = (3 * N) - 1
-    DATA_MASK = (1 << DATA_BITS) - 1
+    DATA_MASK = (1 << DATA_BIT_SIZE) - 1
     ACC_MASK = (1 << ACC_BITS) - 1
 
 
@@ -69,7 +75,7 @@ def golden_matmul(a, b):
 
 async def setup(dut):
     configure_from_dut(dut)
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.reset.value = 1
     dut.start.value = 0
     dut.A_matrix_flat.value = 0
@@ -80,8 +86,8 @@ async def setup(dut):
 
 
 async def run_mul(dut, a, b, tag):
-    dut.A_matrix_flat.value = pack_matrix(a, DATA_BITS)
-    dut.B_matrix_flat.value = pack_matrix(b, DATA_BITS)
+    dut.A_matrix_flat.value = pack_matrix(a, DATA_BIT_SIZE)
+    dut.B_matrix_flat.value = pack_matrix(b, DATA_BIT_SIZE)
 
     dut.start.value = 1
     await RisingEdge(dut.clk)
@@ -149,8 +155,8 @@ async def test_start_ignored_while_running(dut):
     a = [[1 if i == j else 0 for j in range(N)] for i in range(N)]
     b = [[2 if i == j else 0 for j in range(N)] for i in range(N)]
 
-    dut.A_matrix_flat.value = pack_matrix(a, DATA_BITS)
-    dut.B_matrix_flat.value = pack_matrix(b, DATA_BITS)
+    dut.A_matrix_flat.value = pack_matrix(a, DATA_BIT_SIZE)
+    dut.B_matrix_flat.value = pack_matrix(b, DATA_BIT_SIZE)
 
     dut.start.value = 1
     await RisingEdge(dut.clk)
@@ -199,8 +205,8 @@ async def test_back_to_back_runs(dut):
         a = [[rng.randint(0, 100) for _ in range(N)] for _ in range(N)]
         b = [[rng.randint(0, 100) for _ in range(N)] for _ in range(N)]
 
-        dut.A_matrix_flat.value = pack_matrix(a, DATA_BITS)
-        dut.B_matrix_flat.value = pack_matrix(b, DATA_BITS)
+        dut.A_matrix_flat.value = pack_matrix(a, DATA_BIT_SIZE)
+        dut.B_matrix_flat.value = pack_matrix(b, DATA_BIT_SIZE)
 
         dut.start.value = 1
         await RisingEdge(dut.clk)
@@ -262,7 +268,7 @@ async def test_single_nonzero_element(dut):
 async def test_all_max_values(dut):
     """Max unsigned values on both inputs should match golden accumulation."""
     await setup(dut)
-    max_val = (1 << DATA_BITS) - 1
+    max_val = (1 << DATA_BIT_SIZE) - 1
     a = [[max_val for _ in range(N)] for _ in range(N)]
     b = [[max_val for _ in range(N)] for _ in range(N)]
     await run_mul(dut, a, b, "max*max")
@@ -319,8 +325,8 @@ async def test_done_fires_at_exact_cycle(dut):
     # Use identity matrices so the result is predictable.
     a = [[1 if i == j else 0 for j in range(N)] for i in range(N)]
     b = [[1 if i == j else 0 for j in range(N)] for i in range(N)]
-    dut.A_matrix_flat.value = pack_matrix(a, DATA_BITS)
-    dut.B_matrix_flat.value = pack_matrix(b, DATA_BITS)
+    dut.A_matrix_flat.value = pack_matrix(a, DATA_BIT_SIZE)
+    dut.B_matrix_flat.value = pack_matrix(b, DATA_BIT_SIZE)
 
     dut.start.value = 1
     await RisingEdge(dut.clk)  # start sampled on this edge

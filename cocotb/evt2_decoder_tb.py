@@ -6,8 +6,8 @@ import cocotb
 from util.test_logging import logged_test
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, NextTimeStep, ReadOnly, RisingEdge
-import os
 import math
+import os
 from util.config_parser import load_config
 
 MODULE = os.environ.get("TOPLEVEL")
@@ -17,13 +17,12 @@ GRID_SIZE = CFG["GRID_SIZE"]
 SENSOR_WIDTH = CFG["SENSOR_WIDTH"]
 SENSOR_HEIGHT = CFG["SENSOR_HEIGHT"]
 
+GRID_BITS         = (GRID_SIZE - 1).bit_length() + 1
+REQUIRE_TIME_HIGH = 1
+
 EVT_CD_OFF = 0x0
 EVT_CD_ON = 0x1
 EVT_TIME_HIGH = 0x8
-
-GRID_BITS = math.sqrt(GRID_SIZE)
-REQUIRE_TIME_HIGH = 1
-
 
 def build_evt2_cd(pkt_type, x, y, ts_lsb):
     return ((pkt_type & 0xF) << 28) | ((ts_lsb & 0x3F) << 22) | ((x & 0x7FF) << 11) | (y & 0x7FF)

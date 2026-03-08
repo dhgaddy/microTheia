@@ -23,7 +23,6 @@ endif
 
 .DEFAULT_GOAL := help
 
-# NEW ----------------------------------------------------------------------------
 SIM_DUTS = $(strip $(DUT))
 
 SV_SRCS := $(shell find src -name "*.sv")
@@ -41,7 +40,6 @@ CONFIG_FILE := configs/$(CONFIG).txt
 
 # iCE40 FPGA Flow Wrapper
 ICE40_MAKEFILE := ice40/ice40.mk
-# ---------------------------------------------------------------------------------
 
 all: librelane ## Build the project (runs LibreLane)
 .PHONY: all
