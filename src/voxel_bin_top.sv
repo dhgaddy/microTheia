@@ -16,30 +16,31 @@
 //   0=Down, 1=Left, 2=Right, 3=Up
 
 module voxel_bin_top #(
-    parameter int CLK_FREQ_HZ         = 12_000_000,
-    parameter int CLK_FREQ            = CLK_FREQ_HZ, // compatibility alias
-    parameter int BAUD_RATE           = 1_000_000,
-    parameter int WINDOW_MS           = 1000,
-    parameter int CYCLES_PER_BIN      = 0,
-    parameter int GRID_SIZE           = 16,
-    parameter int NUM_BINS            = 8,
-    parameter int READOUT_BINS        = 8,
-    parameter int COUNTER_BITS        = 16,  // Counter width only affects feature/bin storage; SA still uses WEIGHT_BITS path for weights
-    parameter int FIFO_DEPTH_LOG2     = 8,
-    parameter int WEIGHT_BITS         = 8,
-    parameter int WEIGHT_SCALE        = 1024,
-    parameter int N                   = 16,  // 16 → 16x16 systolic array
-    parameter int PASS_MARGIN         = 0,
-    parameter int PERSISTENCE_COUNT   = 2,
-    parameter int CONF_BITS           = 4,
-    parameter int CONF_SHIFT          = 4,
-    parameter int CORE_PARALLEL_READS = 4, // compatibility (unused in current core)
-    parameter int UART_WORD_FIFO_LOG2 = 4,
-    parameter int TX_FIFO_LOG2        = 5,
-    parameter int POR_CYCLES          = 1024,
-    parameter int SOFT_RESET_CYCLES   = 64,
-    parameter [7:0] CONFIG_BYTE0      = 8'h08, // NUM_BINS default
-    parameter [7:0] CONFIG_BYTE1      = 8'h08  // READOUT_BINS default
+    parameter int CLK_FREQ_HZ          = 12_000_000,
+    parameter int BAUD_RATE            = 1_000_000,
+    parameter int WINDOW_MS            = 1000,
+    parameter int CYCLES_PER_BIN       = 0,
+    parameter int GRID_SIZE            = 16,
+    parameter int NUM_BINS             = 8,
+    parameter int READOUT_BINS         = 8,
+    parameter int COUNTER_BITS         = 16,  // Counter width only affects feature/bin storage; SA still uses WEIGHT_BITS path for weights
+    parameter int FIFO_DEPTH           = 256,
+    parameter int DATA_WIDTH           = 32,
+    parameter int REQUIRE_TIME_HIGH    = 1,
+    parameter int SWAP_INPUT_BYTES     = 0,
+    parameter int SENSOR_WIDTH         = 320,
+    parameter int SENSOR_HEIGHT        = 320,
+    parameter int WEIGHT_BITS          = 8,
+    parameter int WEIGHT_SCALE         = 1024,
+    parameter int N                    = 16,  // 16 → 16x16 systolic array
+    parameter int PASS_MARGIN          = 0, // parameter int PASS_MARGIN       = 64,
+    parameter int PERSISTENCE_COUNT    = 2,
+    parameter int CONF_BITS            = 4,
+    parameter int CONF_SHIFT           = 4,
+    parameter int UART_WORD_FIFO_DEPTH = 16,
+    parameter int TX_FIFO_DEPTH        = 32,
+    parameter int POR_CYCLES           = 1024,
+    parameter int SOFT_RESET_CYCLES    = 64
 )(
     input  logic clk,
     input  logic uart_rx,
@@ -53,13 +54,18 @@ module voxel_bin_top #(
     output logic led_right
 );
 
+    localparam logic [7:0] CONFIG_BYTE0       = 8'h08; // NUM_BINS default
+    localparam logic [7:0] CONFIG_BYTE1       = 8'h08; // READOUT_BINS default
+
+    localparam int CLK_FREQ               = CLK_FREQ_HZ; // compatibility alias
+
     localparam int ACTIVE_CLK_FREQ        = (CLK_FREQ != 0) ? CLK_FREQ : CLK_FREQ_HZ;
-    localparam int CLKS_PER_BIT           = (BAUD_RATE > 0) ? (ACTIVE_CLK_FREQ / BAUD_RATE) : 1;
+    localparam int CLKS_PER_BIT           = (BAUD_RATE > 0) ? (CLK_FREQ_HZ / BAUD_RATE) : 1;
     localparam int POR_BITS               = (POR_CYCLES > 1) ? $clog2(POR_CYCLES) : 1;
     localparam int SOFT_RST_BITS          = (SOFT_RESET_CYCLES > 1) ? $clog2(SOFT_RESET_CYCLES + 1) : 1;
-    localparam int HEARTBEAT_HALF_PERIOD  = (ACTIVE_CLK_FREQ / 3);   // ~1.5 Hz blink
+    localparam int HEARTBEAT_HALF_PERIOD  = (CLK_FREQ_HZ / 3);   // ~1.5 Hz blink
     localparam int HEARTBEAT_BITS         = (HEARTBEAT_HALF_PERIOD > 1) ? $clog2(HEARTBEAT_HALF_PERIOD) : 1;
-    localparam int LED_HOLD_CYCLES        = (ACTIVE_CLK_FREQ / 20);  // 50 ms pulse
+    localparam int LED_HOLD_CYCLES        = (CLK_FREQ_HZ / 20);  // 50 ms pulse
     localparam int LED_HOLD_BITS          = (LED_HOLD_CYCLES > 1) ? $clog2(LED_HOLD_CYCLES + 1) : 1;
 
     localparam logic [7:0] CMD_ECHO       = 8'hFF;
@@ -205,7 +211,8 @@ module voxel_bin_top #(
     assign rst = rst_por | (soft_rst_ctr != 0);
 
     uart_rx #(
-        .CLKS_PER_BIT(CLKS_PER_BIT)
+        .CLK_FREQ_HZ(CLK_FREQ_HZ),
+        .BAUD_RATE  (BAUD_RATE)
     ) u_uart_rx (
         .clk  (clk),
         .rst  (rst),
@@ -215,7 +222,8 @@ module voxel_bin_top #(
     );
 
     uart_tx #(
-        .CLKS_PER_BIT(CLKS_PER_BIT)
+        .CLK_FREQ_HZ(CLK_FREQ_HZ),
+        .BAUD_RATE  (BAUD_RATE)
     ) u_uart_tx (
         .clk  (clk),
         .rst  (rst),
@@ -227,8 +235,8 @@ module voxel_bin_top #(
 
     // Word FIFO decouples UART receive from core evt_word ready.
     input_fifo #(
-        .width_p(32),
-        .depth_log2_p(UART_WORD_FIFO_LOG2)
+        .FIFO_DEPTH(UART_WORD_FIFO_DEPTH),
+        .DATA_WIDTH(32)
     ) u_word_fifo (
         .clk_i   (clk),
         .reset_i (rst),
@@ -242,8 +250,8 @@ module voxel_bin_top #(
 
     // TX byte FIFO decouples response generation from serial TX bandwidth.
     input_fifo #(
-        .width_p(8),
-        .depth_log2_p(TX_FIFO_LOG2)
+        .FIFO_DEPTH(TX_FIFO_DEPTH),
+        .DATA_WIDTH(8)
     ) u_tx_fifo (
         .clk_i   (clk),
         .reset_i (rst),
@@ -256,13 +264,18 @@ module voxel_bin_top #(
     );
 
     voxel_bin_core #(
-        .CLK_FREQ_HZ      (ACTIVE_CLK_FREQ),
+        .CLK_FREQ_HZ      (CLK_FREQ_HZ),
         .WINDOW_MS        (WINDOW_MS),
         .GRID_SIZE        (GRID_SIZE),
         .NUM_BINS         (NUM_BINS),
         .READOUT_BINS     (READOUT_BINS),
         .COUNTER_BITS     (COUNTER_BITS),
-        .FIFO_DEPTH_LOG2  (FIFO_DEPTH_LOG2),
+        .FIFO_DEPTH       (FIFO_DEPTH),
+        .DATA_WIDTH       (DATA_WIDTH),
+        .REQUIRE_TIME_HIGH(REQUIRE_TIME_HIGH),
+        .SWAP_INPUT_BYTES (SWAP_INPUT_BYTES),
+        .SENSOR_WIDTH     (SENSOR_WIDTH),
+        .SENSOR_HEIGHT    (SENSOR_HEIGHT),
         .WEIGHT_BITS      (WEIGHT_BITS),
         .WEIGHT_SCALE     (WEIGHT_SCALE),
         .N                (N),
@@ -270,7 +283,8 @@ module voxel_bin_top #(
         .PERSISTENCE_COUNT(PERSISTENCE_COUNT),
         .CONF_BITS        (CONF_BITS),
         .CONF_SHIFT       (CONF_SHIFT),
-        .CYCLES_PER_BIN   (CYCLES_PER_BIN)
+        .CYCLES_PER_BIN   (CYCLES_PER_BIN),
+        .NUM_CLASSES      (NUM_CLASSES)
     ) u_core (
         .clk                (clk),
         .rst                (rst),
@@ -463,7 +477,5 @@ module voxel_bin_top #(
     assign led_left          = (gesture_led_ctr != 0) && (last_gesture == 2'd1);
     assign led_right         = (gesture_led_ctr != 0) && (last_gesture == 2'd2);
     assign led_up            = (gesture_led_ctr != 0) && (last_gesture == 2'd3);
-
-    wire _unused_compat = core_debug_state[0] ^ (CORE_PARALLEL_READS > 0);
 
 endmodule

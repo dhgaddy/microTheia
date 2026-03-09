@@ -111,7 +111,6 @@ sim: ## Run RTL simulation with cocotb
 		COCOTB_TEST_MODULES=$${d}_tb \
 		VERILOG_SOURCES="$$SRCS" \
 		COMPILE_ARGS="$$PARAMS" \
-		SIM_CARGS="$$PARAMS" \
 		PYTHONPATH=cocotb \
 		make -f $$(cocotb-config --makefiles)/Makefile.sim; \
 	done

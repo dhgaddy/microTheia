@@ -12,7 +12,6 @@ module voxel_bin_core #(
     parameter int READOUT_BINS      = 4,
     parameter int COUNTER_BITS      = 4,
     parameter int FIFO_DEPTH        = 256,
-    parameter int FIFO_DEPTH_LOG2   = 8,
     parameter int DATA_WIDTH        = 32,
     parameter int REQUIRE_TIME_HIGH = 1,
     parameter int SWAP_INPUT_BYTES  = 0,
@@ -26,7 +25,8 @@ module voxel_bin_core #(
     parameter int CONF_BITS         = 4,
     parameter int CONF_SHIFT        = 4,
     parameter int NUM_CLASSES       = 4,
-    parameter int CYCLES_PER_BIN    = 0
+    parameter int CYCLES_PER_BIN    = 0, // May be a problem
+    parameter string WEIGHT_FILE    = "weights/gesture_weights_down_left_right_up_16x16_8bins.txt"
 )(
     input  logic                 clk,
     input  logic                 rst,
@@ -169,8 +169,8 @@ module voxel_bin_core #(
         .SENSOR_WIDTH     (SENSOR_WIDTH),
         .SENSOR_HEIGHT    (SENSOR_HEIGHT),
         .GRID_SIZE        (GRID_SIZE),
-        .REQUIRE_TIME_HIGH(1'b1), // REQUIRE_TIME_HIGH
-        .SWAP_INPUT_BYTES (1'b0)  // SWAP_INPUT_BYTES
+        .REQUIRE_TIME_HIGH(REQUIRE_TIME_HIGH),
+        .SWAP_INPUT_BYTES (SWAP_INPUT_BYTES)
     ) u_evt2_decoder (
         .clk         (clk),
         .rst         (rst),
@@ -294,9 +294,7 @@ module voxel_bin_core #(
             ram_1r1w_sync #(
                 .width_p        (WEIGHT_BITS),
                 .depth_p        (FEATURE_COUNT),
-                .filename_p     ("weights/gesture_weights_down_left_right_up_8x8_4bins.txt"),
-                // .filename_p     ("weights/gesture_weights_down_left_right_up_16x16_4bins.txt"),
-                // .filename_p     ("weights/gesture_weights_down_left_right_up_16x16_4bins.txt"),
+                .filename_p     (WEIGHT_FILE),
                 .init_offset_p  (g * WEIGHT_FILE_CLASS_STRIDE),
                 .init_count_p   (FEATURE_COUNT),
                 .init_is_float_p(1'b1),

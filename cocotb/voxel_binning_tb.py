@@ -421,7 +421,8 @@ async def test_stale_bins_preserved_after_reset(dut):
     await setup(dut)
 
     # Plant a known sentinel value in a sample of cells across bins 1..NUM_BINS-1.
-    stale_val = 77
+    # stale_val = 77
+    stale_val = (1 << COUNTER_BITS) - 1
     cells_to_check = 4  # check 4 cells per bin
     for b in range(1, NUM_BINS):
         for cell in range(cells_to_check):

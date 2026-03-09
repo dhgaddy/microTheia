@@ -34,6 +34,15 @@ PERSISTENCE_COUNT   = 2
 CONF_BITS           = 4
 CONF_SHIFT          = 4
 
+# weight WEIGHT_FILE
+WEIGHT_FILE         = "weights/gesture_weights_down_left_right_up_8x8_4bins.txt"
+
+# voxel_bin_top
+UART_WORD_FIFO_DEPTH = 16
+TX_FIFO_DEPTH        = 32
+POR_CYCLES           = 1024
+SOFT_RESET_CYCLES    = 64
+
 # Legacy/optional compatibility knobs (safe to keep, ignored by modules without matching params)
 MIN_EVENT_THRESH    = 20
 MOTION_THRESH       = 8

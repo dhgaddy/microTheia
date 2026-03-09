@@ -31,37 +31,52 @@ class Config:
         return self._params.items()
 
 
+def _strip_comments(line):
+    """Remove # comments."""
+    return line.split("#", 1)[0].strip()
+
+
+def _parse_value(val, params):
+    """Parse int or string values."""
+    val = val.strip()
+
+    # quoted string
+    if val.startswith('"') and val.endswith('"'):
+        return val.strip('"')
+
+    # numeric expression (allow previous params)
+    try:
+        return eval(val, {}, params)
+    except Exception:
+        try:
+            return int(val.replace("_", ""))
+        except Exception:
+            return val
+
+
 def load_config(module_name=None):
     params = {}
 
-    # ---------------- CONFIG FILE MODE ----------------
-    if "SIM_CONFIG" in os.environ:
-        cfg_path = os.environ["SIM_CONFIG"]
+    if "SIM_CONFIG" not in os.environ:
+        return Config(params, module_name)
 
-        with open(cfg_path) as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
+    cfg_path = os.environ["SIM_CONFIG"]
 
-                key, val = line.split("=", 1)
-                key = key.strip()
-                val = val.strip()
+    with open(cfg_path) as f:
+        for raw in f:
+            line = _strip_comments(raw)
 
-                try:
-                    params[key] = eval(val, {}, params)
-                except:
-                    params[key] = int(val.replace("_", ""))
+            if not line:
+                continue
 
-    # ---------------- CARGS MODE ----------------
-    if "SIM_CARGS" in os.environ:
-        cargs = os.environ["SIM_CARGS"]
+            if "=" not in line:
+                continue
 
-        matches = re.findall(r'-P(\w+)\.(\w+)=(\d+)', cargs)
+            key, val = line.split("=", 1)
+            key = key.strip()
+            val = val.strip()
 
-        for mod, param, value in matches:
-            if module_name is None or mod == module_name:
-                params[param] = int(value)
+            params[key] = _parse_value(val, params)
 
     return Config(params, module_name)
 
@@ -76,26 +91,31 @@ def get_module_params(module_name, src_dir="src"):
     with open(src_file) as f:
         text = f.read()
 
-    # Support typed/untyped SystemVerilog parameters, e.g.:
-    #   parameter FOO = 1
-    #   parameter int FOO = 1
-    #   parameter [31:0] foo_p = 32
+    # match SystemVerilog parameter declarations
     param_names = set(
         re.findall(
-            r'parameter(?:\s+(?:signed|unsigned))?(?:\s+[A-Za-z_][A-Za-z0-9_]*)?(?:\s*\[[^\]]+\])?\s+([A-Za-z_][A-Za-z0-9_]*)\s*=',
+            r'parameter(?:\s+(?:signed|unsigned))?'
+            r'(?:\s+[A-Za-z_][A-Za-z0-9_]*)?'
+            r'(?:\s*\[[^\]]+\])?\s+'
+            r'([A-Za-z_][A-Za-z0-9_]*)\s*=',
             text,
         )
     )
 
     overrides = []
+
     for k, v in cfg.items():
-        if k in param_names:
+        if k not in param_names:
+            continue
+
+        if isinstance(v, str):
+            overrides.append(f'-P{module_name}.{k}="{v}"')
+        else:
             overrides.append(f"-P{module_name}.{k}={v}")
 
     return " ".join(overrides)
 
 
-# CLI support (unchanged behavior)
 if __name__ == "__main__":
     import sys
 
