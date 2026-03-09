@@ -119,6 +119,7 @@ sim: ## Run RTL simulation with cocotb
 sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=input_fifo
 	$(MAKE) sim DUT=evt2_decoder
+	$(MAKE) sim DUT=MatMul
 	$(MAKE) sim DUT=uart_rx
 	$(MAKE) sim DUT=uart_tx
 	$(MAKE) sim DUT=uart_debug

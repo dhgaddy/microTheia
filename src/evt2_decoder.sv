@@ -80,8 +80,10 @@ module evt2_decoder #(
         x_grid_raw = x_clamped / X_BIN_DIV;
         y_grid_raw = y_clamped / Y_BIN_DIV;
 
-        x_grid = (x_grid_raw > GRID_SIZE-1) ? GRID_BITS'(GRID_SIZE-1) : x_grid_raw[GRID_BITS-1:0];
-        y_grid = (y_grid_raw > GRID_SIZE-1) ? GRID_BITS'(GRID_SIZE-1) : y_grid_raw[GRID_BITS-1:0];
+        // x_grid = (x_grid_raw > GRID_SIZE-1) ? GRID_BITS'(GRID_SIZE-1) : x_grid_raw[GRID_BITS-1:0];
+        // y_grid = (y_grid_raw > GRID_SIZE-1) ? GRID_BITS'(GRID_SIZE-1) : y_grid_raw[GRID_BITS-1:0];
+        x_grid = (x_grid_raw >= GRID_SIZE) ? GRID_SIZE-1 : x_grid_raw;
+        y_grid = (y_grid_raw >= GRID_SIZE) ? GRID_SIZE-1 : y_grid_raw;
     end
 
     // Backpressure only for CD events that generate downstream samples.
