@@ -128,6 +128,7 @@ sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=voxel_bin_core
 	$(MAKE) sim DUT=voxel_bin_top
 .PHONY: sim-all
+# matmul
 
 sim-gl: ## Run gate-level simulation with cocotb (after copy-final)
 	cd cocotb; GL=1 PDK_ROOT=${PDK_ROOT} PDK=${PDK} SLOT=${SLOT} python3 chip_top_tb.py
