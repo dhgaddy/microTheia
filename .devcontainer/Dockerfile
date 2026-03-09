@@ -46,6 +46,12 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
 ENV PATH="/opt/sv2v-Linux:${PATH}"
 ENV PATH="/opt/sv2v/bin:${PATH}"
 
-RUN python3 -m pip install --no-cache-dir --break-system-packages numpy opencv-python matplotlib cocotb pyserial
+# RUN python3 -m pip install --no-cache-dir --break-system-packages numpy opencv-python matplotlib cocotb pyserial
+RUN python3 -m pip install --no-cache-dir --break-system-packages \
+        numpy==2.4.3 \
+        opencv-python==4.13.0.92 \
+        matplotlib==3.10.8 \
+        cocotb==2.0.1 \
+        pyserial==3.5
 
 USER vscode
