@@ -6,17 +6,24 @@ import cocotb
 from util.test_logging import logged_test
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, NextTimeStep, ReadOnly, RisingEdge
+import os
+from util.config_parser import load_config
 
-CLK_FREQ_HZ = 12_000_000
-WINDOW_MS = 1000
-NUM_BINS = 8
-READOUT_BINS = 8
-GRID_SIZE = 16
-COUNTER_BITS = 16
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
+
+CLK_FREQ_HZ    = CFG["CLK_FREQ_HZ"]
+WINDOW_MS      = CFG["WINDOW_MS"]
+NUM_BINS       = CFG["NUM_BINS"]
+READOUT_BINS   = CFG["READOUT_BINS"]
+GRID_SIZE      = CFG["GRID_SIZE"]
+COUNTER_BITS   = CFG["COUNTER_BITS"]
+CYCLES_PER_BIN = CFG["CYCLES_PER_BIN"]
+
 CELLS_PER_BIN = GRID_SIZE * GRID_SIZE
-TOTAL_CELLS = NUM_BINS * CELLS_PER_BIN
+TOTAL_CELLS   = NUM_BINS * CELLS_PER_BIN
 FEATURE_COUNT = READOUT_BINS * CELLS_PER_BIN
-MAX_COUNTER = (1 << COUNTER_BITS) - 1
+MAX_COUNTER   = (1 << COUNTER_BITS) - 1
 
 BIN_DURATION_MS = WINDOW_MS // READOUT_BINS
 CYCLES_PER_BIN_SAFE = (CLK_FREQ_HZ // 1000) * BIN_DURATION_MS  # default-derived: 1500000
@@ -77,7 +84,7 @@ class VoxelBinningModel:
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.event_valid.value = 0
     dut.event_x.value = 0

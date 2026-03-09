@@ -7,27 +7,28 @@
 //   oldest->newest bins, and row-major within each bin (y major, x minor).
 
 module voxel_binning #(
-    parameter int CLK_FREQ_HZ    = 12_000_000,
-    parameter int WINDOW_MS      = 1000,
-    parameter int NUM_BINS       = 8,
-    parameter int READOUT_BINS   = 8,
-    parameter int GRID_SIZE      = 16,
-    parameter int COUNTER_BITS   = 16,
-    parameter int CYCLES_PER_BIN = 0
+    parameter  int CLK_FREQ_HZ    = 12_000_000,
+    parameter  int WINDOW_MS      = 1000,
+    parameter  int NUM_BINS       = 8,
+    parameter  int READOUT_BINS   = 8,
+    parameter  int GRID_SIZE      = 16,
+    parameter  int COUNTER_BITS   = 16,
+    parameter  int CYCLES_PER_BIN = 0, // I think this could be a problem
+    localparam int RO_INDEX_WIDTH = READOUT_BINS*GRID_SIZE*GRID_SIZE // made to improve readability of IO
 )(
-    input  logic                           clk,
-    input  logic                           rst,
-    input  logic                           event_valid,
-    input  logic [$clog2(GRID_SIZE)-1:0]  event_x,
-    input  logic [$clog2(GRID_SIZE)-1:0]  event_y,
-    input  logic                           event_polarity,
-    output logic                           event_ready,
-    input  logic                           readout_ready,
-    output logic                           readout_start,
-    output logic                           readout_valid,
-    output logic [COUNTER_BITS-1:0]        readout_data,
-    output logic [$clog2(READOUT_BINS*GRID_SIZE*GRID_SIZE)-1:0] readout_index,
-    output logic                           readout_last
+    input  logic                              clk,
+    input  logic                              rst,
+    input  logic                              event_valid,
+    input  logic [$clog2(GRID_SIZE)-1:0]      event_x,
+    input  logic [$clog2(GRID_SIZE)-1:0]      event_y,
+    input  logic                              event_polarity,
+    output logic                              event_ready,
+    input  logic                              readout_ready,
+    output logic                              readout_start,
+    output logic                              readout_valid,
+    output logic [COUNTER_BITS-1:0]           readout_data,
+    output logic [$clog2(RO_INDEX_WIDTH)-1:0] readout_index,
+    output logic                              readout_last
 );
 
     localparam int CELLS_PER_BIN      = GRID_SIZE * GRID_SIZE;
