@@ -11,51 +11,54 @@ module voxel_bin_core #(
     parameter int NUM_BINS          = 8,
     parameter int READOUT_BINS      = 8,
     parameter int COUNTER_BITS      = 16,
-    parameter int FIFO_DEPTH_LOG2   = 8,
+    parameter int CYCLES_PER_BIN    = 0,
+    parameter int FIFO_DEPTH        = 256,
+    parameter int DATA_WIDTH        = 32,
     parameter int SENSOR_WIDTH      = 320,
     parameter int SENSOR_HEIGHT     = 320,
+    parameter int REQUIRE_TIME_HIGH = 1,
+    parameter int SWAP_INPUT_BYTES  = 0,
     parameter int WEIGHT_BITS       = 8,
     parameter int WEIGHT_SCALE      = 1024,
     parameter int N                 = 16,
     parameter int PASS_MARGIN       = 64,
     parameter int PERSISTENCE_COUNT = 2,
     parameter int CONF_BITS         = 4,
-    parameter int CONF_SHIFT        = 4,
-    parameter int CYCLES_PER_BIN    = 0
+    parameter int CONF_SHIFT        = 4
 )(
-    input  logic        clk,
-    input  logic        rst,
-    input  logic [31:0] evt_word,
-    input  logic        evt_word_valid,
-    output logic        evt_word_ready,
-    output logic [1:0]  gesture,
-    output logic        gesture_valid,
+    input  logic                 clk,
+    input  logic                 rst,
+    input  logic [31:0]          evt_word,
+    input  logic                 evt_word_valid,
+    output logic                 evt_word_ready,
+    output logic [1:0]           gesture,
+    output logic                 gesture_valid,
     output logic [CONF_BITS-1:0] gesture_confidence,
-    output logic [7:0]  debug_event_count,
-    output logic [2:0]  debug_state,
-    output logic        debug_fifo_empty,
-    output logic        debug_fifo_full,
-    output logic        debug_temporal_phase,
-    output logic        debug_class_valid,
-    output logic        debug_class_pass,
-    output logic        debug_feature_window_ready,
-    output logic        debug_capture_active,
-    output logic        debug_score_busy
+    output logic [7:0]           debug_event_count,
+    output logic [2:0]           debug_state,
+    output logic                 debug_fifo_empty,
+    output logic                 debug_fifo_full,
+    output logic                 debug_temporal_phase,
+    output logic                 debug_class_valid,
+    output logic                 debug_class_pass,
+    output logic                 debug_feature_window_ready,
+    output logic                 debug_capture_active,
+    output logic                 debug_score_busy
 );
 
-    localparam int NUM_CLASSES   = 4;
-    localparam int FEATURE_COUNT = READOUT_BINS * GRID_SIZE * GRID_SIZE;
-    localparam int FEATURE_BITS  = $clog2(FEATURE_COUNT);
-    localparam int GRID_BITS     = $clog2(GRID_SIZE);
+    localparam int NUM_CLASSES              = 4;
+    localparam int FEATURE_COUNT            = READOUT_BINS * GRID_SIZE * GRID_SIZE;
+    localparam int FEATURE_BITS             = $clog2(FEATURE_COUNT);
+    localparam int GRID_BITS                = $clog2(GRID_SIZE);
     localparam int WEIGHT_FILE_CLASS_STRIDE = 256;
-    localparam int WEIGHT_ADDR_BITS = $clog2(FEATURE_COUNT);
-    localparam int TILES         = FEATURE_COUNT / N;
-    localparam int SA_DATA_BITS  = ((COUNTER_BITS > WEIGHT_BITS) ? COUNTER_BITS : WEIGHT_BITS) + 1;
-    localparam int SA_PRODUCT_BITS = 2 * SA_DATA_BITS;
-    localparam int SA_ACC_BITS   = SA_PRODUCT_BITS + $clog2(N);
-    localparam int SCORE_BITS    = SA_ACC_BITS + $clog2(TILES) + 2;
-    localparam int LOAD_BITS     = $clog2(N + 1);
-    localparam int TILE_BITS     = (TILES > 1) ? $clog2(TILES) : 1;
+    localparam int WEIGHT_ADDR_BITS         = $clog2(FEATURE_COUNT);
+    localparam int TILES                    = FEATURE_COUNT / N;
+    localparam int SA_DATA_BITS             = ((COUNTER_BITS > WEIGHT_BITS) ? COUNTER_BITS : WEIGHT_BITS) + 1;
+    localparam int SA_PRODUCT_BITS          = 2 * SA_DATA_BITS;
+    localparam int SA_ACC_BITS              = SA_PRODUCT_BITS + $clog2(N);
+    localparam int SCORE_BITS               = SA_ACC_BITS + $clog2(TILES) + 2;
+    localparam int LOAD_BITS                = $clog2(N + 1);
+    localparam int TILE_BITS                = (TILES > 1) ? $clog2(TILES) : 1;
 
     typedef enum logic [2:0] {
         SC_IDLE      = 3'd0,
@@ -119,6 +122,7 @@ module voxel_bin_core #(
     logic       class_valid;
     logic       class_pass;
 
+    // ISSUE HERE ----------------------------------------------------------------------------------------------
     generate
         if ((FEATURE_COUNT % N) != 0) begin : gen_invalid_tile_config
             initial $error("voxel_bin_core: FEATURE_COUNT (%0d) must be divisible by N (%0d)", FEATURE_COUNT, N);
@@ -128,6 +132,7 @@ module voxel_bin_core #(
                            FEATURE_COUNT, WEIGHT_FILE_CLASS_STRIDE);
         end
     endgenerate
+    // ---------------------------------------------------------------------------------------------------------
 
     assign debug_fifo_empty     = ~fifo_out_valid;
     assign debug_fifo_full      = ~evt_word_ready;
@@ -148,8 +153,8 @@ module voxel_bin_core #(
     end
 
     input_fifo #(
-        .width_p(32),
-        .depth_log2_p(FIFO_DEPTH_LOG2)
+        .FIFO_DEPTH(FIFO_DEPTH),
+        .DATA_WIDTH(DATA_WIDTH)
     ) u_input_fifo (
         .clk_i   (clk),
         .reset_i (rst),
@@ -162,10 +167,11 @@ module voxel_bin_core #(
     );
 
     evt2_decoder #(
-        .GRID_BITS        (GRID_BITS),
         .SENSOR_WIDTH     (SENSOR_WIDTH),
         .SENSOR_HEIGHT    (SENSOR_HEIGHT),
-        .REQUIRE_TIME_HIGH(1'b1)
+        .GRID_SIZE        (GRID_SIZE),
+        .REQUIRE_TIME_HIGH(REQUIRE_TIME_HIGH),
+        .SWAP_INPUT_BYTES (SWAP_INPUT_BYTES)
     ) u_evt2_decoder (
         .clk         (clk),
         .rst         (rst),
@@ -183,30 +189,30 @@ module voxel_bin_core #(
     voxel_binning #(
         .CLK_FREQ_HZ   (CLK_FREQ_HZ),
         .WINDOW_MS     (WINDOW_MS),
+        .GRID_SIZE     (GRID_SIZE),
         .NUM_BINS      (NUM_BINS),
         .READOUT_BINS  (READOUT_BINS),
-        .GRID_SIZE     (GRID_SIZE),
         .COUNTER_BITS  (COUNTER_BITS),
         .CYCLES_PER_BIN(CYCLES_PER_BIN)
     ) u_voxel_binning (
-        .clk          (clk),
-        .rst          (rst),
-        .event_valid  (dec_event_valid),
-        .event_x      (dec_x16),
-        .event_y      (dec_y16),
+        .clk           (clk),
+        .rst           (rst),
+        .event_valid   (dec_event_valid),
+        .event_x       (dec_x16),
+        .event_y       (dec_y16),
         .event_polarity(dec_polarity),
-        .event_ready  (binner_event_ready),
-        .readout_ready(binner_readout_ready),
-        .readout_start(binner_readout_start),
-        .readout_valid(binner_readout_valid),
-        .readout_data (binner_readout_data),
-        .readout_index(binner_readout_index),
-        .readout_last (binner_readout_last)
+        .event_ready   (binner_event_ready),
+        .readout_ready (binner_readout_ready),
+        .readout_start (binner_readout_start),
+        .readout_valid (binner_readout_valid),
+        .readout_data  (binner_readout_data),
+        .readout_index (binner_readout_index),
+        .readout_last  (binner_readout_last)
     );
 
     ram_1r1w_sync #(
-        .width_p (COUNTER_BITS),
-        .depth_p (FEATURE_COUNT)
+        .width_p    (COUNTER_BITS),
+        .depth_p    (FEATURE_COUNT)
     ) u_feature_ram (
         .clk_i      (clk),
         .reset_i    (rst),
@@ -290,6 +296,8 @@ module voxel_bin_core #(
                 .width_p        (WEIGHT_BITS),
                 .depth_p        (FEATURE_COUNT),
                 .filename_p     ("weights/gesture_weights_down_left_right_up_8x8_4bins.txt"),
+                // .filename_p     ("weights/gesture_weights_down_left_right_up_16x16_4bins.txt"),
+                // .filename_p     ("weights/gesture_weights_down_left_right_up_16x16_8bins.txt"),
                 .init_offset_p  (g * WEIGHT_FILE_CLASS_STRIDE),
                 .init_count_p   (FEATURE_COUNT),
                 .init_is_float_p(1'b1),
@@ -333,20 +341,18 @@ module voxel_bin_core #(
 
     assign sa_start = (score_state == SC_SYS_START);
 
-    systolic_array #(
-        .N               (N),
-        .DATA_BIT_SIZE   (SA_DATA_BITS),
-        .PRODUCT_BIT_SIZE(SA_PRODUCT_BITS),
-        .ACC_BIT_SIZE    (SA_ACC_BITS)
-    ) u_systolic_array (
-        .clk          (clk),
-        .reset        (rst),
-        .start        (sa_start),
-        .A_matrix_flat(sa_a_flat),
-        .B_matrix_flat(sa_b_flat),
+    voxel_systolic_array #(
+        .N              (N),
+        .DATA_BIT_SIZE  (SA_DATA_BITS)
+    ) u_voxel_systolic_array (
+        .clk            (clk),
+        .reset          (rst),
+        .start          (sa_start),
+        .A_matrix_flat  (sa_a_flat),
+        .B_matrix_flat  (sa_b_flat),
         .Out_matrix_flat(sa_out_flat),
-        .busy         (sa_busy),
-        .done         (sa_done)
+        .busy           (sa_busy),
+        .done           (sa_done)
     );
 
     always_ff @(posedge clk) begin
@@ -427,14 +433,14 @@ module voxel_bin_core #(
         end
     end
 
-    gesture_classifier #(
+    voxel_gesture_classifier #(
         .NUM_CLASSES       (NUM_CLASSES),
         .SCORE_BITS        (SCORE_BITS),
         .PASS_MARGIN       (PASS_MARGIN),
         .PERSISTENCE_COUNT (PERSISTENCE_COUNT),
         .CONF_BITS         (CONF_BITS),
         .CONF_SHIFT        (CONF_SHIFT)
-    ) u_gesture_classifier (
+    ) u_voxel_gesture_classifier (
         .clk               (clk),
         .rst               (rst),
         .scores_flat       (scores_flat),

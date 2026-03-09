@@ -1,23 +1,26 @@
 CLK_FREQ_HZ         = 12_000_000
 BAUD_RATE           = 1_000_000
-WINDOW_MS           = 1000
+WINDOW_MS           = 400
 
 # voxel_binning
 GRID_SIZE           = 8
 NUM_BINS            = 4
 READOUT_BINS        = 4
-COUNTER_BITS        = 16
+COUNTER_BITS        = 4
 CYCLES_PER_BIN      = 0
 
 WEIGHT_BITS         = 8
+WEIGHT_SCALE        = 1024
 
-N                   = 16
+N                   = 4
 DATA_BIT_SIZE       = 16
 CORE_PARALLEL_READS = 4
 
 # evt2_decoder
 SENSOR_WIDTH        = 320
 SENSOR_HEIGHT       = 320
+REQUIRE_TIME_HIGH   = 1
+SWAP_INPUT_BYTES    = 0
 
 # input_fifo
 FIFO_DEPTH          = 256
@@ -28,7 +31,7 @@ NUM_CLASSES         = 4
 SCORE_BITS          = 32
 PASS_MARGIN         = 64
 PERSISTENCE_COUNT   = 2
-CONF_BITS           = 8
+CONF_BITS           = 4
 CONF_SHIFT          = 4
 
 # Legacy/optional compatibility knobs (safe to keep, ignored by modules without matching params)

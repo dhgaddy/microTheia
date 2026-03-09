@@ -26,12 +26,13 @@ CONF_BITS         = CFG["CONF_BITS"]
 CONF_SHIFT        = CFG["CONF_SHIFT"]
 WEIGHT_BITS       = CFG["WEIGHT_BITS"]
 WEIGHT_SCALE      = CFG["WEIGHT_SCALE"]
+SENSOR_WIDTH      = CFG["SENSOR_WIDTH"]
+SENSOR_HEIGHT     = CFG["SENSOR_HEIGHT"]
 
 FEATURE_COUNT       = GRID_SIZE * GRID_SIZE * READOUT_BINS
 BIN_DURATION_MS     = WINDOW_MS // READOUT_BINS
 CYCLES_PER_BIN_SAFE = (CLK_FREQ_HZ // 1000) * BIN_DURATION_MS
-SENSOR_DIM          = 320
-BIN_DIV             = SENSOR_DIM // GRID_SIZE
+BIN_DIV             = SENSOR_WIDTH // GRID_SIZE
 
 EVT_CD_OFF = 0x0
 EVT_CD_ON = 0x1
@@ -51,7 +52,7 @@ def build_evt2_cd(pkt_type, x_sensor, y_sensor, ts_lsb):
 def sensor_from_grid(g):
     # Drive the center of the corresponding sensor bin.
     g = max(0, min(GRID_SIZE - 1, int(g)))
-    return min(SENSOR_DIM - 1, (g * BIN_DIV) + (BIN_DIV // 2))
+    return min(SENSOR_WIDTH - 1, (g * BIN_DIV) + (BIN_DIV // 2))
 
 
 class Evt2DecoderModel:
@@ -76,8 +77,8 @@ class Evt2DecoderModel:
         if not self.have_time_high:
             return None
 
-        x_clamped = min(x_raw, SENSOR_DIM - 1)
-        y_clamped = min(y_raw, SENSOR_DIM - 1)
+        x_clamped = min(x_raw, SENSOR_WIDTH - 1)
+        y_clamped = min(y_raw, SENSOR_HEIGHT - 1)
         x_grid = min(x_clamped // BIN_DIV, GRID_SIZE - 1)
         y_grid = min(y_clamped // BIN_DIV, GRID_SIZE - 1)
         pol = 1 if pkt == EVT_CD_ON else 0
@@ -185,11 +186,11 @@ def load_quantized_weights():
     if len(qvals) < expected_len:
         qvals.extend([0] * (expected_len - len(qvals)))
 
-    weights = []
-    for c in range(4):
-        # WEIGHT_FILE_CLASS_STRIDE = 2048 = FEATURE_COUNT; class c starts at c*2048.
-        start = c * FEATURE_COUNT
-        weights.append(qvals[start:start + FEATURE_COUNT])
+    weights = [[0] * FEATURE_COUNT for _ in range(4)]
+
+    for i in range(FEATURE_COUNT):
+        for c in range(4):
+            weights[c][i] = qvals[i * 4 + c]
     return weights
 
 
@@ -435,7 +436,7 @@ async def test_voxel_bin_core_end_to_end_golden(dut):
 
 @logged_test()
 async def test_empty_window_produces_no_gesture(dut):
-    """No CD events → all-zero features → all scores zero → no gesture fires.
+    """No CD events -> all-zero features -> all scores zero -> no gesture fires.
 
     This validates the zero-input boundary case: scores are all zero so margin is
     zero (< PASS_MARGIN) and gesture_valid never asserts.

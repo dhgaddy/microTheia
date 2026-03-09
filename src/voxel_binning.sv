@@ -3,15 +3,15 @@
 // Temporal voxel histogram generator.
 // - Accumulates events in a NUM_BINS ring of GRID_SIZE x GRID_SIZE counters.
 // - Rotates bins every fixed period (clock-based).
-// - Emits READOUT_BINS*GRID_SIZE*GRID_SIZE flattened features in strict order:
+// - Emits NUM_BINS*GRID_SIZE*GRID_SIZE flattened features in strict order:
 //   oldest->newest bins, and row-major within each bin (y major, x minor).
 
 module voxel_binning #(
     parameter  int CLK_FREQ_HZ    = 12_000_000,
     parameter  int WINDOW_MS      = 1000,
+    parameter  int GRID_SIZE      = 16,
     parameter  int NUM_BINS       = 8,
     parameter  int READOUT_BINS   = 8,
-    parameter  int GRID_SIZE      = 16,
     parameter  int COUNTER_BITS   = 16,
     parameter  int CYCLES_PER_BIN = 0, // I think this could be a problem
     localparam int RO_INDEX_WIDTH = READOUT_BINS*GRID_SIZE*GRID_SIZE // made to improve readability of IO
