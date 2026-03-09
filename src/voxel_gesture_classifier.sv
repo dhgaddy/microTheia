@@ -76,12 +76,17 @@ module voxel_gesture_classifier #(
         end
     end
 
-    always_comb begin
-        s0 = $signed(scores_flat_r[0*SCORE_BITS +: SCORE_BITS]);
-        s1 = $signed(scores_flat_r[1*SCORE_BITS +: SCORE_BITS]);
-        s2 = $signed(scores_flat_r[2*SCORE_BITS +: SCORE_BITS]);
-        s3 = $signed(scores_flat_r[3*SCORE_BITS +: SCORE_BITS]);
-    end
+    // always_comb begin
+    //     s0 = $signed(scores_flat_r[0*SCORE_BITS +: SCORE_BITS]);
+    //     s1 = $signed(scores_flat_r[1*SCORE_BITS +: SCORE_BITS]);
+    //     s2 = $signed(scores_flat_r[2*SCORE_BITS +: SCORE_BITS]);
+    //     s3 = $signed(scores_flat_r[3*SCORE_BITS +: SCORE_BITS]);
+    // end
+
+    assign s0 = $signed(scores_flat_r[SCORE_BITS-1:0]);
+    assign s1 = $signed(scores_flat_r[2*SCORE_BITS-1:SCORE_BITS]);
+    assign s2 = $signed(scores_flat_r[3*SCORE_BITS-1:2*SCORE_BITS]);
+    assign s3 = $signed(scores_flat_r[4*SCORE_BITS-1:3*SCORE_BITS]);
 
     always_comb begin
         if (s0 >= s1) begin
@@ -141,8 +146,8 @@ module voxel_gesture_classifier #(
         end
 
         second_score_b = (second_a_b >= second_b_b) ? second_a_b : second_b_b;
-        margin_b = $signed({max_score_b[SCORE_BITS-1], max_score_b}) -
-                   $signed({second_score_b[SCORE_BITS-1], second_score_b});
+        // margin_b = $signed({max_score_b[SCORE_BITS-1], max_score_b}) - $signed({second_score_b[SCORE_BITS-1], second_score_b});
+        margin_b = $signed(max_score_b) - $signed(second_score_b);
         pass_b = (margin_b > PASS_MARGIN);
     end
 
@@ -162,13 +167,33 @@ module voxel_gesture_classifier #(
         end
     end
 
+    // always_comb begin
+    //     conf_sat_c   = 1'b0;
+    //     conf_quant_c = '0;
+    //     if (margin_r > 0) begin
+    //         // conf_quant_c = margin_r[CONF_SHIFT +: CONF_BITS];
+    //         conf_quant_c = margin_r[CONF_SHIFT + CONF_BITS - 1 : CONF_SHIFT];
+    //         if (SCORE_BITS >= (CONF_SHIFT + CONF_BITS))
+    //             // conf_sat_c = |margin_r[SCORE_BITS:CONF_SHIFT+CONF_BITS];
+    //             conf_sat_c = |margin_r[SCORE_BITS-1 : CONF_SHIFT + CONF_BITS];
+    //     end
+    // end
+
+    logic [CONF_BITS-1:0] conf_quant_slice;
+    logic conf_sat_slice;
+
+    assign conf_quant_slice = margin_r[CONF_SHIFT + CONF_BITS - 1 : CONF_SHIFT];
+    assign conf_sat_slice   = |(margin_r >> (CONF_SHIFT + CONF_BITS));
+
     always_comb begin
         conf_sat_c   = 1'b0;
         conf_quant_c = '0;
+
         if (margin_r > 0) begin
-            conf_quant_c = margin_r[CONF_SHIFT +: CONF_BITS];
+            conf_quant_c = conf_quant_slice;
+
             if (SCORE_BITS >= (CONF_SHIFT + CONF_BITS))
-                conf_sat_c = |margin_r[SCORE_BITS:CONF_SHIFT+CONF_BITS];
+                conf_sat_c = conf_sat_slice;
         end
     end
 
