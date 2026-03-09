@@ -6,14 +6,20 @@ import cocotb
 from util.test_logging import logged_test
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, NextTimeStep, ReadOnly, RisingEdge
+import os
+from util.config_parser import load_config
 
-NUM_CLASSES = 4
-SCORE_BITS = 32
-PASS_MARGIN = 64
-PERSISTENCE_COUNT = 2
-CONF_BITS = 8
-CONF_SHIFT = 4
-CONF_MAX = (1 << CONF_BITS) - 1
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
+
+NUM_CLASSES       = CFG["NUM_CLASSES"]
+SCORE_BITS        = CFG["SCORE_BITS"]
+PASS_MARGIN       = CFG["PASS_MARGIN"]
+PERSISTENCE_COUNT = CFG["PERSISTENCE_COUNT"]
+CONF_BITS         = CFG["CONF_BITS"]
+CONF_SHIFT        = CFG["CONF_SHIFT"]
+
+CONF_MAX   = (1 << CONF_BITS) - 1
 SCORE_MASK = (1 << SCORE_BITS) - 1
 # scores_valid -> class_valid latency through the pipelined classifier.
 CLASSIFY_PIPE_CYCLES = 3
@@ -117,7 +123,7 @@ class GestureClassifierModel:
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.scores_flat.value = 0
     dut.scores_valid.value = 0

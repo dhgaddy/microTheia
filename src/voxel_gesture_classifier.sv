@@ -3,7 +3,7 @@
 // class_pass = (max_score - second_score) > PASS_MARGIN
 // gesture_valid requires PERSISTENCE_COUNT consecutive passing windows with same class.
 
-module gesture_classifier #(
+module voxel_gesture_classifier #(
     parameter int NUM_CLASSES        = 4,
     parameter int SCORE_BITS         = 32,
     parameter int PASS_MARGIN        = 64,
@@ -11,17 +11,17 @@ module gesture_classifier #(
     parameter int CONF_BITS          = 8,
     parameter int CONF_SHIFT         = 4
 )(
-    input  logic                               clk,
-    input  logic                               rst,
+    input  logic                              clk,
+    input  logic                              rst,
     input  logic [NUM_CLASSES*SCORE_BITS-1:0] scores_flat,
-    input  logic                               scores_valid,
-    output logic [1:0]                         class_gesture,
-    output logic                               class_valid,
-    output logic                               class_pass,
-    output logic [1:0]                         gesture,
-    output logic                               gesture_valid,
-    output logic [CONF_BITS-1:0]               gesture_confidence,
-    output logic [2:0]                         debug_state
+    input  logic                              scores_valid,
+    output logic [1:0]                        class_gesture,
+    output logic                              class_valid,
+    output logic                              class_pass,
+    output logic [1:0]                        gesture,
+    output logic                              gesture_valid,
+    output logic [CONF_BITS-1:0]              gesture_confidence,
+    output logic [2:0]                        debug_state
 );
 
     localparam int PERSIST_BITS = (PERSISTENCE_COUNT > 1) ? $clog2(PERSISTENCE_COUNT + 1) : 1;
