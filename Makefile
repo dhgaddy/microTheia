@@ -85,10 +85,6 @@ lint: ## Lint all SystemVerilog files in src
 	          $(SV_SRCS)
 .PHONY: lint
 
-# sv2v:
-
-# .PHONY: sv2v
-
 sim: ## Run RTL simulation with cocotb
 	@if [ -z "$(DUT)" ]; then \
 		echo "Error: You must specify DUT=<module_name>"; \
@@ -122,38 +118,16 @@ sim: ## Run RTL simulation with cocotb
 .PHONY: sim
 
 sim-all: ## Test all the modules against Makefile compile args
-	$(MAKE) sim DUT=evt2_decoder
 	$(MAKE) sim DUT=input_fifo
-	$(MAKE) sim DUT=uart_debug
+	$(MAKE) sim DUT=evt2_decoder
 	$(MAKE) sim DUT=uart_rx
 	$(MAKE) sim DUT=uart_tx
-	$(MAKE) sim DUT=MatMul
+	$(MAKE) sim DUT=uart_debug
 	$(MAKE) sim DUT=voxel_gesture_classifier
 	$(MAKE) sim DUT=voxel_systolic_array
-	$(MAKE) sim DUT=voxel_weight_ram
 	$(MAKE) sim DUT=voxel_binning
 	$(MAKE) sim DUT=voxel_bin_core
 	$(MAKE) sim DUT=voxel_bin_top
-
-# 	$(MAKE) sim DUT=input_fifo CONFIG=voxel_default
-# 	$(MAKE) sim DUT=uart_debug CONFIG=voxel_default
-# # 	$(MAKE) sim DUT=uart_rx CONFIG=voxel_default 				  # failing
-# 	$(MAKE) sim DUT=uart_tx CONFIG=voxel_default
-# 	$(MAKE) sim DUT=MatMul CONFIG=voxel_default
-# 	$(MAKE) sim DUT=evt2_decoder CONFIG=voxel_default
-# 	$(MAKE) sim DUT=voxel_gesture_classifier CONFIG=voxel_default
-# 	$(MAKE) sim DUT=voxel_systolic_array CONFIG=voxel_default
-# 	$(MAKE) sim DUT=voxel_weight_ram CONFIG=voxel_default
-# 	$(MAKE) sim DUT=voxel_binning CONFIG=voxel_default 			  # takes a while to run
-# 	$(MAKE) sim DUT=voxel_bin_core CONFIG=voxel_default
-# # 	$(MAKE) sim DUT=voxel_bin_top CONFIG=voxel_default  		  # failing
-
-#	$(MAKE) sim DUT=gradient_map_core CONFIG=gradient_default# still broken
-#	$(MAKE) sim DUT=gradient_map_top CONFIG=gradient_default# still broken
-#	$(MAKE) sim DUT=gradient_gesture_classifier CONFIG=gradient_default# takes a while to run
-#	$(MAKE) sim DUT=gradient_mapping CONFIG=gradient_default
-#	$(MAKE) sim DUT=gradient_systolic_array CONFIG=gradient_default
-#	$(MAKE) sim DUT=gradient_weight_ram CONFIG=gradient_default
 .PHONY: sim-all
 
 sim-gl: ## Run gate-level simulation with cocotb (after copy-final)

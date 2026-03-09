@@ -199,7 +199,15 @@ async def test_known_events_then_readout(dut):
     await setup(dut)
     model = VoxelBinningModel()
 
-    events = [(0, 0), (8, 8), (15, 15), (8, 8), (3, 9), (3, 9), (3, 9)]
+    events = [
+        (0, 0),
+        (GRID_SIZE // 2, GRID_SIZE // 2),
+        (GRID_SIZE - 1, GRID_SIZE - 1),
+        (GRID_SIZE // 2, GRID_SIZE // 2),
+        (GRID_SIZE // 4, (3 * GRID_SIZE) // 5),
+        (GRID_SIZE // 4, (3 * GRID_SIZE) // 5),
+        (GRID_SIZE // 4, (3 * GRID_SIZE) // 5),
+    ]
     for x, y in events:
         await inject_event(dut, model, x, y)
 
@@ -276,8 +284,10 @@ async def test_events_ignored_when_not_accum(dut):
     # While not in ST_ACCUM, pulse event_valid; model does not accept this event.
     if int(dut.state.value) != ST_ACCUM:
         await NextTimeStep()
-        dut.event_x.value = 9
-        dut.event_y.value = 9
+        # dut.event_x.value = 9
+        # dut.event_y.value = 9
+        dut.event_x.value = GRID_SIZE // 2
+        dut.event_y.value = GRID_SIZE // 2
         dut.event_polarity.value = 1
         dut.event_valid.value = 1
         await RisingEdge(dut.clk)

@@ -71,7 +71,8 @@ module voxel_binning #(
 
     logic [BIN_BITS:0] rd_bin_calc;
     logic [BIN_BITS-1:0] rd_bin_idx;
-    logic [CELL_BITS+$clog2(GRID_SIZE)-1:0] event_cell_math;
+    // logic [CELL_BITS+$clog2(GRID_SIZE)-1:0] event_cell_math; // Maybe simplify from this?
+    logic [CELL_BITS-1:0] event_cell_math;
     logic [CELL_BITS-1:0] event_cell_idx;
 
     integer idx;

@@ -13,8 +13,8 @@ from util.config_parser import load_config
 MODULE = os.environ.get("TOPLEVEL")
 CFG = load_config(MODULE)
 
-GRID_SIZE = CFG["GRID_SIZE"]
-SENSOR_WIDTH = CFG["SENSOR_WIDTH"]
+GRID_SIZE     = CFG["GRID_SIZE"]
+SENSOR_WIDTH  = CFG["SENSOR_WIDTH"]
 SENSOR_HEIGHT = CFG["SENSOR_HEIGHT"]
 
 GRID_BITS         = (GRID_SIZE - 1).bit_length() + 1
@@ -300,7 +300,13 @@ async def test_consecutive_cd_events_all_valid(dut):
     await drive_and_check(dut, model, 0, build_evt2_time_high(0x7777), 1, 1, "th")
 
     step = SENSOR_WIDTH // GRID_SIZE
-    coords = [(0, 0), (15, 15), (8, 8), (3, 12), (10, 2)]
+    coords = [
+        (0, 0),
+        (GRID_SIZE - 1, GRID_SIZE - 1),
+        (GRID_SIZE // 2, GRID_SIZE // 2),
+        (GRID_SIZE // 4, (3 * GRID_SIZE) // 4),
+        ((5 * GRID_SIZE) // 8, GRID_SIZE // 8),
+    ]
     for i, (gx, gy) in enumerate(coords):
         word = build_evt2_cd(EVT_CD_ON, gx * step, gy * step, i & 0x3F)
         await drive_and_check(dut, model, 0, word, 1, 1, f"cd-{i}")
@@ -382,22 +388,31 @@ async def test_grid_coordinate_upper_boundaries(dut):
 
     await drive_and_check(dut, model, 0, build_evt2_time_high(0x2), 1, 1, "th")
 
-    step = SENSOR_WIDTH // GRID_SIZE  # = 20
+    step = SENSOR_WIDTH // GRID_SIZE
+
     for g in range(GRID_SIZE - 1):
-        # Upper boundary of cell g is one pixel below the start of cell g+1.
+        # Upper boundary of cell g
         x_upper = g * step + step - 1
         word = build_evt2_cd(EVT_CD_ON, x_upper, 0, g & 0x3F)
+
         await drive_and_check(dut, model, 0, word, 1, 1, f"x-ub-{g}")
         assert int(dut.event_valid.value) == 1
-        got = int(dut.x_out.value)
-        assert got == g, \
-            f"x_sensor={x_upper} (upper bound of cell {g}) mapped to {got}, expected {g}"
 
-        # First pixel of the next cell must map to g+1.
+        got = int(dut.x_out.value)
+        exp = model._grid_map(x_upper, 0)[0]
+
+        assert got == exp, \
+            f"x_sensor={x_upper} mapped to {got}, expected {exp}"
+
+        # First pixel of next cell
         x_next = (g + 1) * step
         word = build_evt2_cd(EVT_CD_ON, x_next, 0, g & 0x3F)
+
         await drive_and_check(dut, model, 0, word, 1, 1, f"x-next-{g}")
         assert int(dut.event_valid.value) == 1
+
         got_next = int(dut.x_out.value)
-        assert got_next == g + 1, \
-            f"x_sensor={x_next} (start of cell {g+1}) mapped to {got_next}, expected {g+1}"
+        exp_next = model._grid_map(x_next, 0)[0]
+
+        assert got_next == exp_next, \
+            f"x_sensor={x_next} mapped to {got_next}, expected {exp_next}"

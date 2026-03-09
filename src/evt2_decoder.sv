@@ -72,10 +72,13 @@ module evt2_decoder #(
         else
             y_clamped = y_raw;
 
-        x_prod_c   = x_clamped * X_M;
-        y_prod_c   = y_clamped * Y_M;
-        x_grid_raw = x_prod_c[GRID_BITS+DIV_K:DIV_K];
-        y_grid_raw = y_prod_c[GRID_BITS+DIV_K:DIV_K];
+        // Multiply vs Division implementations
+        // x_prod_c   = x_clamped * X_M;
+        // y_prod_c   = y_clamped * Y_M;
+        // x_grid_raw = x_prod_c[GRID_BITS+DIV_K:DIV_K];
+        // y_grid_raw = y_prod_c[GRID_BITS+DIV_K:DIV_K];
+        x_grid_raw = x_clamped / X_BIN_DIV;
+        y_grid_raw = y_clamped / Y_BIN_DIV;
 
         x_grid = (x_grid_raw > GRID_SIZE-1) ? GRID_BITS'(GRID_SIZE-1) : x_grid_raw[GRID_BITS-1:0];
         y_grid = (y_grid_raw > GRID_SIZE-1) ? GRID_BITS'(GRID_SIZE-1) : y_grid_raw[GRID_BITS-1:0];
