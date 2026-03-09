@@ -91,13 +91,15 @@ module voxel_binning #(
         if (wr_bin_plus_1 >= NUM_BINS)
             next_wr_bin = wr_bin_plus_1 - NUM_BINS;
         else
-            next_wr_bin = wr_bin_plus_1[BIN_BITS-1:0];
+            // next_wr_bin = wr_bin_plus_1[BIN_BITS-1:0];
+            next_wr_bin = wr_bin_plus_1;
 
         start_calc = wr_bin_idx + NUM_BINS - (READOUT_BINS - 1);
         if (start_calc >= NUM_BINS)
             snapshot_start_bin = start_calc - NUM_BINS;
         else
-            snapshot_start_bin = start_calc[BIN_BITS-1:0];
+            // snapshot_start_bin = start_calc[BIN_BITS-1:0];
+            snapshot_start_bin = start_calc;
 
         if (completed_bins < NUM_BINS)
             completed_bins_next = completed_bins + 1'b1;
@@ -108,7 +110,8 @@ module voxel_binning #(
         if (rd_bin_calc >= NUM_BINS)
             rd_bin_idx = rd_bin_calc - NUM_BINS;
         else
-            rd_bin_idx = rd_bin_calc[BIN_BITS-1:0];
+            // rd_bin_idx = rd_bin_calc[BIN_BITS-1:0];
+            rd_bin_idx = rd_bin_calc;
     end
 
     assign event_ready   = (state == ST_ACCUM);
