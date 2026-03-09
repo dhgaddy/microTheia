@@ -6,25 +6,27 @@
 
 module voxel_bin_core #(
     parameter int CLK_FREQ_HZ       = 12_000_000,
-    parameter int WINDOW_MS         = 1000,
-    parameter int GRID_SIZE         = 16,
-    parameter int NUM_BINS          = 8,
-    parameter int READOUT_BINS      = 8,
-    parameter int COUNTER_BITS      = 16,
-    parameter int CYCLES_PER_BIN    = 0,
+    parameter int WINDOW_MS         = 400,
+    parameter int GRID_SIZE         = 8,
+    parameter int NUM_BINS          = 4,
+    parameter int READOUT_BINS      = 4,
+    parameter int COUNTER_BITS      = 4,
     parameter int FIFO_DEPTH        = 256,
+    parameter int FIFO_DEPTH_LOG2   = 8,
     parameter int DATA_WIDTH        = 32,
-    parameter int SENSOR_WIDTH      = 320,
-    parameter int SENSOR_HEIGHT     = 320,
     parameter int REQUIRE_TIME_HIGH = 1,
     parameter int SWAP_INPUT_BYTES  = 0,
+    parameter int SENSOR_WIDTH      = 320,
+    parameter int SENSOR_HEIGHT     = 320,
     parameter int WEIGHT_BITS       = 8,
     parameter int WEIGHT_SCALE      = 1024,
-    parameter int N                 = 16,
+    parameter int N                 = 4,
     parameter int PASS_MARGIN       = 64,
     parameter int PERSISTENCE_COUNT = 2,
     parameter int CONF_BITS         = 4,
-    parameter int CONF_SHIFT        = 4
+    parameter int CONF_SHIFT        = 4,
+    parameter int NUM_CLASSES       = 4,
+    parameter int CYCLES_PER_BIN    = 0
 )(
     input  logic                 clk,
     input  logic                 rst,
@@ -46,7 +48,6 @@ module voxel_bin_core #(
     output logic                 debug_score_busy
 );
 
-    localparam int NUM_CLASSES              = 4;
     localparam int FEATURE_COUNT            = READOUT_BINS * GRID_SIZE * GRID_SIZE;
     localparam int FEATURE_BITS             = $clog2(FEATURE_COUNT);
     localparam int GRID_BITS                = $clog2(GRID_SIZE);
@@ -122,7 +123,6 @@ module voxel_bin_core #(
     logic       class_valid;
     logic       class_pass;
 
-    // ISSUE HERE ----------------------------------------------------------------------------------------------
     generate
         if ((FEATURE_COUNT % N) != 0) begin : gen_invalid_tile_config
             initial $error("voxel_bin_core: FEATURE_COUNT (%0d) must be divisible by N (%0d)", FEATURE_COUNT, N);
@@ -132,7 +132,6 @@ module voxel_bin_core #(
                            FEATURE_COUNT, WEIGHT_FILE_CLASS_STRIDE);
         end
     endgenerate
-    // ---------------------------------------------------------------------------------------------------------
 
     assign debug_fifo_empty     = ~fifo_out_valid;
     assign debug_fifo_full      = ~evt_word_ready;
@@ -170,8 +169,8 @@ module voxel_bin_core #(
         .SENSOR_WIDTH     (SENSOR_WIDTH),
         .SENSOR_HEIGHT    (SENSOR_HEIGHT),
         .GRID_SIZE        (GRID_SIZE),
-        .REQUIRE_TIME_HIGH(REQUIRE_TIME_HIGH),
-        .SWAP_INPUT_BYTES (SWAP_INPUT_BYTES)
+        .REQUIRE_TIME_HIGH(1'b1), // REQUIRE_TIME_HIGH
+        .SWAP_INPUT_BYTES (1'b0)  // SWAP_INPUT_BYTES
     ) u_evt2_decoder (
         .clk         (clk),
         .rst         (rst),
@@ -193,21 +192,21 @@ module voxel_bin_core #(
         .NUM_BINS      (NUM_BINS),
         .READOUT_BINS  (READOUT_BINS),
         .COUNTER_BITS  (COUNTER_BITS),
-        .CYCLES_PER_BIN(CYCLES_PER_BIN)
+        .CYCLES_PER_BIN(CYCLES_PER_BIN) // I think this could be a problem
     ) u_voxel_binning (
-        .clk           (clk),
-        .rst           (rst),
-        .event_valid   (dec_event_valid),
-        .event_x       (dec_x16),
-        .event_y       (dec_y16),
+        .clk          (clk),
+        .rst          (rst),
+        .event_valid  (dec_event_valid),
+        .event_x      (dec_x16),
+        .event_y      (dec_y16),
         .event_polarity(dec_polarity),
-        .event_ready   (binner_event_ready),
-        .readout_ready (binner_readout_ready),
-        .readout_start (binner_readout_start),
-        .readout_valid (binner_readout_valid),
-        .readout_data  (binner_readout_data),
-        .readout_index (binner_readout_index),
-        .readout_last  (binner_readout_last)
+        .event_ready  (binner_event_ready),
+        .readout_ready(binner_readout_ready),
+        .readout_start(binner_readout_start),
+        .readout_valid(binner_readout_valid),
+        .readout_data (binner_readout_data),
+        .readout_index(binner_readout_index),
+        .readout_last (binner_readout_last)
     );
 
     ram_1r1w_sync #(
@@ -297,7 +296,7 @@ module voxel_bin_core #(
                 .depth_p        (FEATURE_COUNT),
                 .filename_p     ("weights/gesture_weights_down_left_right_up_8x8_4bins.txt"),
                 // .filename_p     ("weights/gesture_weights_down_left_right_up_16x16_4bins.txt"),
-                // .filename_p     ("weights/gesture_weights_down_left_right_up_16x16_8bins.txt"),
+                // .filename_p     ("weights/gesture_weights_down_left_right_up_16x16_4bins.txt"),
                 .init_offset_p  (g * WEIGHT_FILE_CLASS_STRIDE),
                 .init_count_p   (FEATURE_COUNT),
                 .init_is_float_p(1'b1),
@@ -342,8 +341,8 @@ module voxel_bin_core #(
     assign sa_start = (score_state == SC_SYS_START);
 
     voxel_systolic_array #(
-        .N              (N),
-        .DATA_BIT_SIZE  (SA_DATA_BITS)
+        .N               (N),
+        .DATA_BIT_SIZE   (SA_DATA_BITS)
     ) u_voxel_systolic_array (
         .clk            (clk),
         .reset          (rst),
