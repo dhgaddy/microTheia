@@ -141,7 +141,7 @@ async def simple_matrix_test(dut):
     ]
 
     expected = matmul_expected(A, B)
-    actual = await run_matmul(dut, A, B, verbose_busy=True)
+    actual = await run_matmul(dut, A, B, verbose_busy=False)
 
     print("\nExpected:")
     print_matrix(expected)
@@ -164,7 +164,7 @@ async def maxed_matrix_test(dut):
     B = [[max_val for _ in range(N)] for _ in range(N)]
 
     expected = matmul_expected(A, B)
-    actual = await run_matmul(dut, A, B, verbose_busy=True)
+    actual = await run_matmul(dut, A, B, verbose_busy=False)
 
     print("\nExpected (maxed):")
     print_matrix(expected)
@@ -175,3 +175,206 @@ async def maxed_matrix_test(dut):
     check_matrix(expected, actual)
 
     print("\nMaxed matrix test passed.")
+
+@cocotb.test()
+async def zeroes_matrix_test(dut):
+    await setup_dut(dut)
+
+    print(f"\n--------- {N}x{N} Matrix Multiply Test ---------")
+
+    A = [
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)]
+    ]
+
+    B = [
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)]
+    ]
+
+    expected = matmul_expected(A, B)
+    actual = await run_matmul(dut, A, B, verbose_busy=False)
+
+    print("\nExpected:")
+    print_matrix(expected)
+
+    print("\nActual:")
+    print_matrix(actual)
+
+    check_matrix(expected, actual)
+
+    print("\nSimple matrix test passed.")
+
+@cocotb.test()
+async def identity_matrix_test(dut):
+    await setup_dut(dut)
+
+    print(f"\n--------- {N}x{N} Matrix Multiply Test ---------")
+
+    A = [
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+    ]
+
+    B = [
+        [1 + i for i in range(16)],
+        [17 + i for i in range(16)],
+        [33 + i for i in range(16)],
+        [49 + i for i in range(16)],
+        [65 + i for i in range(16)],
+        [81 + i for i in range(16)],
+        [97 + i for i in range(16)],
+        [113 + i for i in range(16)],
+        [129 + i for i in range(16)],
+        [145 + i for i in range(16)],
+        [161 + i for i in range(16)],
+        [177 + i for i in range(16)],
+        [193 + i for i in range(16)],
+        [209 + i for i in range(16)],
+        [225 + i for i in range(16)],
+        [241 + i for i in range(16)]
+    ]
+
+    expected = matmul_expected(A, B)
+    actual = await run_matmul(dut, A, B, verbose_busy=False)
+
+    print("\nExpected:")
+    print_matrix(expected)
+
+    print("\nActual:")
+    print_matrix(actual)
+
+    check_matrix(expected, actual)
+
+    print("\nSimple matrix test passed.")
+
+@cocotb.test()
+async def reset_matrix_test(dut):
+    await setup_dut(dut)
+
+    print(f"\n--------- {N}x{N} Matrix Multiply Test ---------")
+
+    A = [
+        [1 + i for i in range(16)],
+        [17 + i for i in range(16)],
+        [33 + i for i in range(16)],
+        [49 + i for i in range(16)],
+        [65 + i for i in range(16)],
+        [81 + i for i in range(16)],
+        [97 + i for i in range(16)],
+        [113 + i for i in range(16)],
+        [129 + i for i in range(16)],
+        [145 + i for i in range(16)],
+        [161 + i for i in range(16)],
+        [177 + i for i in range(16)],
+        [193 + i for i in range(16)],
+        [209 + i for i in range(16)],
+        [225 + i for i in range(16)],
+        [241 + i for i in range(16)]
+    ]
+
+    B = [
+        [257 + i for i in range(16)],
+        [273 + i for i in range(16)],
+        [289 + i for i in range(16)],
+        [305 + i for i in range(16)],
+        [321 + i for i in range(16)],
+        [337 + i for i in range(16)],
+        [353 + i for i in range(16)],
+        [369 + i for i in range(16)],
+        [385 + i for i in range(16)],
+        [401 + i for i in range(16)],
+        [417 + i for i in range(16)],
+        [433 + i for i in range(16)],
+        [449 + i for i in range(16)],
+        [465 + i for i in range(16)],
+        [481 + i for i in range(16)],
+        [497 + i for i in range(16)]
+    ]
+
+    expected = matmul_expected(A, B)
+    actual = await run_matmul(dut, A, B, verbose_busy=False)
+
+    await RisingEdge(dut.clk)   # leave ReadOnly phase safely
+
+    dut.reset.value = 1
+    dut.start.value = 0
+    dut.A_matrix_flat.value = 0
+    dut.B_matrix_flat.value = 0
+
+    await ClockCycles(dut.clk, 3)
+    dut.reset.value = 0
+    await RisingEdge(dut.clk)
+
+    actual = unpack_matrix(int(dut.Out_matrix_flat.value), ACC_BIT_SIZE)
+
+    expected = [
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)],
+        [0*i for i in range(16)]
+    ]
+
+    print("\nExpected:")
+    print_matrix(expected)
+
+    print("\nActual:")
+    print_matrix(actual)
+
+    check_matrix(expected, actual)
+
+    print("\nSimple matrix test passed.")
