@@ -183,10 +183,10 @@ class GestureSimulator:
             center = self.resolution // 2
             obj_size = self.resolution // 4
             # NOTE: Training camera was mounted with both axes inverted vs grid coords.
-            # Physical RIGHT → grid x sweeps HIGH→LOW, so object x moves (res→0) in screen space.
-            # Physical LEFT  → grid x sweeps LOW→HIGH, so object x moves (0→res) in screen space.
-            # Physical DOWN  → grid y sweeps HIGH→LOW, so object y moves (res→0) in screen space.
-            # Physical UP    → grid y sweeps LOW→HIGH, so object y moves (0→res) in screen space.
+            # Physical RIGHT -> grid x sweeps HIGH->LOW, so object x moves (res->0) in screen space.
+            # Physical LEFT  -> grid x sweeps LOW->HIGH, so object x moves (0->res) in screen space.
+            # Physical DOWN  -> grid y sweeps HIGH->LOW, so object y moves (res->0) in screen space.
+            # Physical UP    -> grid y sweeps LOW->HIGH, so object y moves (0->res) in screen space.
             if self.current_gesture == 'right':
                 x = int((1 - progress) * (self.resolution - obj_size))
                 y = center - obj_size // 2
@@ -468,7 +468,7 @@ def create_event_visualization(
     resolution: int = DVS_RESOLUTION,
     accumulation_time_ms: int = 33
 ) -> np.ndarray:
-    """ON events → blue, OFF events → red."""
+    """ON events -> blue, OFF events -> red."""
     vis = np.zeros((resolution, resolution, 3), dtype=np.uint8)
     for event in events:
         x, y = event.x, event.y
@@ -689,7 +689,7 @@ class UARTOutputHandler:
             if self.serial.in_waiting > 0:
                 response = self.serial.read(1)
                 if response[0] == 0x55:
-                    print("FPGA connection verified (echo 0xFF → 0x55)")
+                    print("FPGA connection verified (echo 0xFF -> 0x55)")
                     return True
             print("WARNING: echo test did not return 0x55 — check bitstream and baud rate")
             return False

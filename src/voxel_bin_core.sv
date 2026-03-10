@@ -5,28 +5,78 @@
 // input_fifo -> evt2_decoder -> voxel_binning -> systolic_array (tiled GEMV) -> gesture_classifier
 
 module voxel_bin_core #(
-    parameter int CLK_FREQ_HZ       = 12_000_000,
-    parameter int WINDOW_MS         = 400,
-    parameter int GRID_SIZE         = 8,
-    parameter int NUM_BINS          = 4,
-    parameter int READOUT_BINS      = 4,
-    parameter int COUNTER_BITS      = 4,
-    parameter int FIFO_DEPTH        = 256,
-    parameter int DATA_WIDTH        = 32,
-    parameter int REQUIRE_TIME_HIGH = 1,
-    parameter int SWAP_INPUT_BYTES  = 0,
-    parameter int SENSOR_WIDTH      = 320,
-    parameter int SENSOR_HEIGHT     = 320,
-    parameter int WEIGHT_BITS       = 8,
-    parameter int WEIGHT_SCALE      = 1024,
-    parameter int N                 = 4,
-    parameter int PASS_MARGIN       = 64,
-    parameter int PERSISTENCE_COUNT = 2,
-    parameter int CONF_BITS         = 4,
-    parameter int CONF_SHIFT        = 4,
-    parameter int NUM_CLASSES       = 4,
-    parameter int CYCLES_PER_BIN    = 0, // May be a problem
-    parameter string WEIGHT_FILE    = "weights/gesture_weights_down_left_right_up_16x16_8bins.txt"
+    parameter int CLK_FREQ_HZ              = 12_000_000,
+    parameter int WINDOW_MS                = 400,
+    parameter int GRID_SIZE                = 8,
+    parameter int NUM_BINS                 = 4,
+    parameter int READOUT_BINS             = 4,
+    parameter int COUNTER_BITS             = 4,
+    parameter int FIFO_DEPTH               = 256,
+    parameter int DATA_WIDTH               = 32,
+    parameter int REQUIRE_TIME_HIGH        = 1,
+    parameter int SWAP_INPUT_BYTES         = 0,
+    parameter int SENSOR_WIDTH             = 320,
+    parameter int SENSOR_HEIGHT            = 320,
+    parameter int WEIGHT_BITS              = 8,
+    parameter int WEIGHT_SCALE             = 1024,
+    parameter int N                        = 4,
+    parameter int PASS_MARGIN              = 64,
+    parameter int PERSISTENCE_COUNT        = 2,
+    parameter int CONF_BITS                = 4,
+    parameter int CONF_SHIFT               = 4,
+    parameter int NUM_CLASSES              = 4,
+    parameter int CYCLES_PER_BIN           = 0, // May be a problem
+    // parameter int WEIGHT_FILE_CLASS_STRIDE = 256,
+
+    // localparam string WEIGHT_FILE           = "weights/gesture_weights_down_left_right_up_8x8_4bins.txt",
+    // localparam string WEIGHT_MEM_C0         = "../weights/256weights_q8_c0.mem",
+    // localparam string WEIGHT_MEM_C1         = "../weights/256weights_q8_c1.mem",
+    // localparam string WEIGHT_MEM_C2         = "../weights/256weights_q8_c1.mem", 
+    // localparam string WEIGHT_MEM_C3         = "../weights/256weights_q8_c3.mem"
+
+    localparam string WEIGHT_FILE           = "weights/gesture_weights_down_left_right_up_16x16_8bins.txt",
+    localparam string WEIGHT_MEM_C0         = "../weights/2048weights_q8_c0.mem",
+    localparam string WEIGHT_MEM_C1         = "../weights/2048weights_q8_c1.mem",
+    localparam string WEIGHT_MEM_C2         = "../weights/2048weights_q8_c1.mem", 
+    localparam string WEIGHT_MEM_C3         = "../weights/2048weights_q8_c3.mem"
+
+    // `ifdef WEIGHT_FILE
+    //     `WEIGHT_FILE
+    // `else
+    //     "weights/gesture_weights_down_left_right_up_16x16_8bins.txt"
+    // `endif
+    // ,
+
+    // parameter string WEIGHT_MEM_C0 =
+    // `ifdef WEIGHT_MEM_C0
+    //     `WEIGHT_MEM_C0
+    // `else
+    //     "../weights/256weights_q8_c0.mem"
+    // `endif
+    // ,
+
+    // parameter string WEIGHT_MEM_C1 =
+    // `ifdef WEIGHT_MEM_C1
+    //     `WEIGHT_MEM_C1
+    // `else
+    //     "../weights/256weights_q8_c1.mem"
+    // `endif
+    // ,
+
+    // parameter string WEIGHT_MEM_C2 =
+    // `ifdef WEIGHT_MEM_C2
+    //     `WEIGHT_MEM_C2
+    // `else
+    //     "../weights/256weights_q8_c2.mem"
+    // `endif
+    // ,
+
+    // parameter string WEIGHT_MEM_C3 =
+    // `ifdef WEIGHT_MEM_C3
+    //     `WEIGHT_MEM_C3
+    // `else
+    //     "../weights/256weights_q8_c3.mem"
+    // `endif
 )(
     input  logic                 clk,
     input  logic                 rst,
@@ -48,10 +98,11 @@ module voxel_bin_core #(
     output logic                 debug_score_busy
 );
 
-    localparam int FEATURE_COUNT            = READOUT_BINS * GRID_SIZE * GRID_SIZE;
+    localparam int FEATURE_COUNT            = READOUT_BINS * GRID_SIZE * GRID_SIZE; // 4 * 64 = 256
     localparam int FEATURE_BITS             = $clog2(FEATURE_COUNT);
     localparam int GRID_BITS                = $clog2(GRID_SIZE);
-    localparam int WEIGHT_FILE_CLASS_STRIDE = 256;
+    // localparam int WEIGHT_FILE_CLASS_STRIDE = 256;
+    localparam int WEIGHT_FILE_CLASS_STRIDE = FEATURE_COUNT;
     localparam int WEIGHT_ADDR_BITS         = $clog2(FEATURE_COUNT);
     localparam int TILES                    = FEATURE_COUNT / N;
     localparam int SA_DATA_BITS             = ((COUNTER_BITS > WEIGHT_BITS) ? COUNTER_BITS : WEIGHT_BITS) + 1;
@@ -267,10 +318,20 @@ module voxel_bin_core #(
     logic [WEIGHT_BITS-1:0] weight_mem_c3 [0:FEATURE_COUNT-1];
 
     initial begin
-        $readmemh("../weights/256weights_q8_c0.mem", weight_mem_c0);
-        $readmemh("../weights/256weights_q8_c1.mem", weight_mem_c1);
-        $readmemh("../weights/256weights_q8_c2.mem", weight_mem_c2);
-        $readmemh("../weights/256weights_q8_c3.mem", weight_mem_c3);
+        // $readmemh("../weights/256weights_q8_c0.mem", weight_mem_c0);
+        // $readmemh("../weights/256weights_q8_c1.mem", weight_mem_c1);
+        // $readmemh("../weights/256weights_q8_c2.mem", weight_mem_c2);
+        // $readmemh("../weights/256weights_q8_c3.mem", weight_mem_c3);
+
+        // $readmemh("../weights/2048weights_q8_c0.mem", weight_mem_c0);
+        // $readmemh("../weights/2048weights_q8_c1.mem", weight_mem_c1);
+        // $readmemh("../weights/2048weights_q8_c2.mem", weight_mem_c2);
+        // $readmemh("../weights/2048weights_q8_c3.mem", weight_mem_c3);
+
+        $readmemh(WEIGHT_MEM_C0, weight_mem_c0);
+        $readmemh(WEIGHT_MEM_C1, weight_mem_c1);
+        $readmemh(WEIGHT_MEM_C2, weight_mem_c2);
+        $readmemh(WEIGHT_MEM_C3, weight_mem_c3);
     end
 
     always_ff @(posedge clk) begin

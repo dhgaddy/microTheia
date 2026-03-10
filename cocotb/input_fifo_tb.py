@@ -252,7 +252,7 @@ async def test_simultaneous_read_write_stress(dut):
 
 @logged_test()
 async def test_single_element_round_trip(dut):
-    """Write one item, then read it back; FIFO must go empty→non-empty→empty."""
+    """Write one item, then read it back; FIFO must go empty->non-empty->empty."""
     await setup(dut)
     model = InputFifoModel()
 
@@ -363,28 +363,28 @@ async def test_rd_pending_then_push(dut):
     for _ in range(2):
         model.step(0, 0, 0, 0)
 
-    # Push A: empty FIFO → A bypasses to out_reg.
+    # Push A: empty FIFO -> A bypasses to out_reg.
     await drive_and_check(dut, model, 0, 1, 0xAAAA_0001, 0, "push-A")
     assert int(dut.valid_o.value) == 1
     assert int(dut.data_o.value) == 0xAAAA_0001
 
-    # Push B: out_reg occupied → B goes to RAM tail.
+    # Push B: out_reg occupied -> B goes to RAM tail.
     await drive_and_check(dut, model, 0, 1, 0xBBBB_0002, 0, "push-B")
 
     # Simultaneously pop A (ready_i=1) and push C (valid_i=1):
-    # - rd_en fires → tail_count=1>0 so rd_pending=1, last_rd_data=B
-    # - C cannot bypass (rd_pending=1) → goes to RAM tail
+    # - rd_en fires -> tail_count=1>0 so rd_pending=1, last_rd_data=B
+    # - C cannot bypass (rd_pending=1) -> goes to RAM tail
     await drive_and_check(dut, model, 0, 1, 0xCCCC_0003, 1, "pop-A-push-C")
     # valid_o must be 0 while rd_pending resolves.
     assert int(dut.valid_o.value) == 0, "valid_o should be 0 while rd_pending"
 
-    # Next cycle: rd_pending resolves → B appears at output.
+    # Next cycle: rd_pending resolves -> B appears at output.
     await drive_and_check(dut, model, 0, 0, 0, 0, "resolve-B")
     assert int(dut.valid_o.value) == 1, "B should appear after rd_pending resolves"
     assert int(dut.data_o.value) == 0xBBBB_0002, \
         f"Expected B (0xBBBB0002), got 0x{int(dut.data_o.value):08X}"
 
-    # Pop B; C is still in tail → triggers another rd_pending.
+    # Pop B; C is still in tail -> triggers another rd_pending.
     await drive_and_check(dut, model, 0, 0, 0, 1, "pop-B")
 
     # Resolve C.

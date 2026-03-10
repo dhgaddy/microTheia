@@ -169,10 +169,10 @@ def generate_gesture_trajectory_events(
     """Generate events that approximate a real DVS gesture motion trail for one bin.
 
     Weight analysis shows the model learned real motion trajectories:
-      Down (bin2 dominant): center-column sweep from top→bottom, trailing edge in bin2
+      Down (bin2 dominant): center-column sweep from top->bottom, trailing edge in bin2
       Up   (bin1 dominant): whole-frame center activity peaking early (bin1)
-      Left (bin0-1):        right→left horizontal sweep in center rows
-      Right(bin0-1):        left→right horizontal sweep in center rows
+      Left (bin0-1):        right->left horizontal sweep in center rows
+      Right(bin0-1):        left->right horizontal sweep in center rows
 
     We model the gesture as a point source moving linearly across the sensor,
     emitting events along its path.  bin_idx controls where in the trajectory
@@ -188,8 +188,8 @@ def generate_gesture_trajectory_events(
     # The training data was captured with the camera mounted so that its physical
     # axes are inverted relative to the EVT2 grid coordinates output by evt2_decoder.
     # Empirically verified on hardware: to activate "Down" weights (which learned
-    # a top→bottom motion in training-frame coords), we must send events sweeping
-    # bottom→top in grid coords (y=7→0), and vice versa for Up, Left, Right.
+    # a top->bottom motion in training-frame coords), we must send events sweeping
+    # bottom->top in grid coords (y=7->0), and vice versa for Up, Left, Right.
     # UP is special: bin1 has uniformly high weights across ALL y rows (not directional).
     # Sending a directional sweep for UP gives the same per-bin spatial distribution as DOWN
     # and DOWN wins because bin2 has higher total Down weight.
@@ -373,7 +373,7 @@ class FPGAGestureInterface:
         self.clear_rx_buffer()
 
     def detect_architecture(self) -> str:
-        """Probe with 0xFF; 0x55 reply → voxel_bin, else → gradient_map."""
+        """Probe with 0xFF; 0x55 reply -> voxel_bin, else -> gradient_map."""
         self.clear_rx_buffer()
         self._send_byte(0xFF)
         response = self._receive_byte(timeout=0.3)
@@ -643,7 +643,7 @@ def test_gesture(fpga: FPGAGestureInterface, gesture: Gesture,
                 print(f"  warmup: waiting {warmup_s:.1f}s for stale bins to clear...")
             time.sleep(warmup_s)
             fpga.clear_rx_buffer()
-        bins_to_drive = readout_bins * 3      # 3 full windows → 2 consecutive guaranteed
+        bins_to_drive = readout_bins * 3      # 3 full windows -> 2 consecutive guaranteed
         # Events spread evenly across all bins (trajectory pattern covers every bin).
         per_bin = max(16, num_events // readout_bins)
         total_events = bins_to_drive * per_bin

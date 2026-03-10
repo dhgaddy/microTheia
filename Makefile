@@ -116,6 +116,37 @@ sim: ## Run RTL simulation with cocotb
 	done
 .PHONY: sim
 
+# sim: ## Run RTL simulation with cocotb
+# 	@if [ -z "$(DUT)" ]; then \
+# 		echo "Error: You must specify DUT=<module_name>"; \
+# 		echo "Example: make sim DUT=voxel_bin_top"; \
+# 		exit 1; \
+# 	fi; \
+# 	for d in $(SIM_DUTS); do \
+# 		echo "===================================================="; \
+# 		echo " Running DUT=$$d with CONFIG=$(CONFIG)"; \
+# 		echo "===================================================="; \
+# 		if [ ! -f "cocotb/$${d}_tb.py" ]; then \
+# 			echo "Skipping $$d (no testbench found)"; \
+# 			continue; \
+# 		fi; \
+# 		rm -rf sim_build; \
+# 		\
+# 		SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv src/ram_1r1w_sync.sv"; \
+# 		\
+# 		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
+# 		export SIM_CONFIG=$(CONFIG_FILE); \
+# 		\
+# 		TOPLEVEL=$$d \
+# 		TOPLEVEL_LANG=verilog \
+# 		COCOTB_TEST_MODULES=$${d}_tb \
+# 		VERILOG_SOURCES="$$SRCS" \
+# 		COMPILE_ARGS=$$PARAMS \
+# 		PYTHONPATH=cocotb \
+# 		make -f $$(cocotb-config --makefiles)/Makefile.sim; \
+# 	done
+# .PHONY: sim
+
 sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=input_fifo
 	$(MAKE) sim DUT=evt2_decoder
@@ -123,11 +154,12 @@ sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=uart_rx
 	$(MAKE) sim DUT=uart_tx
 	$(MAKE) sim DUT=uart_debug
+	$(MAKE) sim DUT=ram_1r1w_sync
 	$(MAKE) sim DUT=voxel_gesture_classifier
 	$(MAKE) sim DUT=voxel_systolic_array
 	$(MAKE) sim DUT=voxel_binning
 	$(MAKE) sim DUT=voxel_bin_core
-	$(MAKE) sim DUT=voxel_bin_top
+# 	$(MAKE) sim DUT=voxel_bin_top
 .PHONY: sim-all
 # matmul
 

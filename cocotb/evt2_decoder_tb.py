@@ -221,7 +221,7 @@ async def test_randomized_golden_scoreboard(dut):
 
 @logged_test()
 async def test_polarity_off_vs_on(dut):
-    """CD_OFF → polarity=0; CD_ON → polarity=1."""
+    """CD_OFF -> polarity=0; CD_ON -> polarity=1."""
     await setup(dut)
     model = Evt2DecoderModel()
 

@@ -32,7 +32,7 @@ module voxel_bin_top #(
     parameter int SENSOR_HEIGHT        = 320,
     parameter int WEIGHT_BITS          = 8,
     parameter int WEIGHT_SCALE         = 1024,
-    parameter int N                    = 16,  // 16 → 16x16 systolic array
+    parameter int N                    = 16,  // 16 -> 16x16 systolic array
     parameter int PASS_MARGIN          = 0, // parameter int PASS_MARGIN       = 64,
     parameter int PERSISTENCE_COUNT    = 2,
     parameter int CONF_BITS            = 4,
@@ -40,6 +40,7 @@ module voxel_bin_top #(
     parameter int UART_WORD_FIFO_DEPTH = 16,
     parameter int TX_FIFO_DEPTH        = 32,
     parameter int POR_CYCLES           = 1024,
+    parameter int NUM_CLASSES          = 4,
     parameter int SOFT_RESET_CYCLES    = 64
 )(
     input  logic clk,

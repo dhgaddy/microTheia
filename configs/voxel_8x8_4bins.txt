@@ -35,7 +35,11 @@ CONF_BITS           = 4
 CONF_SHIFT          = 4
 
 # weight WEIGHT_FILE
-WEIGHT_FILE         = "weights/gesture_weights_down_left_right_up_8x8_4bins.txt"
+# WEIGHT_FILE   = "weights/gesture_weights_down_left_right_up_8x8_4bins.txt"
+# WEIGHT_MEM_C0 = "../weights/256weights_q8_c0.mem"
+# WEIGHT_MEM_C1 = "../weights/256weights_q8_c1.mem"
+# WEIGHT_MEM_C2 = "../weights/256weights_q8_c1.mem" 
+# WEIGHT_MEM_C3 = "../weights/256weights_q8_c3.mem"
 
 # voxel_bin_top
 UART_WORD_FIFO_DEPTH = 16

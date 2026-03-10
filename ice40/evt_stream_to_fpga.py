@@ -153,7 +153,7 @@ def verify_fpga_connection(fpga, timeout_s=0.3):
     time.sleep(timeout_s)
     resp = fpga.read(fpga.in_waiting or 1)
     if b"\x55" in resp:
-        print("[FPGA] Connection verified (echo 0xFF → 0x55)")
+        print("[FPGA] Connection verified (echo 0xFF -> 0x55)")
         return True
     print(f"[FPGA] WARNING: echo probe did not return 0x55 (got {resp.hex() or 'nothing'})")
     print("[FPGA]   Check: correct COM port? correct bitstream loaded? correct baud rate?")
@@ -331,7 +331,7 @@ def main():
 
     # ------------------------------------------------------------------ pre-sync (bin timer alignment)
     if args.pre_sync:
-        fpga.write(b"\xFC")  # soft reset → FPGA bin timer resets to bin 0
+        fpga.write(b"\xFC")  # soft reset -> FPGA bin timer resets to bin 0
         print("[SYNC] Soft reset sent, waiting 1s for stale bins 1-3 to flush...")
         time.sleep(1.0)
         fpga.reset_input_buffer()  # discard any spurious bytes from warmup period

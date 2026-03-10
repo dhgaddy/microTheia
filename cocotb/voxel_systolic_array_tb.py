@@ -246,7 +246,7 @@ async def test_identity_times_identity(dut):
 
 @logged_test()
 async def test_single_nonzero_element(dut):
-    """A[0][0]=k, B[0][0]=k, all others 0 → Out[0][0]=k*k, rest 0."""
+    """A[0][0]=k, B[0][0]=k, all others 0 -> Out[0][0]=k*k, rest 0."""
     await setup(dut)
 
     k = 127
@@ -292,7 +292,7 @@ async def test_accumulator_does_not_persist_across_runs(dut):
     b1 = [[1 for _ in range(N)] for _ in range(N)]
     await run_mul(dut, a1, b1, "ones-run")
 
-    # Second run: all-zeros → result must be exactly zero.
+    # Second run: all-zeros -> result must be exactly zero.
     a2 = [[0 for _ in range(N)] for _ in range(N)]
     b2 = [[0 for _ in range(N)] for _ in range(N)]
     await run_mul(dut, a2, b2, "zeros-run")

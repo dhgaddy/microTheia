@@ -251,7 +251,7 @@ async def test_all_negative_scores(dut):
     await setup(dut)
     model = GestureClassifierModel()
 
-    # class 2 is least negative → max; margin = (-50) - (-150) = 100 > PASS_MARGIN.
+    # class 2 is least negative -> max; margin = (-50) - (-150) = 100 > PASS_MARGIN.
     scores = [-200, -150, -50, -180]
     for i in range(PERSISTENCE_COUNT + 1):
         await drive_and_check(dut, model, scores, 1, f"neg-{i}")
@@ -377,12 +377,12 @@ async def test_debug_state_transitions(dut):
     assert int(dut.gesture_valid.value) == 1
     assert int(dut.gesture.value) == 0
 
-    # Fail resets streak → debug_state=0, gesture_valid deasserts.
+    # Fail resets streak -> debug_state=0, gesture_valid deasserts.
     await drive_and_check(dut, model, [100, 64, 64, 64], 1, "fail-2")
     assert int(dut.debug_state.value) == 0
     assert int(dut.gesture_valid.value) == 0
 
-    # Class change on first pass: streak restarts at 1 → debug_state=1.
+    # Class change on first pass: streak restarts at 1 -> debug_state=1.
     await drive_and_check(dut, model, [0, 400, 0, 0], 1, "class-change")
     assert int(dut.debug_state.value) == 1, \
         f"Expected debug_state=1 after class change pass, got {int(dut.debug_state.value)}"

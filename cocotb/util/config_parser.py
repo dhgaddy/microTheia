@@ -114,12 +114,3 @@ def get_module_params(module_name, src_dir="src"):
             overrides.append(f"-P{module_name}.{k}={v}")
 
     return " ".join(overrides)
-
-
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) != 2:
-        print("")
-    else:
-        print(get_module_params(sys.argv[1]))

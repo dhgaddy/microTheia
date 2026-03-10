@@ -150,3 +150,27 @@ To check whether our design is suitable for manufacturing, run the [gf180mcu-pre
 - https://docs.prophesee.ai/stable/data/encoding_formats/evt2.html
 - https://docs.prophesee.ai/stable/data/encoding_formats/evt3.html
 - https://docs.google.com/spreadsheets/d/1fW5ecBsLSec4hXBMaOjMUHQGslm4y-QUILgrxqS8MpA/edit?gid=0#gid=0
+
+### WHAT NEEDS FIXING
+- use similar syntax to ram_1r1w_sync for the usage of strings so it sees the text as a packed array and can be passed as an arg
+- add WEIGHT, WEIGHT_MEM_C0, WEIGHT_MEM_C1, WEIGHT_MEM_C2, WEIGHT_MEM_C3 as parameters
+- clean up WEIGHT_FILE_CLASS_STRIDE and FEATURE_COUNT
+- clean up and seperate always_comb and always_ff
+- add more parameterization in testing for ram_1r1w_sync????
+- take a look at the old main stuff that was working before a refactor
+- Modules that need fixes for parameterization and issue with voxel_default config
+    - uart_rx
+    - uart_tx
+    - uart_debug
+    - voxel_bin_core
+    - voxel_bin_top
+- Modules that need fixes for parameterization and issue with voxel_8x8_4bins config
+    - evt2_decoder
+    - MatMul
+    - uart_rx
+    - uart_tx
+    - uart_debug
+    - voxel_gesture_classifier
+    - voxel_systolic_array
+    - voxel_binning
+    - voxel_bin_top
