@@ -3,8 +3,8 @@
 // Sends gesture ASCII strings ("UP\r\n", "DOWN\r\n", etc.) over UART.
 
 module uart_debug #(
-    parameter CLK_FREQ_HZ = 12_000_000,
-    parameter BAUD_RATE   = 115200
+    parameter int CLK_FREQ_HZ = 12_000_000,
+    parameter int BAUD_RATE   = 115200
 )(
     input  logic        clk,
     input  logic        rst,

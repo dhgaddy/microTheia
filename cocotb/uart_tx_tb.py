@@ -108,7 +108,7 @@ async def receive_uart_byte(dut, timeout_cycles=200000):
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     dut.rst.value = 1
     dut.data.value = 0
     dut.valid.value = 0

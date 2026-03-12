@@ -2,19 +2,16 @@ CLK_FREQ_HZ         = 12_000_000
 BAUD_RATE           = 1_000_000
 WINDOW_MS           = 400
 
-# voxel_binning
+# voxel_binning — small grid & bin count for fast simulation
 GRID_SIZE           = 8
 NUM_BINS            = 4
 READOUT_BINS        = 4
 COUNTER_BITS        = 4
 CYCLES_PER_BIN      = 0
 
-WEIGHT_BITS         = 8
-WEIGHT_SCALE        = 1024
-
-N                   = 4
-DATA_BIT_SIZE       = 16
-CORE_PARALLEL_READS = 4
+# input_fifo
+FIFO_DEPTH          = 256
+DATA_WIDTH          = 32
 
 # evt2_decoder
 SENSOR_WIDTH        = 320
@@ -22,9 +19,13 @@ SENSOR_HEIGHT       = 320
 REQUIRE_TIME_HIGH   = 1
 SWAP_INPUT_BYTES    = 0
 
-# input_fifo
-FIFO_DEPTH          = 256
-DATA_WIDTH          = 32
+# voxel_systolic_array — N=8 gives TILES=32 per window (vs 128 for default),
+# making each scoring pipeline run ~4x faster.
+N                   = 8
+DATA_BIT_SIZE       = 16
+
+WEIGHT_BITS         = 8
+WEIGHT_SCALE        = 1024
 
 # voxel_gesture_classifier
 NUM_CLASSES         = 4
@@ -46,14 +47,13 @@ TX_FIFO_DEPTH        = 32
 POR_CYCLES           = 1024
 SOFT_RESET_CYCLES    = 64
 
-# Legacy/optional compatibility knobs (safe to keep, ignored by modules without matching params)
+# Legacy/optional compatibility knobs
 MIN_EVENT_THRESH    = 20
 MOTION_THRESH       = 8
 VALUE_BITS          = 6
-
+CORE_PARALLEL_READS = 4
 ACC_BITS            = 24
 MIN_SCORE_THRESH    = 30
 ACC_SUM_BITS        = 18
 PARALLEL_READS      = 4
 CLASS_IDX           = 0
-FIFO_DEPTH_LOG2     = 8

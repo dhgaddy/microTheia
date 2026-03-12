@@ -151,7 +151,7 @@ To check whether our design is suitable for manufacturing, run the [gf180mcu-pre
 - https://docs.prophesee.ai/stable/data/encoding_formats/evt3.html
 - https://docs.google.com/spreadsheets/d/1fW5ecBsLSec4hXBMaOjMUHQGslm4y-QUILgrxqS8MpA/edit?gid=0#gid=0
 
-### WHAT NEEDS FIXING
+### WHAT NEEDS FIXING (I fixed most of these)
 - use similar syntax to ram_1r1w_sync for the usage of strings so it sees the text as a packed array and can be passed as an arg
 - add WEIGHT, WEIGHT_MEM_C0, WEIGHT_MEM_C1, WEIGHT_MEM_C2, WEIGHT_MEM_C3 as parameters
 - clean up WEIGHT_FILE_CLASS_STRIDE and FEATURE_COUNT

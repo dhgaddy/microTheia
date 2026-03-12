@@ -3,8 +3,8 @@
 // UART Receiver - 8N1, synchronous active-high reset
 
 module uart_rx #(
-    parameter  CLK_FREQ_HZ  = 12_000_000,
-    parameter  BAUD_RATE    = 115200
+    parameter int CLK_FREQ_HZ = 12_000_000,
+    parameter int BAUD_RATE   = 115200
 )(
     input  logic clk,
     input  logic rst,

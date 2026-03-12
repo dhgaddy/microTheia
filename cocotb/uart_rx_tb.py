@@ -117,7 +117,7 @@ async def expect_valid_byte(dut, expected, timeout_cycles):
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     dut.rst.value = 1
     dut.rx.value = 1
     await ClockCycles(dut.clk, 5)

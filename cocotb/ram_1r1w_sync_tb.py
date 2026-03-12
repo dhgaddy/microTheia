@@ -1,20 +1,25 @@
 """Robust cocotb testbench for ram_1r1w_sync with cycle-accurate golden model."""
 
+import os
 import random
 
 import cocotb
 from util.test_logging import logged_test
+from util.config_parser import load_config
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, NextTimeStep, ReadOnly, RisingEdge
 
-WIDTH = 8
-DEPTH = 512
+MODULE = os.environ.get("TOPLEVEL", "ram_1r1w_sync")
+CFG = load_config(MODULE)
+
+WIDTH = CFG.get("width_p", 8)
+DEPTH = CFG.get("depth_p", 512)
 ADDR_MASK = DEPTH - 1
 DATA_MASK = (1 << WIDTH) - 1
 
 
 class Ram1R1WSyncModel:
-    """Cycle-accurate model for rtl/ram_1r1w_sync.sv default params."""
+    """Cycle-accurate model for ram_1r1w_sync parameterized by WIDTH/DEPTH."""
 
     def __init__(self):
         self.reset()
@@ -38,7 +43,7 @@ class Ram1R1WSyncModel:
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk_i, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk_i, 10, unit="ns").start())
     dut.reset_i.value = 1
     dut.wr_valid_i.value = 0
     dut.wr_data_i.value = 0

@@ -75,7 +75,7 @@ def golden_matmul(a, b):
 
 async def setup(dut):
     configure_from_dut(dut)
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
     dut.reset.value = 1
     dut.start.value = 0
     dut.A_matrix_flat.value = 0

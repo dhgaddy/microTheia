@@ -183,15 +183,15 @@ def get_param_string(parameters):
 
 
 def assert_resolvable(s):
-    assert s.value.is_resolvable, f"Unresolvable value in {s._path} (x or z in some or all bits) at Time {get_sim_time(units='ns')}ns."
+    assert s.value.is_resolvable, f"Unresolvable value in {s._path} (x or z in some or all bits) at Time {get_sim_time(unit='ns')}ns."
 
-async def clock_start_sequence(clk_i, period=1, units='ns'):
+async def clock_start_sequence(clk_i, period=1, unit='ns'):
     # Set the clock to Z for 10 ns. This helps separate tests.
     clk_i.value = LogicArray(['z'])
     await Timer(10, 'ns')
 
     # Unrealistically fast clock, but nice for mental math (1 GHz)
-    c = Clock(clk_i, period, units)
+    c = Clock(clk_i, period, unit)
 
     # Start the clock (soon). Start it low to avoid issues on the first RisingEdge
     cocotb.start_soon(c.start(start_high=False))

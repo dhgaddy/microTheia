@@ -109,8 +109,14 @@ def get_module_params(module_name, src_dir="src"):
             continue
 
         if isinstance(v, str):
-            overrides.append(f'-P{module_name}.{k}="{v}"')
+            pass  # iverilog -P does not support string values; rely on RTL defaults
         else:
             overrides.append(f"-P{module_name}.{k}={v}")
 
     return " ".join(overrides)
+
+
+if __name__ == "__main__":
+    import sys
+    module = sys.argv[1] if len(sys.argv) > 1 else None
+    print(get_module_params(module) if module else "")

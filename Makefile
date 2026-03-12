@@ -99,7 +99,7 @@ sim: ## Run RTL simulation with cocotb
 			echo "Skipping $$d (no testbench found)"; \
 			continue; \
 		fi; \
-		rm -rf sim_build; \
+		rm -rf cocotb/sim_build/$$d; \
 		\
 		SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv src/ram_1r1w_sync.sv"; \
 		\
@@ -111,8 +111,10 @@ sim: ## Run RTL simulation with cocotb
 		COCOTB_TEST_MODULES=$${d}_tb \
 		VERILOG_SOURCES="$$SRCS" \
 		COMPILE_ARGS="$$PARAMS" \
+		WAVES=1 \
+		SIM_BUILD=cocotb/sim_build/$$d \
 		PYTHONPATH=cocotb \
-		make -f $$(cocotb-config --makefiles)/Makefile.sim; \
+		make -f $$(cocotb-config --makefiles)/Makefile.sim results.xml; \
 	done
 .PHONY: sim
 
@@ -146,6 +148,10 @@ sim: ## Run RTL simulation with cocotb
 # 		make -f $$(cocotb-config --makefiles)/Makefile.sim; \
 # 	done
 # .PHONY: sim
+
+sim-fast: ## Run voxel_bin_core sim with small fast-sim config (8x8 grid, N=8, 4 bins)
+	$(MAKE) sim DUT=voxel_bin_core CONFIG=voxel_sim_fast
+.PHONY: sim-fast
 
 sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=input_fifo
