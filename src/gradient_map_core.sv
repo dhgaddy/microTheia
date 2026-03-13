@@ -61,7 +61,6 @@ module gradient_map_core #(
 
     input_fifo #(
         .FIFO_DEPTH(FIFO_DEPTH),
-        .PTR_BITS  (FIFO_PTR_BITS),
         .DATA_WIDTH(DATA_WIDTH)
     ) u_input_fifo (
         .clk     (clk),

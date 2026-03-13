@@ -27,6 +27,14 @@ SIM_DUTS = $(strip $(DUT))
 
 SV_SRCS := $(shell find src -name "*.sv")
 
+# Architecture selection
+AVAILABLE_ARCHES := voxel gradient
+ARCH ?= voxel
+
+ifeq ($(filter $(ARCH),$(AVAILABLE_ARCHES)),)
+    $(error $(ARCH) is not valid. Available architectures: $(AVAILABLE_ARCHES))
+endif
+
 help: ## Show this help message
 	@echo 'Usage: make [target]'
 	@echo ''
@@ -35,7 +43,12 @@ help: ## Show this help message
 .PHONY: help
 
 # Simulation configuration
+ifeq ($(ARCH),gradient)
+CONFIG ?= gradient_default
+else
 CONFIG ?= voxel_default
+endif
+
 CONFIG_FILE := configs/$(CONFIG).txt
 
 # iCE40 FPGA Flow Wrapper
@@ -101,7 +114,7 @@ sim: ## Run RTL simulation with cocotb
 		fi; \
 		rm -rf cocotb/sim_build/$$d; \
 		\
-		SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv src/ram_1r1w_sync.sv"; \
+		SRCS="src/$(ARCH)_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv src/ram_1r1w_sync.sv"; \
 		\
 		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
 		export SIM_CONFIG=$(CONFIG_FILE); \
@@ -136,7 +149,20 @@ sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=voxel_bin_core
 	$(MAKE) sim DUT=voxel_bin_top
 .PHONY: sim-all
-# matmul
+
+sim-all-gradient:
+	$(MAKE) sim ARCH=gradient DUT=input_fifo
+	$(MAKE) sim ARCH=gradient DUT=evt2_decoder
+	$(MAKE) sim ARCH=gradient DUT=uart_rx
+	$(MAKE) sim ARCH=gradient DUT=uart_tx
+	$(MAKE) sim ARCH=gradient DUT=uart_debug
+	$(MAKE) sim ARCH=gradient DUT=gradient_gesture_classifier
+	$(MAKE) sim ARCH=gradient DUT=gradient_weight_ram
+	$(MAKE) sim ARCH=gradient DUT=gradient_systolic_array
+	$(MAKE) sim ARCH=gradient DUT=gradient_mapping
+	$(MAKE) sim ARCH=gradient DUT=gradient_map_core
+	$(MAKE) sim ARCH=gradient DUT=gradient_map_top
+.PHONY: sim-all-gradient
 
 sim-gl: ## Run gate-level simulation with cocotb (after copy-final)
 	cd cocotb; GL=1 PDK_ROOT=${PDK_ROOT} PDK=${PDK} SLOT=${SLOT} python3 chip_top_tb.py
