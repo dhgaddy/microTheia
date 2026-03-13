@@ -88,7 +88,7 @@ async def wait_for_por_release(dut):
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.uart_rx.value = 1
     await ClockCycles(dut.clk, 8)
     await wait_for_por_release(dut)

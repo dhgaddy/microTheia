@@ -69,7 +69,7 @@ async def receive_message(dut, max_bytes=12):
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.gesture_class.value = 0
     dut.gesture_valid.value = 0

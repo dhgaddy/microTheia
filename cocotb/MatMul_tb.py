@@ -58,7 +58,7 @@ def unpack_matrix(packed, elem_bits):
 
 
 async def setup_dut(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
 
     dut.reset.value = 1
     dut.start.value = 0

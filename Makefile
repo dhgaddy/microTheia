@@ -165,7 +165,7 @@ sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=voxel_systolic_array
 	$(MAKE) sim DUT=voxel_binning
 	$(MAKE) sim DUT=voxel_bin_core
-# 	$(MAKE) sim DUT=voxel_bin_top
+	$(MAKE) sim DUT=voxel_bin_top
 .PHONY: sim-all
 # matmul
 

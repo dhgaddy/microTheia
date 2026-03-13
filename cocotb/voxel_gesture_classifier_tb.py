@@ -123,7 +123,7 @@ class GestureClassifierModel:
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value = 1
     dut.scores_flat.value = 0
     dut.scores_valid.value = 0
