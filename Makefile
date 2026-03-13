@@ -85,6 +85,10 @@ lint: ## Lint all SystemVerilog files in src
 	          $(SV_SRCS)
 .PHONY: lint
 
+# Default testbench module name is <DUT>_tb, but you can override it:
+# Example: make sim DUT=voxel_bin_core_parallel TB=voxel_bin_core
+TB ?= $(DUT)
+
 sim: ## Run RTL simulation with cocotb
 	@if [ -z "$(DUT)" ]; then \
 		echo "Error: You must specify DUT=<module_name>"; \
@@ -95,8 +99,8 @@ sim: ## Run RTL simulation with cocotb
 		echo "===================================================="; \
 		echo " Running DUT=$$d with CONFIG=$(CONFIG)"; \
 		echo "===================================================="; \
-		if [ ! -f "cocotb/$${d}_tb.py" ]; then \
-			echo "Skipping $$d (no testbench found)"; \
+		if [ ! -f "cocotb/$(TB)_tb.py" ]; then \
+			echo "Skipping $$d (no testbench found: cocotb/$(TB)_tb.py)"; \
 			continue; \
 		fi; \
 		rm -rf cocotb/sim_build/$$d; \
@@ -108,7 +112,7 @@ sim: ## Run RTL simulation with cocotb
 		\
 		TOPLEVEL=$$d \
 		TOPLEVEL_LANG=verilog \
-		COCOTB_TEST_MODULES=$${d}_tb \
+		COCOTB_TEST_MODULES=$(TB)_tb \
 		VERILOG_SOURCES="$$SRCS" \
 		COMPILE_ARGS="$$PARAMS" \
 		WAVES=1 \
