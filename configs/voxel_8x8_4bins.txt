@@ -1,17 +1,20 @@
 CLK_FREQ_HZ         = 12_000_000
 BAUD_RATE           = 1_000_000
-WINDOW_MS           = 1000
+WINDOW_MS           = 400
 
 # voxel_binning
-GRID_SIZE           = 16
-NUM_BINS            = 8
-READOUT_BINS        = 8
-COUNTER_BITS        = 16
+GRID_SIZE           = 8
+NUM_BINS            = 4
+READOUT_BINS        = 4
+COUNTER_BITS        = 4
 CYCLES_PER_BIN      = 0
 
-# input_fifo
-FIFO_DEPTH          = 256
-DATA_WIDTH          = 32
+WEIGHT_BITS         = 8
+WEIGHT_SCALE        = 1024
+
+N                   = 4
+DATA_BIT_SIZE       = 16
+CORE_PARALLEL_READS = 4
 
 # evt2_decoder
 SENSOR_WIDTH        = 320
@@ -19,26 +22,23 @@ SENSOR_HEIGHT       = 320
 REQUIRE_TIME_HIGH   = 1
 SWAP_INPUT_BYTES    = 0
 
-# voxel_systolic_array
-N                   = 16
-DATA_BIT_SIZE       = 16
-
-WEIGHT_BITS         = 8
-WEIGHT_SCALE        = 1024
+# input_fifo
+FIFO_DEPTH          = 256
+DATA_WIDTH          = 32
 
 # voxel_gesture_classifier
 NUM_CLASSES         = 4
 SCORE_BITS          = 32
 PASS_MARGIN         = 64
 PERSISTENCE_COUNT   = 2
-CONF_BITS           = 8
+CONF_BITS           = 4
 CONF_SHIFT          = 4
 
-WEIGHT        = "weights/gesture_weights_down_left_right_up_16x16_8bins.txt"
-WEIGHT_MEM_C0 = "../weights/2048weights_q8_c0.mem"
-WEIGHT_MEM_C1 = "../weights/2048weights_q8_c1.mem"
-WEIGHT_MEM_C2 = "../weights/2048weights_q8_c2.mem"
-WEIGHT_MEM_C3 = "../weights/2048weights_q8_c3.mem"
+WEIGHT        = "weights/gesture_weights_down_left_right_up_8x8_4bins.txt"
+WEIGHT_MEM_C0 = "../weights/256weights_q8_c0.mem"
+WEIGHT_MEM_C1 = "../weights/256weights_q8_c1.mem"
+WEIGHT_MEM_C2 = "../weights/256weights_q8_c2.mem"
+WEIGHT_MEM_C3 = "../weights/256weights_q8_c3.mem"
 
 # voxel_bin_top
 UART_WORD_FIFO_DEPTH = 16
@@ -50,10 +50,10 @@ SOFT_RESET_CYCLES    = 64
 MIN_EVENT_THRESH    = 20
 MOTION_THRESH       = 8
 VALUE_BITS          = 6
-CORE_PARALLEL_READS = 4
+
 ACC_BITS            = 24
 MIN_SCORE_THRESH    = 30
 ACC_SUM_BITS        = 18
 PARALLEL_READS      = 4
 CLASS_IDX           = 0
-
+FIFO_DEPTH_LOG2     = 8

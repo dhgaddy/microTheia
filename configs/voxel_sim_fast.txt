@@ -1,12 +1,12 @@
 CLK_FREQ_HZ         = 12_000_000
 BAUD_RATE           = 1_000_000
-WINDOW_MS           = 1000
+WINDOW_MS           = 400
 
-# voxel_binning
-GRID_SIZE           = 16
-NUM_BINS            = 8
-READOUT_BINS        = 8
-COUNTER_BITS        = 16
+# voxel_binning — small grid & bin count for fast simulation
+GRID_SIZE           = 8
+NUM_BINS            = 4
+READOUT_BINS        = 4
+COUNTER_BITS        = 4
 CYCLES_PER_BIN      = 0
 
 # input_fifo
@@ -19,8 +19,9 @@ SENSOR_HEIGHT       = 320
 REQUIRE_TIME_HIGH   = 1
 SWAP_INPUT_BYTES    = 0
 
-# voxel_systolic_array
-N                   = 16
+# voxel_systolic_array — N=8 gives TILES=32 per window (vs 128 for default),
+# making each scoring pipeline run ~4x faster.
+N                   = 8
 DATA_BIT_SIZE       = 16
 
 WEIGHT_BITS         = 8
@@ -31,14 +32,14 @@ NUM_CLASSES         = 4
 SCORE_BITS          = 32
 PASS_MARGIN         = 64
 PERSISTENCE_COUNT   = 2
-CONF_BITS           = 8
+CONF_BITS           = 4
 CONF_SHIFT          = 4
 
-WEIGHT        = "weights/gesture_weights_down_left_right_up_16x16_8bins.txt"
-WEIGHT_MEM_C0 = "../weights/2048weights_q8_c0.mem"
-WEIGHT_MEM_C1 = "../weights/2048weights_q8_c1.mem"
-WEIGHT_MEM_C2 = "../weights/2048weights_q8_c2.mem"
-WEIGHT_MEM_C3 = "../weights/2048weights_q8_c3.mem"
+WEIGHT        = "weights/gesture_weights_down_left_right_up_8x8_4bins.txt"
+WEIGHT_MEM_C0 = "../weights/256weights_q8_c0.mem"
+WEIGHT_MEM_C1 = "../weights/256weights_q8_c1.mem"
+WEIGHT_MEM_C2 = "../weights/256weights_q8_c2.mem"
+WEIGHT_MEM_C3 = "../weights/256weights_q8_c3.mem"
 
 # voxel_bin_top
 UART_WORD_FIFO_DEPTH = 16
@@ -46,7 +47,7 @@ TX_FIFO_DEPTH        = 32
 POR_CYCLES           = 1024
 SOFT_RESET_CYCLES    = 64
 
-# Legacy/optional compatibility knobs (safe to keep, ignored by modules without matching params)
+# Legacy/optional compatibility knobs
 MIN_EVENT_THRESH    = 20
 MOTION_THRESH       = 8
 VALUE_BITS          = 6
@@ -56,4 +57,3 @@ MIN_SCORE_THRESH    = 30
 ACC_SUM_BITS        = 18
 PARALLEL_READS      = 4
 CLASS_IDX           = 0
-

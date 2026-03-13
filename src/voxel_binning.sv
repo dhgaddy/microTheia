@@ -1,230 +1,208 @@
 `timescale 1ns/1ps
 
-// Accumulates DVS events into a ring buffer of NUM_BINS 2D histograms.
-// Rotates bins on a timer; flattens READOUT_BINS bins for classification.
-// Parallel reads (PARALLEL_READS values/cycle) feed the systolic array.
+// Temporal voxel histogram generator.
+// - Accumulates events in a NUM_BINS ring of GRID_SIZE x GRID_SIZE counters.
+// - Rotates bins every fixed period (clock-based).
+// - Emits NUM_BINS*GRID_SIZE*GRID_SIZE flattened features in strict order:
+//   oldest->newest bins, and row-major within each bin (y major, x minor).
 
 module voxel_binning #(
-    parameter CLK_FREQ_HZ    = 12_000_000,
-    parameter WINDOW_MS      = 400,
-    parameter GRID_SIZE      = 16,
-    parameter NUM_BINS       = 4,
-    parameter READOUT_BINS   = 4,
-    parameter COUNTER_BITS   = 6,
-    parameter PARALLEL_READS = 4,
-    parameter CYCLES_PER_BIN = 0  // 0 = auto-compute from WINDOW_MS/NUM_BINS
+    parameter  int CLK_FREQ_HZ    = 12_000_000,
+    parameter  int WINDOW_MS      = 1000,
+    parameter  int GRID_SIZE      = 16,
+    parameter  int NUM_BINS       = 8,
+    parameter  int READOUT_BINS   = 8,
+    parameter  int COUNTER_BITS   = 16,
+    parameter  int CYCLES_PER_BIN = 0, // I think this could be a problem
+    localparam int RO_INDEX_WIDTH = READOUT_BINS*GRID_SIZE*GRID_SIZE // made to improve readability of IO
 )(
-    input  logic        clk,
-    input  logic        rst,
-    input  logic        event_valid,
-    input  logic signed [4:0] event_x,
-    input  logic signed [4:0] event_y,
-    input  logic        event_polarity,
-    output logic        event_ready,
-    output logic        readout_start,
-    output logic [PARALLEL_READS*COUNTER_BITS-1:0] readout_data,
-    output logic        readout_valid
+    input  logic                              clk,
+    input  logic                              rst,
+    input  logic                              event_valid,
+    input  logic [$clog2(GRID_SIZE)-1:0]      event_x,
+    input  logic [$clog2(GRID_SIZE)-1:0]      event_y,
+    input  logic                              event_polarity,
+    output logic                              event_ready,
+    input  logic                              readout_ready,
+    output logic                              readout_start,
+    output logic                              readout_valid,
+    output logic [COUNTER_BITS-1:0]           readout_data,
+    output logic [$clog2(RO_INDEX_WIDTH)-1:0] readout_index,
+    output logic                              readout_last
 );
 
-    localparam integer BIN_DURATION_MS     = WINDOW_MS / NUM_BINS;
-    localparam integer CYCLES_PER_BIN_AUTO = (CLK_FREQ_HZ / 1000) * BIN_DURATION_MS;
-    localparam integer CYCLES_PER_BIN_USE  = (CYCLES_PER_BIN == 0) ? CYCLES_PER_BIN_AUTO : CYCLES_PER_BIN;
-    localparam integer TIMER_BITS          = $clog2(CYCLES_PER_BIN_USE + 1);
-    localparam integer CELLS_PER_BIN       = GRID_SIZE * GRID_SIZE;
-    localparam integer TOTAL_CELLS         = NUM_BINS * CELLS_PER_BIN;
-    localparam integer CELL_ADDR_BITS      = $clog2(TOTAL_CELLS);
-    localparam integer BIN_IDX_BITS        = $clog2(NUM_BINS);
-    localparam integer GRID_ADDR_BITS      = $clog2(CELLS_PER_BIN);
-    localparam integer PARALLEL_BITS       = $clog2(PARALLEL_READS);
-    localparam integer CYCLES_PER_BIN_READ = (CELLS_PER_BIN + PARALLEL_READS - 1) / PARALLEL_READS;
-
-    logic [TIMER_BITS-1:0]   bin_timer;
-    logic [BIN_IDX_BITS-1:0] current_bin_idx;
-
-    logic [COUNTER_BITS-1:0] mem [0:TOTAL_CELLS-1];
-
-    logic [BIN_IDX_BITS-1:0] event_bin_idx;
-    logic [3:0]              mapped_x, mapped_y;
-    logic [GRID_ADDR_BITS-1:0] event_cell_addr;
-    logic [CELL_ADDR_BITS-1:0] event_full_addr;
-
-    assign mapped_x        = event_x + 5'd8;
-    assign mapped_y        = event_y + 5'd8;
-    assign event_cell_addr = {mapped_y[3:0], mapped_x[3:0]};
+    localparam int CELLS_PER_BIN      = GRID_SIZE * GRID_SIZE;
+    localparam int TOTAL_CELLS        = NUM_BINS * CELLS_PER_BIN;
+    localparam int FEATURE_COUNT      = READOUT_BINS * CELLS_PER_BIN;
+    localparam int BIN_BITS           = (NUM_BINS > 1) ? $clog2(NUM_BINS) : 1;
+    localparam int CELL_BITS          = (CELLS_PER_BIN > 1) ? $clog2(CELLS_PER_BIN) : 1;
+    localparam int BIN_COUNT_BITS     = $clog2(NUM_BINS + 1);
+    localparam int BIN_DURATION_MS    = WINDOW_MS / READOUT_BINS;
+    localparam int CYCLES_PER_BIN_AUTO = (CLK_FREQ_HZ / 1000) * BIN_DURATION_MS;
+    localparam int CYCLES_PER_BIN_USE = (CYCLES_PER_BIN == 0) ? CYCLES_PER_BIN_AUTO : CYCLES_PER_BIN;
+    localparam int CYCLES_PER_BIN_SAFE = (CYCLES_PER_BIN_USE < 1) ? 1 : CYCLES_PER_BIN_USE;
+    localparam int TIMER_BITS         = (CYCLES_PER_BIN_SAFE > 1) ? $clog2(CYCLES_PER_BIN_SAFE) : 1;
 
     typedef enum logic [1:0] {
-        S_IDLE,
-        S_READOUT,
-        S_CLEAR
+        ST_ACCUM      = 2'd0,
+        ST_WAIT_RD    = 2'd1,
+        ST_READOUT    = 2'd2,
+        ST_CLEAR      = 2'd3
     } state_t;
 
     state_t state;
-    assign event_ready = (state != S_CLEAR);
 
-    logic [BIN_IDX_BITS-1:0]                   readout_bin_ptr;
-    logic [GRID_ADDR_BITS-PARALLEL_BITS:0]     readout_cell_ctr;
-    logic [GRID_ADDR_BITS-1:0]                 clear_cell_ctr;
-    logic                                      trigger_readout;
+    logic [COUNTER_BITS-1:0] mem [0:TOTAL_CELLS-1];
 
-    always_ff @(posedge clk) begin
-        if (rst) begin
-            bin_timer       <= '0;
-            current_bin_idx <= '0;
-            trigger_readout <= 1'b0;
-            state           <= S_CLEAR;
-            clear_cell_ctr  <= '0;
-        end else begin
-            trigger_readout <= 1'b0;
+    logic [TIMER_BITS-1:0] timer_ctr;
+    logic [BIN_BITS-1:0]   wr_bin_idx;
+    logic [BIN_BITS-1:0]   clear_bin_idx;
+    logic [BIN_BITS-1:0]   snapshot_start_bin;
+    logic [BIN_COUNT_BITS-1:0] completed_bins;
 
-            if (state == S_IDLE || state == S_READOUT) begin
-                if (bin_timer >= CYCLES_PER_BIN_USE - 1) begin
-                    bin_timer <= '0;
+    logic [BIN_BITS-1:0] rd_bin_off;
+    logic [CELL_BITS-1:0] rd_cell_idx;
+    logic [CELL_BITS-1:0] clear_cell_idx;
 
-                    if (current_bin_idx == NUM_BINS - 1)
-                        current_bin_idx <= '0;
-                    else
-                        current_bin_idx <= current_bin_idx + 1'b1;
+    logic [BIN_BITS:0] wr_bin_plus_1;
+    logic [BIN_BITS-1:0] next_wr_bin;
+    logic [BIN_BITS:0] start_calc;
+    logic [BIN_COUNT_BITS-1:0] completed_bins_next;
 
-                    trigger_readout <= 1'b1;
-                    state           <= S_CLEAR;
-                    clear_cell_ctr  <= '0;
-                end else begin
-                    bin_timer <= bin_timer + 1'b1;
-                end
-            end else if (state == S_CLEAR) begin
-                if (clear_cell_ctr == CELLS_PER_BIN - 1)
-                    state <= S_IDLE;
-                clear_cell_ctr <= clear_cell_ctr + 1'b1;
-            end
-        end
+    logic [BIN_BITS:0] rd_bin_calc;
+    logic [BIN_BITS-1:0] rd_bin_idx;
+    // logic [CELL_BITS+$clog2(GRID_SIZE)-1:0] event_cell_math; // Maybe simplify from this?
+    logic [CELL_BITS-1:0] event_cell_math;
+    logic [CELL_BITS-1:0] event_cell_idx;
+
+    integer idx;
+    initial begin
+        if (READOUT_BINS > NUM_BINS)
+            $error("voxel_binning: READOUT_BINS (%0d) must be <= NUM_BINS (%0d)", READOUT_BINS, NUM_BINS);
+        for (idx = 0; idx < TOTAL_CELLS; idx = idx + 1)
+            mem[idx] = '0;
     end
 
-    logic ram_wen;
-    logic [CELL_ADDR_BITS-1:0] ram_addr;
-    logic [COUNTER_BITS-1:0]   ram_wdata;
-    logic [COUNTER_BITS-1:0]   ram_rdata;
+    assign event_cell_math = (event_y * GRID_SIZE) + event_x;
+    assign event_cell_idx  = event_cell_math[CELL_BITS-1:0];
 
-    logic readout_busy;
-    logic [BIN_IDX_BITS-1:0]   rd_bin_offset;
-    logic [GRID_ADDR_BITS-1:0] rd_cell_ctr;
+    always_comb begin
+        wr_bin_plus_1 = wr_bin_idx + 1'b1;
+        if (wr_bin_plus_1 >= NUM_BINS)
+            next_wr_bin = wr_bin_plus_1 - NUM_BINS;
+        else
+            // next_wr_bin = wr_bin_plus_1[BIN_BITS-1:0];
+            next_wr_bin = wr_bin_plus_1;
+
+        start_calc = wr_bin_idx + NUM_BINS - (READOUT_BINS - 1);
+        if (start_calc >= NUM_BINS)
+            snapshot_start_bin = start_calc - NUM_BINS;
+        else
+            // snapshot_start_bin = start_calc[BIN_BITS-1:0];
+            snapshot_start_bin = start_calc;
+
+        if (completed_bins < NUM_BINS)
+            completed_bins_next = completed_bins + 1'b1;
+        else
+            completed_bins_next = completed_bins;
+
+        rd_bin_calc = snapshot_start_bin + rd_bin_off;
+        if (rd_bin_calc >= NUM_BINS)
+            rd_bin_idx = rd_bin_calc - NUM_BINS;
+        else
+            // rd_bin_idx = rd_bin_calc[BIN_BITS-1:0];
+            rd_bin_idx = rd_bin_calc;
+    end
+
+    assign event_ready   = (state == ST_ACCUM);
+    assign readout_valid = (state == ST_READOUT);
+    assign readout_index = (rd_bin_off * CELLS_PER_BIN) + rd_cell_idx;
+    assign readout_last  = (rd_bin_off == READOUT_BINS-1) && (rd_cell_idx == CELLS_PER_BIN-1);
+    assign readout_data  = mem[(rd_bin_idx * CELLS_PER_BIN) + rd_cell_idx];
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            readout_busy   <= 1'b0;
-            readout_start  <= 1'b0;
-            rd_bin_offset  <= '0;
-            rd_cell_ctr    <= '0;
+            state             <= ST_CLEAR;
+            timer_ctr         <= '0;
+            wr_bin_idx        <= '0;
+            clear_bin_idx     <= '0;
+            completed_bins    <= '0;
+            rd_bin_off        <= '0;
+            rd_cell_idx       <= '0;
+            clear_cell_idx    <= '0;
+            readout_start     <= 1'b0;
         end else begin
             readout_start <= 1'b0;
 
-            if (trigger_readout) begin
-                readout_busy  <= 1'b1;
-                readout_start <= 1'b1;
-                rd_bin_offset <= '0;
-                rd_cell_ctr   <= '0;
-            end else if (readout_busy) begin
-                if (rd_cell_ctr >= CYCLES_PER_BIN_READ - 1) begin
-                    rd_cell_ctr <= '0;
-                    if (rd_bin_offset == READOUT_BINS - 1)
-                        readout_busy <= 1'b0;
-                    else
-                        rd_bin_offset <= rd_bin_offset + 1'b1;
-                end else begin
-                    rd_cell_ctr <= rd_cell_ctr + 1'b1;
+            case (state)
+                ST_ACCUM: begin
+                    if (event_valid) begin
+                        if (mem[(wr_bin_idx * CELLS_PER_BIN) + event_cell_idx] != {COUNTER_BITS{1'b1}})
+                            mem[(wr_bin_idx * CELLS_PER_BIN) + event_cell_idx]
+                                <= mem[(wr_bin_idx * CELLS_PER_BIN) + event_cell_idx] + 1'b1;
+                    end
+
+                    if (timer_ctr == CYCLES_PER_BIN_SAFE - 1) begin
+                        timer_ctr      <= '0;
+                        clear_bin_idx  <= next_wr_bin;
+                        completed_bins <= completed_bins_next;
+
+                        if (completed_bins_next >= READOUT_BINS) begin
+                            if (readout_ready) begin
+                                state         <= ST_READOUT;
+                                rd_bin_off    <= '0;
+                                rd_cell_idx   <= '0;
+                                readout_start <= 1'b1;
+                            end else begin
+                                state <= ST_WAIT_RD;
+                            end
+                        end else begin
+                            state          <= ST_CLEAR;
+                            clear_cell_idx <= '0;
+                        end
+                    end else begin
+                        timer_ctr <= timer_ctr + 1'b1;
+                    end
                 end
-            end
+
+                ST_WAIT_RD: begin
+                    if (readout_ready) begin
+                        state         <= ST_READOUT;
+                        rd_bin_off    <= '0;
+                        rd_cell_idx   <= '0;
+                        readout_start <= 1'b1;
+                    end
+                end
+
+                ST_READOUT: begin
+                    if (readout_last) begin
+                        state          <= ST_CLEAR;
+                        clear_cell_idx <= '0;
+                    end else if (rd_cell_idx == CELLS_PER_BIN - 1) begin
+                        rd_cell_idx <= '0;
+                        rd_bin_off  <= rd_bin_off + 1'b1;
+                    end else begin
+                        rd_cell_idx <= rd_cell_idx + 1'b1;
+                    end
+                end
+
+                ST_CLEAR: begin
+                    mem[(clear_bin_idx * CELLS_PER_BIN) + clear_cell_idx] <= '0;
+                    if (clear_cell_idx == CELLS_PER_BIN - 1) begin
+                        clear_cell_idx <= '0;
+                        wr_bin_idx     <= clear_bin_idx;
+                        state          <= ST_ACCUM;
+                    end else begin
+                        clear_cell_idx <= clear_cell_idx + 1'b1;
+                    end
+                end
+
+                default: state <= ST_ACCUM;
+            endcase
         end
     end
 
-    // Chronological readout: current_bin_idx first (oldest, being cleared),
-    // then wrapping through the ring buffer to the newest filled bin.
-    // The clear and readout happen concurrently; readout sees pre-clear values.
-    logic [BIN_IDX_BITS:0]   calc_bin_idx;
-    logic [BIN_IDX_BITS-1:0] actual_rd_bin_idx;
-
-    always_comb begin
-        calc_bin_idx = current_bin_idx + rd_bin_offset;
-        if (calc_bin_idx >= NUM_BINS)
-            actual_rd_bin_idx = calc_bin_idx - NUM_BINS;
-        else
-            actual_rd_bin_idx = calc_bin_idx;
-    end
-
-    logic [CELL_ADDR_BITS-1:0] port_a_addr;
-    logic [COUNTER_BITS-1:0]   port_a_rdata;
-    logic [COUNTER_BITS-1:0]   port_a_wdata;
-    logic                      port_a_wen;
-
-    logic                      event_valid_pipe;
-    logic [CELL_ADDR_BITS-1:0] evt_addr_pipe;
-
-    logic [CELL_ADDR_BITS-1:0] clear_addr;
-    logic [CELL_ADDR_BITS-1:0] evt_addr;
-
-    assign clear_addr = {current_bin_idx, clear_cell_ctr};
-    assign evt_addr   = {current_bin_idx, event_cell_addr};
-
-    always_ff @(posedge clk) begin
-        port_a_rdata     <= mem[port_a_addr];
-        event_valid_pipe <= event_valid;
-        evt_addr_pipe    <= evt_addr;
-
-        if (port_a_wen)
-            mem[port_a_addr] <= port_a_wdata;
-    end
-
-    logic [CELL_ADDR_BITS-1:0] rd_addr_parallel [0:PARALLEL_READS-1];
-    logic [COUNTER_BITS-1:0]   ram_rdata_parallel [0:PARALLEL_READS-1];
-
-    genvar p;
-    generate
-        for (p = 0; p < PARALLEL_READS; p = p + 1) begin : gen_parallel_reads
-            logic [GRID_ADDR_BITS-1:0] cell_offset;
-            assign cell_offset         = (rd_cell_ctr * PARALLEL_READS) + p;
-            assign rd_addr_parallel[p] = {actual_rd_bin_idx, cell_offset[GRID_ADDR_BITS-1:0]};
-
-            always_ff @(posedge clk) begin
-                if (readout_busy && cell_offset < CELLS_PER_BIN)
-                    ram_rdata_parallel[p] <= mem[rd_addr_parallel[p]];
-                else
-                    ram_rdata_parallel[p] <= '0;
-            end
-        end
-    endgenerate
-
-    always_comb begin
-        for (int i = 0; i < PARALLEL_READS; i = i + 1)
-            readout_data[i*COUNTER_BITS +: COUNTER_BITS] = ram_rdata_parallel[i];
-    end
-
-    always_comb begin
-        port_a_addr  = '0;
-        port_a_wdata = '0;
-        port_a_wen   = 1'b0;
-
-        if (state == S_CLEAR) begin
-            port_a_addr  = clear_addr;
-            port_a_wdata = '0;
-            port_a_wen   = 1'b1;
-        end else if (event_valid_pipe) begin
-            port_a_addr  = evt_addr_pipe;
-            port_a_wdata = (port_a_rdata != {COUNTER_BITS{1'b1}}) ? port_a_rdata + 1'b1 : port_a_rdata;
-            port_a_wen   = 1'b1;
-        end else if (event_valid) begin
-            port_a_addr = evt_addr;
-            port_a_wen  = 1'b0;
-        end
-    end
-
-    logic readout_valid_d;
-    logic [GRID_ADDR_BITS-1:0] cell_offset_max;
-
-    always_comb
-        cell_offset_max = (rd_cell_ctr * PARALLEL_READS) + (PARALLEL_READS - 1);
-
-    always_ff @(posedge clk)
-        readout_valid_d <= (readout_busy && cell_offset_max < CELLS_PER_BIN);
-
-    assign readout_valid = readout_valid_d;
+    // Polarity is carried for interface completeness; current voxel feature is count-only.
+    wire _unused_polarity = event_polarity;
 
 endmodule

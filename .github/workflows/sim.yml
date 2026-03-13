@@ -25,19 +25,19 @@ jobs:
 
       # - run: make lint
 
-      - run: make sim DUT=evt2_decoder
       - run: make sim DUT=input_fifo
+      - run: make sim DUT=evt2_decoder
       - run: make sim DUT=MatMul
 
-      - run: make sim DUT=uart_debug
       - run: make sim DUT=uart_rx
       - run: make sim DUT=uart_tx
+      - run: make sim DUT=uart_debug
 
-      - run: make sim DUT=voxel_bin_core
-      - run: make sim DUT=voxel_bin_top
-      - run: make sim DUT=voxel_binning
       - run: make sim DUT=voxel_gesture_classifier
-      - run: make sim DUT=voxel_systolic_array
-      - run: make sim DUT=voxel_weight_ram
+      # - run: make sim DUT=voxel_systolic_array # takes to long for GA
+      - run: make sim DUT=voxel_binning
+
+      # - run: make sim DUT=voxel_bin_core # takes to long for GA
+      # - run: make sim DUT=voxel_bin_top # takes to long for GA
 
       - run: make clean

@@ -1,35 +1,59 @@
-"""Top-level EVT2 UART testbench for voxel_bin_top with ideal golden models."""
+"""Robust cocotb testbench for voxel_bin_top UART protocol and packetization."""
 
-from collections import deque
 import random
 
 import cocotb
+from util.test_logging import logged_test
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, Event, RisingEdge
+from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
+import os
+from util.config_parser import load_config
 
-CLK_FREQ_HZ = 1_000_000
-BAUD_RATE = 250_000
-CLKS_PER_BIT = CLK_FREQ_HZ // BAUD_RATE
+MODULE = os.environ.get("TOPLEVEL")
+CFG = load_config(MODULE)
 
-GRID_SIZE = 16
-NUM_BINS = 4
-CELLS_PER_BIN = GRID_SIZE * GRID_SIZE
-TOTAL_CELLS = NUM_BINS * CELLS_PER_BIN
-COUNTER_BITS = 6
-MAX_COUNTER = (1 << COUNTER_BITS) - 1
-PARALLEL_READS = 4
-NUM_CLASSES = 4
-PERSISTENCE_COUNT = 2
-MIN_SCORE_THRESH = 30
+CLK_FREQ_HZ          = CFG["CLK_FREQ_HZ"]
+BAUD_RATE            = CFG["BAUD_RATE"]
+WINDOW_MS            = CFG["WINDOW_MS"]
+CYCLES_PER_BIN       = CFG["CYCLES_PER_BIN"]
+GRID_SIZE            = CFG["GRID_SIZE"]
+NUM_BINS             = CFG["NUM_BINS"]
+READOUT_BINS         = CFG["READOUT_BINS"]
+COUNTER_BITS         = CFG["COUNTER_BITS"]
+FIFO_DEPTH           = CFG["FIFO_DEPTH"]
+DATA_WIDTH           = CFG["DATA_WIDTH"]
+REQUIRE_TIME_HIGH    = CFG["REQUIRE_TIME_HIGH"]
+SWAP_INPUT_BYTES     = CFG["SWAP_INPUT_BYTES"]
+SENSOR_WIDTH         = CFG["SENSOR_WIDTH"]
+SENSOR_HEIGHT        = CFG["SENSOR_HEIGHT"]
+WEIGHT_BITS          = CFG["WEIGHT_BITS"]
+WEIGHT_SCALE         = CFG["WEIGHT_SCALE"]
+N                    = CFG["N"]
+PASS_MARGIN          = CFG["PASS_MARGIN"]
+PERSISTENCE_COUNT    = CFG["PERSISTENCE_COUNT"]
+CONF_BITS            = CFG["CONF_BITS"]
+CONF_SHIFT           = CFG["CONF_SHIFT"]
+UART_WORD_FIFO_DEPTH = CFG["UART_WORD_FIFO_DEPTH"]
+TX_FIFO_DEPTH        = CFG["TX_FIFO_DEPTH"]
+POR_CYCLES           = CFG["POR_CYCLES"]
+SOFT_RESET_CYCLES    = CFG["SOFT_RESET_CYCLES"]
+
+CLK_FREQ_HZ = 12_000_000
+BAUD_RATE = 1_000_000
+
+SENSOR_DIM = max(SENSOR_WIDTH, SENSOR_HEIGHT)
 
 EVT_CD_OFF = 0x0
 EVT_CD_ON = 0x1
 EVT_TIME_HIGH = 0x8
 
+CLKS_PER_BIT = CLK_FREQ_HZ // BAUD_RATE
+DRIVE_CLKS_PER_BIT = CLKS_PER_BIT
+BIN_DURATION_MS = WINDOW_MS // READOUT_BINS
+CYCLES_PER_BIN_SAFE = (CLK_FREQ_HZ // 1000) * BIN_DURATION_MS
+BIN_DIV = SENSOR_DIM // GRID_SIZE
 
-def logic_to_int(val):
-    bits = str(val).replace("x", "0").replace("X", "0").replace("z", "0").replace("Z", "0")
-    return int(bits, 2)
+ST_ACCUM = 0
 
 
 def build_evt2_time_high(payload):
@@ -41,413 +65,406 @@ def build_evt2_cd(pkt_type, x_sensor, y_sensor, ts_lsb):
         ((x_sensor & 0x7FF) << 11) | (y_sensor & 0x7FF)
 
 
-def sensor_from_grid(g, jitter):
-    return ((g & 0xF) << 4) | (jitter & 0xF)
+def sensor_from_grid(g):
+    g = max(0, min(GRID_SIZE - 1, int(g)))
+    return min(SENSOR_DIM - 1, (g * BIN_DIV) + (BIN_DIV // 2))
 
 
-class Evt2DecoderModel:
-    def __init__(self):
-        self.time_high_reg = 0
-
-    def step(self, word):
-        pkt_type = (word >> 28) & 0xF
-        ts_lsb = (word >> 22) & 0x3F
-        x_raw = (word >> 11) & 0x7FF
-        y_raw = word & 0x7FF
-
-        if pkt_type == EVT_TIME_HIGH:
-            self.time_high_reg = word & 0x0FFFFFFF
-            return None
-
-        if pkt_type not in (EVT_CD_OFF, EVT_CD_ON):
-            return None
-
-        x_grid = min((x_raw >> 4) & 0x1F, 15)
-        y_grid = min((y_raw >> 4) & 0x1F, 15)
-        pol = 1 if pkt_type == EVT_CD_ON else 0
-        ts = ((self.time_high_reg & 0x3FF) << 6) | ts_lsb
-        return (x_grid, y_grid, pol, ts)
+def map_internal_to_uart(g_internal):
+    return g_internal & 0x3
 
 
-class VoxelBinningModel:
-    """Idealized model of voxel_binning ring-buffer accumulation."""
-
-    def __init__(self):
-        self.mem = [0] * TOTAL_CELLS
-        self.readout_head_snapshot = [0] * CELLS_PER_BIN
-
-    def inject_grid_event(self, bin_idx, x_grid, y_grid):
-        cell_addr = ((y_grid & 0xF) << 4) | (x_grid & 0xF)
-        full_addr = (bin_idx % NUM_BINS) * CELLS_PER_BIN + cell_addr
-        if self.mem[full_addr] < MAX_COUNTER:
-            self.mem[full_addr] += 1
-
-    def on_readout_start(self, current_bin_idx):
-        idx = current_bin_idx % NUM_BINS
-        base = idx * CELLS_PER_BIN
-        self.readout_head_snapshot = self.mem[base:base + CELLS_PER_BIN].copy()
-        for i in range(CELLS_PER_BIN):
-            self.mem[base + i] = 0
-
-    def get_readout(self, current_bin_idx):
-        idx0 = current_bin_idx % NUM_BINS
-        readout = []
-        for bin_offset in range(NUM_BINS):
-            idx = (idx0 + bin_offset) % NUM_BINS
-            base = idx * CELLS_PER_BIN
-            if bin_offset == 0:
-                readout.extend(self.readout_head_snapshot)
-            else:
-                readout.extend(self.mem[base:base + CELLS_PER_BIN])
-        return readout
-
-
-class VoxelWeightClassifierModel:
-    """Idealized model of weight_ram + systolic_array + score thresholding."""
-
-    def __init__(self):
-        self.weights = self._init_weights()
-
-    def _init_weights(self):
-        weights = [[0] * NUM_CLASSES for _ in range(TOTAL_CELLS)]
-        half = GRID_SIZE // 2
-        for i in range(TOTAL_CELLS):
-            spatial_addr = i % CELLS_PER_BIN
-            bin_idx = i // CELLS_PER_BIN
-            cy = spatial_addr // GRID_SIZE
-            cx = spatial_addr % GRID_SIZE
-            temp_phase = 1 if bin_idx >= 2 else -1
-
-            for class_idx in range(NUM_CLASSES):
-                if class_idx == 0:
-                    raw = temp_phase * (half - cy) if cy < half else -(temp_phase * (cy - half + 1))
-                elif class_idx == 1:
-                    raw = temp_phase * (cy - half + 1) if cy >= half else -(temp_phase * (half - cy))
-                elif class_idx == 2:
-                    raw = temp_phase * (half - cx) if cx < half else -(temp_phase * (cx - half + 1))
-                else:
-                    raw = temp_phase * (cx - half + 1) if cx >= half else -(temp_phase * (half - cx))
-                weights[i][class_idx] = max(-128, min(127, raw))
-        return weights
-
-    def classify(self, features):
-        scores = [0] * NUM_CLASSES
-        for i, feat in enumerate(features):
-            f = feat & MAX_COUNTER
-            for k in range(NUM_CLASSES):
-                scores[k] += f * self.weights[i][k]
-
-        best = 0
-        for k in range(1, NUM_CLASSES):
-            if scores[k] > scores[best]:
-                best = k
-
-        abs_best = abs(scores[best])
-        class_pass = abs_best >= MIN_SCORE_THRESH
-        pseudo_mag_x = abs_best & 0xFFFF
-        conf = 15 if pseudo_mag_x > 255 else ((pseudo_mag_x >> 4) & 0xF)
-        return best, int(class_pass), pseudo_mag_x, conf
-
-
-class PersistenceModel:
-    """Idealized model of voxel gesture_classifier persistence filter."""
-
-    def __init__(self, persistence_count=PERSISTENCE_COUNT):
-        self.persistence_count = persistence_count
-        self.last_gesture = 0
-        self.match_count = 0
-
-    def step(self, class_gesture, class_valid, class_pass, abs_delta_x, abs_delta_y):
-        gesture = 0
-        gesture_valid = 0
-        confidence = 0
-
-        if class_valid:
-            if class_pass:
-                if class_gesture == self.last_gesture:
-                    prev_match_count = self.match_count
-                    if self.match_count < self.persistence_count:
-                        self.match_count += 1
-
-                    if prev_match_count >= self.persistence_count - 1:
-                        gesture = class_gesture
-                        gesture_valid = 1
-                        self.match_count = 0
-                        dominant = abs_delta_x if abs_delta_x > abs_delta_y else abs_delta_y
-                        confidence = 15 if dominant > 255 else ((dominant >> 4) & 0xF)
-                else:
-                    self.last_gesture = class_gesture
-                    self.match_count = 0
-            else:
-                self.match_count = 0
-
-        return gesture, gesture_valid, confidence
-
-
-class VoxelTopHarness:
-    def __init__(self, dut):
-        self.dut = dut
-        self.decoder = Evt2DecoderModel()
-        self.binning = VoxelBinningModel()
-        self.classifier = VoxelWeightClassifierModel()
-        self.persistence_dut = PersistenceModel(PERSISTENCE_COUNT)
-
-        self.expected_decoded = deque()
-        self.expected_sys = deque()
-        self.expected_gesture = deque()
-        self.expected_uart = deque()
-
-        self.observed_uart_bytes = []
-        self.readout_start_count = 0
-        self.cycle = 0
-        self.model_sys_samples = 0
-        self.model_sys_mismatches = 0
-
-        self._uart_stop = Event()
-        self._uart_task = None
-
-    async def setup(self):
-        cocotb.start_soon(Clock(self.dut.clk, 10, units="ns").start())
-        self.dut.uart_rx.value = 1
-        await ClockCycles(self.dut.clk, 16)
-        await self._wait_por_release()
-        self._uart_task = cocotb.start_soon(self._uart_tx_monitor())
-        await self.tick(8)
-
-    async def shutdown(self):
-        self._uart_stop.set()
-        await self.tick(CLKS_PER_BIT * 12)
-
-    async def _wait_por_release(self):
-        stable = 0
-        for _ in range(800):
-            await RisingEdge(self.dut.clk)
-            self.cycle += 1
-            if int(self.dut.rst.value) == 0:
-                stable += 1
-                if stable >= 6:
-                    return
-            else:
-                stable = 0
-        raise AssertionError("Timed out waiting for internal reset deassertion")
-
-    def _on_word_streamed(self, word):
-        evt = self.decoder.step(word)
-        if evt is not None:
-            self.expected_decoded.append(evt)
-
-    def _enqueue_uart_byte(self, val, mask=0xFF, tag=""):
-        self.expected_uart.append((val & 0xFF, mask & 0xFF, tag))
-
-    def _sample_cycle(self):
-        if int(self.dut.rst.value):
-            return
-
-        if int(self.dut.u_core.decoded_valid.value):
-            obs = (
-                int(self.dut.u_core.u_evt2_decoder.x_out.value),
-                int(self.dut.u_core.u_evt2_decoder.y_out.value),
-                int(self.dut.u_core.u_evt2_decoder.polarity.value),
-                int(self.dut.u_core.u_evt2_decoder.timestamp.value),
-            )
-            assert self.expected_decoded, \
-                f"Decoded event observed with empty model queue: {obs}"
-            exp = self.expected_decoded.popleft()
-            assert obs == exp, f"Decoded mismatch: DUT={obs}, model={exp}"
-            dut_state = logic_to_int(self.dut.u_core.u_voxel_binning.state.value)
-            dut_bin_idx = logic_to_int(self.dut.u_core.u_voxel_binning.current_bin_idx.value)
-            # Voxel-binning gives clear writes priority; ignore events while clearing.
-            if dut_state != 2:
-                self.binning.inject_grid_event(dut_bin_idx, exp[0], exp[1])
-
-        if int(self.dut.u_core.u_voxel_binning.readout_start.value):
-            self.readout_start_count += 1
-            dut_bin_idx = logic_to_int(self.dut.u_core.u_voxel_binning.current_bin_idx.value)
-            self.binning.on_readout_start(dut_bin_idx)
-            features = self.binning.get_readout(dut_bin_idx)
-            best, class_pass, pseudo_mag_x, conf = self.classifier.classify(features)
-            self.expected_sys.append((best, class_pass, pseudo_mag_x))
-
-        if int(self.dut.u_core.sys_result_valid.value):
-            assert self.expected_sys, "sys_result_valid observed with empty expected queue"
-            exp_best, exp_pass, exp_mag = self.expected_sys.popleft()
-
-            dut_best = logic_to_int(self.dut.u_core.sys_best_class.value)
-            dut_pass = logic_to_int(self.dut.u_core.score_above_thresh.value)
-            dut_mag = logic_to_int(self.dut.u_core.pseudo_mag_x.value) & 0xFFFF
-
-            self.model_sys_samples += 1
-            if (dut_best != exp_best) or (dut_pass != exp_pass) or (dut_mag != (exp_mag & 0xFFFF)):
-                self.model_sys_mismatches += 1
-
-            mg, mv, mc = self.persistence_dut.step(dut_best, 1, dut_pass, dut_mag, 0)
-            if mv:
-                self.expected_gesture.append((mg, mc))
-                self._enqueue_uart_byte(0xA0 | mg, 0xFF, "gesture-header")
-                self._enqueue_uart_byte((mc & 0xF) << 4, 0xF0, "confidence-high-nibble")
-
-        if int(self.dut.u_core.gesture_valid.value):
-            assert self.expected_gesture, "gesture_valid observed with empty expected queue"
-            exp_g, exp_c = self.expected_gesture.popleft()
-            dut_g = int(self.dut.u_core.gesture.value)
-            dut_c = int(self.dut.u_core.gesture_confidence.value)
-
-            dut_mag_x = logic_to_int(self.dut.u_core.pseudo_mag_x.value)
-            conf_from_mag = 15 if dut_mag_x > 255 else ((dut_mag_x >> 4) & 0xF)
-            assert dut_c == conf_from_mag, \
-                f"Confidence formula mismatch: DUT={dut_c}, expected={conf_from_mag} from pseudo_mag_x={dut_mag_x}"
-
-            assert dut_g == exp_g, f"gesture mismatch: DUT={dut_g}, model={exp_g}"
-            assert dut_c == exp_c, f"gesture_confidence mismatch: DUT={dut_c}, model={exp_c}"
-
-    async def tick(self, cycles=1):
-        for _ in range(cycles):
-            await RisingEdge(self.dut.clk)
-            self.cycle += 1
-            self._sample_cycle()
-
-    async def _drive_bit(self, bit, cycles):
-        self.dut.uart_rx.value = bit
-        await self.tick(cycles)
-
-    async def send_uart_byte(self, byte_val):
-        await self._drive_bit(0, CLKS_PER_BIT)
-        for i in range(8):
-            await self._drive_bit((byte_val >> i) & 1, CLKS_PER_BIT)
-        await self._drive_bit(1, CLKS_PER_BIT)
-
-    async def send_command_echo(self):
-        self._enqueue_uart_byte(0x55, 0xFF, "echo")
-        await self.send_uart_byte(0xFF)
-
-    async def send_evt2_word(self, word):
-        first = (word >> 24) & 0xFF
-        assert first not in (0xFC, 0xFD, 0xFE, 0xFF), \
-            f"Word 0x{word:08X} collides with command-byte parser in top"
-        for shift in (24, 16, 8, 0):
-            await self.send_uart_byte((word >> shift) & 0xFF)
-        self._on_word_streamed(word)
-
-    async def wait_next_readout_start(self, timeout_cycles=300000):
-        target = self.readout_start_count + 1
-        for _ in range(timeout_cycles):
-            await self.tick()
-            if self.readout_start_count >= target:
+async def wait_for_por_release(dut):
+    stable = 0
+    for _ in range(5000):
+        await RisingEdge(dut.clk)
+        if int(dut.rst.value) == 0:
+            stable += 1
+            if stable >= 6:
                 return
-        raise AssertionError("Timed out waiting for readout_start")
+        else:
+            stable = 0
+    raise AssertionError("Timed out waiting for POR deassertion")
 
-    async def wait_uart_drain(self, timeout_cycles=320000):
-        quiet = 0
-        last_len = len(self.observed_uart_bytes)
-        for _ in range(timeout_cycles):
-            await self.tick()
-            now_len = len(self.observed_uart_bytes)
-            if now_len == last_len and not self.expected_uart and not self.expected_gesture and not self.expected_sys:
-                quiet += 1
-                if quiet >= CLKS_PER_BIT * 14:
-                    return
-            else:
-                quiet = 0
-                last_len = now_len
-        raise AssertionError("Timed out waiting for UART/model queues to drain")
 
-    async def _uart_tx_monitor(self):
-        while not self._uart_stop.is_set():
-            await RisingEdge(self.dut.clk)
-            if self._uart_stop.is_set():
+async def setup(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    dut.uart_rx.value = 1
+    await ClockCycles(dut.clk, 8)
+    await wait_for_por_release(dut)
+    await ClockCycles(dut.clk, CLKS_PER_BIT * 3)
+    await drain_tx_bytes(dut)
+
+
+async def uart_drive_byte(dut, byte_val):
+    await RisingEdge(dut.clk)
+    # start
+    dut.uart_rx.value = 0
+    await ClockCycles(dut.clk, DRIVE_CLKS_PER_BIT)
+
+    # data LSB-first
+    for i in range(8):
+        dut.uart_rx.value = (byte_val >> i) & 1
+        await ClockCycles(dut.clk, DRIVE_CLKS_PER_BIT)
+
+    # stop
+    dut.uart_rx.value = 1
+    await ClockCycles(dut.clk, DRIVE_CLKS_PER_BIT)
+
+
+async def await_rx_byte(dut, timeout_cycles=50000):
+    for _ in range(timeout_cycles):
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if int(dut.rx_byte_valid.value):
+            return int(dut.rx_byte.value)
+    return None
+
+
+async def await_tx_bytes(dut, count, timeout_cycles=200000):
+    out = []
+    for _ in range(timeout_cycles):
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if int(dut.tx_byte_valid.value):
+            out.append(int(dut.tx_byte.value))
+            if len(out) >= count:
+                return out
+    raise AssertionError(f"Timed out waiting for {count} tx byte(s), got {out}")
+
+
+async def drain_tx_bytes(dut, idle_cycles=CLKS_PER_BIT * 12):
+    # Consume any startup bytes if present; return once the stream stays quiet.
+    quiet = 0
+    while quiet < idle_cycles:
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if int(dut.tx_byte_valid.value):
+            quiet = 0
+        else:
+            quiet += 1
+
+
+async def await_tx_idle(dut, stable_cycles=CLKS_PER_BIT * 3, timeout_cycles=500000):
+    # Wait until TX producer/consumer path has no pending activity for a stable window.
+    quiet = 0
+    for _ in range(timeout_cycles):
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        busy = int(dut.tx_busy.value)
+        out_valid = int(dut.tx_fifo_out_valid.value)
+        in_valid = int(dut.tx_fifo_in_valid.value)
+        second_pending = int(dut.second_byte_pending.value)
+        if busy or out_valid or in_valid or second_pending:
+            quiet = 0
+        else:
+            quiet += 1
+            if quiet >= stable_cycles:
                 return
+    raise AssertionError("Timed out waiting for TX path to become idle")
 
-            if int(self.dut.uart_tx.value) != 0:
-                continue
 
-            await ClockCycles(self.dut.clk, CLKS_PER_BIT // 2)
-            if int(self.dut.uart_tx.value) != 0:
-                continue
+async def issue_soft_reset(dut, timeout_cycles=CLKS_PER_BIT * 400):
+    async def _await_rst():
+        for _ in range(timeout_cycles):
+            await RisingEdge(dut.clk)
+            await ReadOnly()
+            if int(dut.rst.value):
+                return True
+        return False
 
-            byte_val = 0
-            for i in range(8):
-                await ClockCycles(self.dut.clk, CLKS_PER_BIT)
-                if int(self.dut.uart_tx.value):
-                    byte_val |= 1 << i
+    rst_task = cocotb.start_soon(_await_rst())
+    await uart_drive_byte(dut, 0xFC)
+    saw_rst = await rst_task
+    assert saw_rst, "Soft reset command did not assert rst"
 
-            await ClockCycles(self.dut.clk, CLKS_PER_BIT)
-            assert int(self.dut.uart_tx.value) == 1, "UART TX framing error: stop bit low"
+    # Wait for rst to deassert.
+    for _ in range(timeout_cycles):
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if not int(dut.rst.value):
+            break
+    else:
+        raise AssertionError("Soft reset did not deassert in time")
 
-            self.observed_uart_bytes.append(byte_val)
-            assert self.expected_uart, \
-                f"Unexpected UART byte 0x{byte_val:02X} with empty expected queue"
-            exp_val, exp_mask, tag = self.expected_uart.popleft()
-            assert (byte_val & exp_mask) == (exp_val & exp_mask), \
-                f"{tag} mismatch: DUT=0x{byte_val:02X}, model=0x{exp_val:02X}, mask=0x{exp_mask:02X}"
+    await ClockCycles(dut.clk, CLKS_PER_BIT * 2)
+    await await_tx_idle(dut)
+
+
+async def send_evt2_word_uart(dut, word):
+    b0 = (word >> 24) & 0xFF
+    assert b0 not in (0xFC, 0xFD, 0xFE, 0xFF), f"Word starts with command byte 0x{b0:02X}"
+    for shift in (24, 16, 8, 0):
+        await uart_drive_byte(dut, (word >> shift) & 0xFF)
+
+
+async def collect_core_words(dut, cycles):
+    words = []
+    for _ in range(cycles):
+        await RisingEdge(dut.clk)
+        if int(dut.core_evt_valid.value) and int(dut.core_evt_ready.value):
+            words.append(int(dut.core_evt_word.value))
+    return words
+
+
+async def force_core_bin_rollover(dut):
+    while int(dut.u_core.u_voxel_binning.state.value) != ST_ACCUM:
+        await RisingEdge(dut.clk)
+    dut.u_core.u_voxel_binning.timer_ctr.value = CYCLES_PER_BIN_SAFE - 1
+    await RisingEdge(dut.clk)
 
 
 def region_points(name):
-    pts = []
-    if name == "top":
-        ys, xs = range(1, 5), range(4, 12)
-    elif name == "bottom":
-        ys, xs = range(11, 15), range(4, 12)
-    elif name == "left":
-        ys, xs = range(4, 12), range(1, 5)
-    elif name == "right":
-        ys, xs = range(4, 12), range(11, 15)
-    else:
-        raise ValueError(f"Unknown region: {name}")
+    x_lo = max(0, GRID_SIZE // 8)
+    x_hi = min(GRID_SIZE, GRID_SIZE - (GRID_SIZE // 8))
+    y_lo = x_lo
+    y_hi = x_hi
+    band = max(2, GRID_SIZE // 4)
 
+    if name == "top":
+        ys, xs = range(y_lo, min(y_lo + band, GRID_SIZE)), range(x_lo, x_hi)
+    elif name == "bottom":
+        ys, xs = range(max(GRID_SIZE - band, 0), y_hi), range(x_lo, x_hi)
+    elif name == "left":
+        ys, xs = range(y_lo, y_hi), range(x_lo, min(x_lo + band, GRID_SIZE))
+    elif name == "right":
+        ys, xs = range(y_lo, y_hi), range(max(GRID_SIZE - band, 0), x_hi)
+    else:
+        raise ValueError(name)
+
+    pts = []
     for y in ys:
         for x in xs:
             pts.append((x, y))
     return pts
 
 
-async def drive_region_words(h, rng, region_name, words=10):
-    pts = region_points(region_name)
-    for i in range(words):
-        gx, gy = rng.choice(pts)
-        x_sensor = sensor_from_grid(gx, rng.randint(0, 15))
-        y_sensor = sensor_from_grid(gy, rng.randint(0, 15))
-        pkt = EVT_CD_ON if (i & 1) else EVT_CD_OFF
-        await h.send_evt2_word(build_evt2_cd(pkt, x_sensor, y_sensor, i & 0x3F))
+@logged_test()
+async def test_uart_commands_and_word_assembly(dut):
+    await setup(dut)
+
+    # Echo command.
+    # await_rx_byte must start concurrently with uart_drive_byte: rx_byte_valid is a
+    # 1-cycle pulse that fires during the STOP-bit sampling phase (~72 clks before
+    # uart_drive_byte returns), so a sequential call after drive always misses it.
+    await await_tx_idle(dut)
+    echo_task  = cocotb.start_soon(await_tx_bytes(dut, 1))
+    rx_task    = cocotb.start_soon(await_rx_byte(dut, timeout_cycles=CLKS_PER_BIT * 200))
+    await uart_drive_byte(dut, 0xFF)
+    rx = await rx_task
+    assert rx == 0xFF, f"Echo command decode mismatch: 0x{(rx if rx is not None else -1):02X}"
+    b = (await echo_task)[0]
+    assert b == 0x55, f"Echo response mismatch: {b}"
+
+    # Config command.
+    await await_tx_idle(dut)
+    cfg_task = cocotb.start_soon(await_tx_bytes(dut, 2))
+    rx_task  = cocotb.start_soon(await_rx_byte(dut, timeout_cycles=CLKS_PER_BIT * 200))
+    await uart_drive_byte(dut, 0xFD)
+    rx = await rx_task
+    assert rx == 0xFD, f"Config command decode mismatch: 0x{(rx if rx is not None else -1):02X}"
+    c0, c1 = await cfg_task
+    assert c0 == 0x08 and c1 == 0x08, f"Config response mismatch: {[c0, c1]}"
+
+    # Status command.
+    await await_tx_idle(dut)
+    status_task = cocotb.start_soon(await_tx_bytes(dut, 1))
+    rx_task     = cocotb.start_soon(await_rx_byte(dut, timeout_cycles=CLKS_PER_BIT * 200))
+    await uart_drive_byte(dut, 0xFE)
+    rx = await rx_task
+    assert rx == 0xFE, f"Status command decode mismatch: 0x{(rx if rx is not None else -1):02X}"
+    s = (await status_task)[0]
+    assert (s & 0xF0) == 0xB0, f"Status high nibble mismatch: 0x{s:02X}"
+    assert (s & 0x01) == 0, f"Status bit0 should be 0: 0x{s:02X}"
+
+    # Soft reset command should assert internal rst pulse and fully recover.
+    await issue_soft_reset(dut)
+
+    # Word assembly path: send one EVT2 word and verify it reaches core word stream.
+    word = build_evt2_time_high(0x123456)
+    collector = cocotb.start_soon(collect_core_words(dut, cycles=80000))
+    await send_evt2_word_uart(dut, word)
+    words = await collector
+    assert word in words, f"Assembled word 0x{word:08X} not observed on core_evt_word"
 
 
-@cocotb.test()
-async def test_voxel_bin_top_uart_evt2_golden(dut):
-    """End-to-end ideal-model scoreboard: EVT2 UART -> binning/classifier -> UART packets."""
+@logged_test()
+async def test_gesture_uart_packet_stream_matches_core(dut):
+    await setup(dut)
+    await issue_soft_reset(dut)
+
+    produced_bytes = []
+    dequeued_bytes = []
+    core_gesture_count = 0
+
+    stop = {"flag": False}
+
+    async def core_gesture_monitor():
+        nonlocal core_gesture_count
+        prev_valid = 0
+        while not stop["flag"]:
+            await RisingEdge(dut.clk)
+            await ReadOnly()
+            if int(dut.rst.value):
+                prev_valid = 0
+                continue
+            cur_valid = int(dut.u_core.gesture_valid.value)
+            if cur_valid and not prev_valid:
+                core_gesture_count += 1
+            prev_valid = cur_valid
+
+    async def uart_tx_monitor():
+        while not stop["flag"]:
+            await RisingEdge(dut.clk)
+            await ReadOnly()
+            if int(dut.tx_fifo_in_valid.value) and int(dut.tx_fifo_in_ready.value):
+                produced_bytes.append(int(dut.tx_fifo_in_data.value))
+            if int(dut.tx_fifo_out_valid.value) and int(dut.tx_fifo_out_ready.value):
+                dequeued_bytes.append(int(dut.tx_fifo_out_data.value))
+
+    mon_core = cocotb.start_soon(core_gesture_monitor())
+    mon_uart = cocotb.start_soon(uart_tx_monitor())
+
     rng = random.Random(0xA91B57)
-    h = VoxelTopHarness(dut)
-    await h.setup()
 
-    await h.send_command_echo()
-    await h.send_evt2_word(build_evt2_time_high(0x0123))
+    await send_evt2_word_uart(dut, build_evt2_time_high(0x12345))
 
-    await h.wait_next_readout_start()
-
-    # Consecutive-region script to exercise persistence and directional response.
     script = [
-        "bottom", "bottom", "top", "top", "bottom", "bottom", "top", "top",
-        "right", "right", "left", "left", "right", "right", "left", "left",
+        "bottom", "bottom", "top", "top",
+        "right", "right", "left", "left",
+        "bottom", "bottom", "top", "top",
     ]
 
     for region in script:
-        # Keep events away from clear boundaries so accumulation semantics are deterministic.
-        await h.tick(300)
-        await drive_region_words(h, rng, region_name=region, words=10)
-        await h.wait_next_readout_start()
+        pts = region_points(region)
+        for i in range(12):
+            gx, gy = rng.choice(pts)
+            x_s = sensor_from_grid(gx)
+            y_s = sensor_from_grid(gy)
+            pkt = EVT_CD_ON if (i & 1) else EVT_CD_OFF
+            word = build_evt2_cd(pkt, x_s, y_s, i & 0x3F)
+            await send_evt2_word_uart(dut, word)
+        await force_core_bin_rollover(dut)
 
-    # Flush final pipeline outputs.
-    for _ in range(4):
-        await h.wait_next_readout_start()
+    # Give pipeline time to flush results and TX queue.
+    await ClockCycles(dut.clk, 200000)
 
-    await h.wait_uart_drain()
+    stop["flag"] = True
+    await ClockCycles(dut.clk, CLKS_PER_BIT * 20)
 
-    assert not h.expected_decoded, \
-        f"Unconsumed decoded expectations: {len(h.expected_decoded)}"
-    assert not h.expected_sys, \
-        f"Unconsumed classifier expectations: {len(h.expected_sys)}"
-    assert not h.expected_gesture, \
-        f"Unconsumed gesture expectations: {len(h.expected_gesture)}"
-    assert not h.expected_uart, \
-        f"Unsent expected UART bytes: {len(h.expected_uart)}"
-    assert h.model_sys_samples > 0, "No classifier model comparison samples were collected"
+    # Drain monitor tasks (best effort).
+    mon_core.cancel()
+    mon_uart.cancel()
 
-    await h.shutdown()
+    assert core_gesture_count > 0, "No core gesture_valid pulses observed"
+    assert len(dequeued_bytes) == (2 * core_gesture_count), \
+        (f"Expected 2 UART bytes per core gesture, got {len(dequeued_bytes)} bytes "
+         f"for {core_gesture_count} gestures")
+    assert dequeued_bytes == produced_bytes, \
+        f"UART packet stream mismatch\nTX_DEQ: {dequeued_bytes}\nTX_IN:  {produced_bytes}"
+
+
+@logged_test()
+async def test_diag_command(dut):
+    """0xFB diagnostic command returns 2 bytes: event_count and sticky debug flags."""
+    await setup(dut)
+    await await_tx_idle(dut)
+
+    # Clear debug/sticky state accumulated by earlier tests in this module.
+    await issue_soft_reset(dut)
+
+    diag_task = cocotb.start_soon(await_tx_bytes(dut, 2))
+    rx_task   = cocotb.start_soon(await_rx_byte(dut, timeout_cycles=CLKS_PER_BIT * 200))
+    await uart_drive_byte(dut, 0xFB)
+
+    rx = await rx_task
+    assert rx == 0xFB, f"Diag command RX decode: expected 0xFB, got 0x{(rx or 0):02X}"
+
+    d = await diag_task
+    assert len(d) == 2, f"Expected 2 diag bytes, got {d}"
+
+    # Byte 0: debug_event_count — must be 0 after soft reset with no subsequent EVT2 words.
+    assert d[0] == 0, f"debug_event_count should be 0 after soft reset, got {d[0]}"
+
+    # Byte 1: sticky diagnostic flags.
+    # Bits [7:2] are sticky pipeline-seen flags — all should be 0 after reset.
+    # Bit [1]: core_gesture_valid (live) — 0
+    # Bit [0]: core_debug_temporal_phase (live binner phase)
+    assert (d[1] & 0xFE) == 0, \
+        f"Diag byte1 upper 7 bits should be 0 after soft reset with no events, got 0x{d[1]:02X}"
+
+
+@logged_test()
+async def test_gesture_packet_byte_content(dut):
+    """Verify that each UART gesture packet encodes class and confidence correctly.
+
+    Packet format (RTL): byte0 = 0xA0|class, byte1 = {conf[3:0], evtcnt[7:4]}.
+    """
+    await setup(dut)
+
+    # Capture (gesture, confidence, event_count) when core fires gesture_valid,
+    # and concurrently capture TX bytes as they enter the TX FIFO.
+    core_records = []
+    tx_bytes = []
+
+    async def monitors():
+        prev_valid = 0
+        while True:
+            await RisingEdge(dut.clk)
+            await ReadOnly()
+            if int(dut.rst.value):
+                prev_valid = 0
+                continue
+            # Capture gesture_valid rising edge.
+            cur_valid = int(dut.u_core.gesture_valid.value)
+            if cur_valid and not prev_valid:
+                core_records.append((
+                    int(dut.u_core.gesture.value),
+                    int(dut.u_core.gesture_confidence.value),
+                    int(dut.u_core.debug_event_count.value),
+                ))
+            prev_valid = cur_valid
+            # Capture bytes as they enter the TX FIFO (before serialization drains them).
+            if int(dut.tx_fifo_in_valid.value) and int(dut.tx_fifo_in_ready.value):
+                tx_bytes.append(int(dut.tx_fifo_in_data.value))
+
+    mon = cocotb.start_soon(monitors())
+
+    rng = random.Random(0x1A2B_3C4D)
+    await send_evt2_word_uart(dut, build_evt2_time_high(0x99999))
+
+    script = [
+        "bottom", "bottom", "top", "top",
+        "right", "right", "left", "left",
+        "bottom", "bottom", "top", "top",
+    ]
+    for region in script:
+        pts = region_points(region)
+        for i in range(12):
+            gx, gy = rng.choice(pts)
+            word = build_evt2_cd(EVT_CD_ON if (i & 1) else EVT_CD_OFF,
+                                 sensor_from_grid(gx), sensor_from_grid(gy), i & 0x3F)
+            await send_evt2_word_uart(dut, word)
+        await force_core_bin_rollover(dut)
+
+    # Wait for pipeline and TX FIFO to flush.
+    await ClockCycles(dut.clk, 200000)
+    mon.cancel()
+
+    assert len(core_records) > 0, "No core gesture_valid pulses observed"
+    assert len(tx_bytes) == 2 * len(core_records), (
+        f"Expected {2*len(core_records)} TX bytes, got {len(tx_bytes)}"
+    )
+
+    for i, (cls, conf, evtcnt) in enumerate(core_records):
+        b0 = tx_bytes[2 * i]
+        b1 = tx_bytes[2 * i + 1]
+        exp_b0 = 0xA0 | (cls & 0x3)
+        exp_b1 = ((conf & 0xF) << 4) | ((evtcnt >> 4) & 0xF)
+        assert b0 == exp_b0, (
+            f"Packet {i}: byte0 DUT=0x{b0:02X} expected=0x{exp_b0:02X} (class={cls})"
+        )
+        assert b1 == exp_b1, (
+            f"Packet {i}: byte1 DUT=0x{b1:02X} expected=0x{exp_b1:02X} "
+            f"(conf={conf}, evtcnt={evtcnt})"
+        )

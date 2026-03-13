@@ -23,7 +23,6 @@ endif
 
 .DEFAULT_GOAL := help
 
-# NEW ----------------------------------------------------------------------------
 SIM_DUTS = $(strip $(DUT))
 
 SV_SRCS := $(shell find src -name "*.sv")
@@ -35,15 +34,12 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z0-9_-]+:[^#]*## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":[^#]*## "}; {printf "  %-20s %s\n", $$1, $$2}'
 .PHONY: help
 
-# Optional configuration file
-CONFIG ?=
-CONFIG_FILE := $(if $(CONFIG),configs/$(CONFIG).txt,)
-
-HAS_CONFIG := $(if $(CONFIG),1,0)
+# Simulation configuration
+CONFIG ?= voxel_default
+CONFIG_FILE := configs/$(CONFIG).txt
 
 # iCE40 FPGA Flow Wrapper
 ICE40_MAKEFILE := ice40/ice40.mk
-# ---------------------------------------------------------------------------------
 
 all: librelane ## Build the project (runs LibreLane)
 .PHONY: all
@@ -94,108 +90,84 @@ sim: ## Run RTL simulation with cocotb
 		echo "Error: You must specify DUT=<module_name>"; \
 		echo "Example: make sim DUT=voxel_bin_top"; \
 		exit 1; \
-	fi; 
-	@for d in $(SIM_DUTS); do \
+	fi; \
+	for d in $(SIM_DUTS); do \
 		echo "===================================================="; \
-		echo " Running DUT=$$d"; \
+		echo " Running DUT=$$d with CONFIG=$(CONFIG)"; \
 		echo "===================================================="; \
 		if [ ! -f "cocotb/$${d}_tb.py" ]; then \
 			echo "Skipping $$d (no testbench found)"; \
 			continue; \
 		fi; \
+		rm -rf cocotb/sim_build/$$d; \
 		\
-		# ------------------ Default CARGS ------------------ \
-		if [ "$$d" = "evt2_decoder" ]; then \
-			CARGS="-P$$d.GRID_SIZE=16"; \
-		elif [ "$$d" = "input_fifo" ]; then \
-			CARGS="-P$$d.FIFO_DEPTH=8 -P$$d.DATA_WIDTH=32"; \
-		elif [ "$$d" = "uart_debug" ]; then \
-			CARGS="-P$$d.CLK_FREQ_HZ=12000000 -P$$d.BAUD_RATE=3000000"; \
-		elif [ "$$d" = "uart_rx" ]; then \
-			CARGS="-P$$d.CLK_FREQ_HZ=12000000 -P$$d.BAUD_RATE=3000000"; \
-		elif [ "$$d" = "uart_tx" ]; then \
-			CARGS="-P$$d.CLK_FREQ_HZ=12000000 -P$$d.BAUD_RATE=3000000"; \
-		elif [ "$$d" = "MatMul" ]; then \
-			CARGS="-P$$d.N=16 -P$$d.DATA_BIT_SIZE=16"; \
-		elif [ "$$d" = "voxel_gesture_classifier" ]; then \
-			CARGS="-P$$d.ACC_SUM_BITS=18 -P$$d.PERSISTENCE_COUNT=2"; \
-		elif [ "$$d" = "voxel_systolic_array" ]; then \
-			CARGS="-P$$d.GRID_SIZE=16 -P$$d.NUM_BINS=4 -P$$d.NUM_CLASSES=4 -P$$d.VALUE_BITS=6 -P$$d.WEIGHT_BITS=8 -P$$d.ACC_BITS=24 -P$$d.PARALLEL_READS=4"; \
-		elif [ "$$d" = "voxel_weight_ram" ]; then \
-			CARGS="-P$$d.CLASS_IDX=0 -P$$d.GRID_SIZE=16 -P$$d.NUM_BINS=4 -P$$d.WEIGHT_BITS=8"; \
-		elif [ "$$d" = "voxel_binning" ]; then \
-			CARGS="-P$$d.CYCLES_PER_BIN=100"; \
-		elif [ "$$d" = "voxel_bin_core" ]; then \
-			CARGS="-P$$d.CYCLES_PER_BIN=100"; \
-		elif [ "$$d" = "voxel_bin_top" ]; then \
-			CARGS="-P$$d.CYCLES_PER_BIN=100 -P$$d.CLK_FREQ_HZ=1000000 -P$$d.BAUD_RATE=250000 -P$$d.PARALLEL_READS=4"; \
-		else \
-			CARGS=""; \
-		fi; \
+		SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv src/ram_1r1w_sync.sv"; \
 		\
-		rm -rf sim_build; \
-		\
-		if echo $$d | grep -q gradient; then \
-			SRCS="src/gradient_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv"; \
-		else \
-			SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv"; \
-		fi; \
-		\
-		# ------------------ CONFIG override ------------------ \
-		if [ "$(HAS_CONFIG)" = "1" ]; then \
-			PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m config_parser $$d); \
-			COMPILE_ARGS="$$PARAMS"; \
-			export SIM_CONFIG=$(CONFIG_FILE); \
-		else \
-			COMPILE_ARGS="$$CARGS"; \
-			unset SIM_CONFIG; \
-		fi; \
+		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
+		export SIM_CONFIG=$(CONFIG_FILE); \
 		\
 		TOPLEVEL=$$d \
 		TOPLEVEL_LANG=verilog \
 		COCOTB_TEST_MODULES=$${d}_tb \
 		VERILOG_SOURCES="$$SRCS" \
-		COMPILE_ARGS="$$COMPILE_ARGS" \
-		SIM_CARGS="$$COMPILE_ARGS" \
+		COMPILE_ARGS="$$PARAMS" \
+		WAVES=1 \
+		SIM_BUILD=cocotb/sim_build/$$d \
 		PYTHONPATH=cocotb \
-		make -f $$(cocotb-config --makefiles)/Makefile.sim; \
+		make -f $$(cocotb-config --makefiles)/Makefile.sim results.xml; \
 	done
 .PHONY: sim
 
+# sim: ## Run RTL simulation with cocotb
+# 	@if [ -z "$(DUT)" ]; then \
+# 		echo "Error: You must specify DUT=<module_name>"; \
+# 		echo "Example: make sim DUT=voxel_bin_top"; \
+# 		exit 1; \
+# 	fi; \
+# 	for d in $(SIM_DUTS); do \
+# 		echo "===================================================="; \
+# 		echo " Running DUT=$$d with CONFIG=$(CONFIG)"; \
+# 		echo "===================================================="; \
+# 		if [ ! -f "cocotb/$${d}_tb.py" ]; then \
+# 			echo "Skipping $$d (no testbench found)"; \
+# 			continue; \
+# 		fi; \
+# 		rm -rf sim_build; \
+# 		\
+# 		SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv src/ram_1r1w_sync.sv"; \
+# 		\
+# 		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
+# 		export SIM_CONFIG=$(CONFIG_FILE); \
+# 		\
+# 		TOPLEVEL=$$d \
+# 		TOPLEVEL_LANG=verilog \
+# 		COCOTB_TEST_MODULES=$${d}_tb \
+# 		VERILOG_SOURCES="$$SRCS" \
+# 		COMPILE_ARGS=$$PARAMS \
+# 		PYTHONPATH=cocotb \
+# 		make -f $$(cocotb-config --makefiles)/Makefile.sim; \
+# 	done
+# .PHONY: sim
+
+sim-fast: ## Run voxel_bin_core sim with small fast-sim config (8x8 grid, N=8, 4 bins)
+	$(MAKE) sim DUT=voxel_bin_core CONFIG=voxel_sim_fast
+.PHONY: sim-fast
+
 sim-all: ## Test all the modules against Makefile compile args
-	$(MAKE) sim DUT=evt2_decoder
 	$(MAKE) sim DUT=input_fifo
-	$(MAKE) sim DUT=uart_debug
+	$(MAKE) sim DUT=evt2_decoder
+	$(MAKE) sim DUT=MatMul
 	$(MAKE) sim DUT=uart_rx
 	$(MAKE) sim DUT=uart_tx
-	$(MAKE) sim DUT=MatMul
+	$(MAKE) sim DUT=uart_debug
+	$(MAKE) sim DUT=ram_1r1w_sync
 	$(MAKE) sim DUT=voxel_gesture_classifier
 	$(MAKE) sim DUT=voxel_systolic_array
-	$(MAKE) sim DUT=voxel_weight_ram
 	$(MAKE) sim DUT=voxel_binning
 	$(MAKE) sim DUT=voxel_bin_core
 	$(MAKE) sim DUT=voxel_bin_top
-
-# 	$(MAKE) sim DUT=input_fifo CONFIG=voxel_default
-# 	$(MAKE) sim DUT=uart_debug CONFIG=voxel_default
-# # 	$(MAKE) sim DUT=uart_rx CONFIG=voxel_default 				  # failing
-# 	$(MAKE) sim DUT=uart_tx CONFIG=voxel_default
-# 	$(MAKE) sim DUT=MatMul CONFIG=voxel_default
-# 	$(MAKE) sim DUT=evt2_decoder CONFIG=voxel_default
-# 	$(MAKE) sim DUT=voxel_gesture_classifier CONFIG=voxel_default
-# 	$(MAKE) sim DUT=voxel_systolic_array CONFIG=voxel_default
-# 	$(MAKE) sim DUT=voxel_weight_ram CONFIG=voxel_default
-# 	$(MAKE) sim DUT=voxel_binning CONFIG=voxel_default 			  # takes a while to run
-# 	$(MAKE) sim DUT=voxel_bin_core CONFIG=voxel_default
-# # 	$(MAKE) sim DUT=voxel_bin_top CONFIG=voxel_default  		  # failing
-
-#	$(MAKE) sim DUT=gradient_map_core CONFIG=gradient_default# still broken
-#	$(MAKE) sim DUT=gradient_map_top CONFIG=gradient_default# still broken
-#	$(MAKE) sim DUT=gradient_gesture_classifier CONFIG=gradient_default# takes a while to run
-#	$(MAKE) sim DUT=gradient_mapping CONFIG=gradient_default
-#	$(MAKE) sim DUT=gradient_systolic_array CONFIG=gradient_default
-#	$(MAKE) sim DUT=gradient_weight_ram CONFIG=gradient_default
 .PHONY: sim-all
+# matmul
 
 sim-gl: ## Run gate-level simulation with cocotb (after copy-final)
 	cd cocotb; GL=1 PDK_ROOT=${PDK_ROOT} PDK=${PDK} SLOT=${SLOT} python3 chip_top_tb.py

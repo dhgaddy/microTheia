@@ -1,25 +1,24 @@
-"""units testbench for uart_tx with golden reference model."""
+"""Robust cocotb testbench for uart_tx with cycle-accurate golden model."""
+
+import random
 
 import cocotb
+from util.test_logging import logged_test
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, ClockCycles
-import random
+from cocotb.triggers import ClockCycles, NextTimeStep, ReadOnly, RisingEdge
 import os
-from config_parser import load_config
+from util.config_parser import load_config
 
 MODULE = os.environ.get("TOPLEVEL")
 CFG = load_config(MODULE)
 
-CLK_FREQ_HZ = CFG["CLK_FREQ_HZ"]
-BAUD_RATE = CFG["BAUD_RATE"]
+CLK_FREQ_HZ = CFG["CLK_FREQ_HZ"] # 12_000_000
+BAUD_RATE = CFG["BAUD_RATE"] # 115200
+
 CLKS_PER_BIT = CLK_FREQ_HZ // BAUD_RATE
 
-# ---------------------------------------------------------------------------
-# Golden reference model
-# ---------------------------------------------------------------------------
-class UartTxModel:
-    """Cycle-accurate model of the uart_tx 8N1 transmitter."""
 
+class UartTxModel:
     IDLE, START, DATA, STOP = 0, 1, 2, 3
 
     def __init__(self, clks_per_bit=CLKS_PER_BIT):
@@ -34,15 +33,18 @@ class UartTxModel:
         self.tx = 1
         self.busy = 0
 
-    def step(self, data, valid):
-        """Advance one clock cycle. Returns (tx, busy)."""
+    def step(self, rst, data, valid):
+        if rst:
+            self.reset()
+            return self.tx, self.busy
+
         if self.state == self.IDLE:
             self.tx = 1
             self.clk_cnt = 0
             self.bit_idx = 0
             self.busy = 0
             if valid:
-                self.tx_data = data
+                self.tx_data = data & 0xFF
                 self.busy = 1
                 self.state = self.START
 
@@ -78,15 +80,14 @@ class UartTxModel:
         return self.tx, self.busy
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-async def receive_uart_byte(dut, timeout=500):
-    """Sample the tx line and recover a byte. Returns the byte or None."""
-    for _ in range(timeout):
+async def receive_uart_byte(dut, timeout_cycles=200000):
+    prev = int(dut.tx.value)
+    for _ in range(timeout_cycles):
         await RisingEdge(dut.clk)
-        if int(dut.tx.value) == 0:
+        cur = int(dut.tx.value)
+        if prev == 1 and cur == 0:
             break
+        prev = cur
     else:
         return None
 
@@ -94,14 +95,16 @@ async def receive_uart_byte(dut, timeout=500):
     if int(dut.tx.value) != 0:
         return None
 
-    byte_val = 0
+    val = 0
     for i in range(8):
         await ClockCycles(dut.clk, CLKS_PER_BIT)
         if int(dut.tx.value):
-            byte_val |= (1 << i)
+            val |= 1 << i
 
     await ClockCycles(dut.clk, CLKS_PER_BIT)
-    return byte_val
+    if int(dut.tx.value) != 1:
+        return None
+    return val
 
 
 async def setup(dut):
@@ -114,121 +117,87 @@ async def setup(dut):
     await ClockCycles(dut.clk, 2)
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-@cocotb.test()
-async def test_reset(dut):
-    """tx=1 and busy=0 after reset."""
+@logged_test()
+async def test_reset_defaults(dut):
     await setup(dut)
-    assert int(dut.tx.value) == 1, "tx should be idle high"
-    assert int(dut.busy.value) == 0, "busy should be 0"
+    assert int(dut.tx.value) == 1
+    assert int(dut.busy.value) == 0
 
 
-@cocotb.test()
-async def test_single_byte(dut):
-    """Transmit 0xA5 and verify the serial waveform."""
+@logged_test()
+async def test_single_byte_transmit(dut):
     await setup(dut)
-    recv_task = cocotb.start_soon(receive_uart_byte(dut))
+
+    rx_task = cocotb.start_soon(receive_uart_byte(dut))
     dut.data.value = 0xA5
     dut.valid.value = 1
     await RisingEdge(dut.clk)
     dut.valid.value = 0
-    result = await recv_task
-    assert result == 0xA5, f"Expected 0xA5, got {result}"
+
+    got = await rx_task
+    assert got == 0xA5, f"Expected 0xA5, got {got}"
 
 
-@cocotb.test()
-async def test_busy_during_transmission(dut):
-    """busy should be high throughout a transmission."""
-    await setup(dut)
-    dut.data.value = 0x42
-    dut.valid.value = 1
-    await RisingEdge(dut.clk)
-    dut.valid.value = 0
-    await RisingEdge(dut.clk)
-    total_bits = 10  # start + 8 data + stop
-    busy_seen = True
-    for _ in range(total_bits * CLKS_PER_BIT - 2):
-        await RisingEdge(dut.clk)
-        if int(dut.busy.value) == 0:
-            busy_seen = False
-            break
-    assert busy_seen, "busy dropped during transmission"
-
-
-@cocotb.test()
-async def test_all_byte_values(dut):
-    """Transmit and verify every byte value 0x00–0xFF."""
-    await setup(dut)
-    for val in range(256):
-        recv_task = cocotb.start_soon(receive_uart_byte(dut))
-
-        dut.data.value = val
-        dut.valid.value = 1
-        await RisingEdge(dut.clk)
-        dut.valid.value = 0
-
-        result = await recv_task
-        assert result == val, f"Expected 0x{val:02X}, got {result}"
-
-        # wait for transmitter to fully return to IDLE
-        while int(dut.busy.value) == 1:
-            await RisingEdge(dut.clk)
-
-
-@cocotb.test()
-async def test_golden_model_waveform(dut):
-    """Randomized frame-level check against golden transmitter behavior."""
-    await setup(dut)
-
-    test_bytes = [random.randint(0, 255) for _ in range(10)]
-
-    for b in test_bytes:
-        recv_task = cocotb.start_soon(receive_uart_byte(dut))
-        dut.data.value = b
-        dut.valid.value = 1
-        await RisingEdge(dut.clk)
-        dut.valid.value = 0
-
-        saw_busy = False
-        for _ in range((10 * CLKS_PER_BIT) + 8):
-            await RisingEdge(dut.clk)
-            if int(dut.busy.value) == 1:
-                saw_busy = True
-            if saw_busy and int(dut.busy.value) == 0:
-                break
-
-        got = await recv_task
-        assert got == b, f"Expected 0x{b:02X}, got 0x{got:02X}"
-        assert saw_busy, "busy never asserted during transmission"
-        await ClockCycles(dut.clk, 2)
-
-
-@cocotb.test()
+@logged_test()
 async def test_ignore_valid_while_busy(dut):
-    """A new valid pulse while busy should be ignored."""
     await setup(dut)
+
     dut.data.value = 0x11
     dut.valid.value = 1
     await RisingEdge(dut.clk)
     dut.valid.value = 0
-    await ClockCycles(dut.clk, CLKS_PER_BIT * 3)
 
-    recv_task = cocotb.start_soon(receive_uart_byte(dut, timeout=CLKS_PER_BIT * 12))
+    await ClockCycles(dut.clk, CLKS_PER_BIT * 2)
+
+    # This should be ignored because busy is high.
     dut.data.value = 0x22
     dut.valid.value = 1
     await RisingEdge(dut.clk)
     dut.valid.value = 0
 
-    while int(dut.busy.value) == 1:
+    # Wait for first frame to finish then send a valid one.
+    while int(dut.busy.value):
         await RisingEdge(dut.clk)
 
-    recv_task2 = cocotb.start_soon(receive_uart_byte(dut))
+    rx_task = cocotb.start_soon(receive_uart_byte(dut))
     dut.data.value = 0x33
     dut.valid.value = 1
     await RisingEdge(dut.clk)
     dut.valid.value = 0
-    result = await recv_task2
-    assert result == 0x33, f"Expected 0x33 after busy cleared, got {result}"
 
+    got = await rx_task
+    assert got == 0x33, f"Expected 0x33 after busy clear, got {got}"
+
+
+@logged_test()
+async def test_randomized_cycle_scoreboard(dut):
+    await setup(dut)
+    model = UartTxModel(CLKS_PER_BIT)
+    rng = random.Random(0x7EA11ED)
+
+    # Replay setup into model.
+    for _ in range(5):
+        model.step(1, 0, 0)
+    for _ in range(2):
+        model.step(0, 0, 0)
+
+    for cycle in range(6000):
+        data = rng.randint(0, 255)
+        # Bias toward no valid to avoid back-to-back perpetual traffic.
+        valid = rng.choice([0, 0, 1])
+
+        dut.data.value = data
+        dut.valid.value = valid
+
+        exp_tx, exp_busy = model.step(0, data, valid)
+
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+
+        got_tx = int(dut.tx.value)
+        got_busy = int(dut.busy.value)
+
+        assert got_tx == exp_tx, f"Cycle {cycle}: tx DUT={got_tx} model={exp_tx}"
+        assert got_busy == exp_busy, f"Cycle {cycle}: busy DUT={got_busy} model={exp_busy}"
+
+        await NextTimeStep()

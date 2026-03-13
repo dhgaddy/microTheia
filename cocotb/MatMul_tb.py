@@ -2,7 +2,7 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, FallingEdge, ClockCycles, ReadOnly
 import os
-from config_parser import load_config
+from util.config_parser import load_config
 
 MODULE = os.environ.get("TOPLEVEL")
 CFG = load_config(MODULE)

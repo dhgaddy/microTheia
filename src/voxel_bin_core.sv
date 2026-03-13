@@ -2,94 +2,146 @@
 
 // Full voxel-bin processing core.
 // Data flow:
-// EVT2 word stream -> evt2_input_fifo -> EVT2Decoder -> TimeSurfaceBinning
-// -> SystolicMatrixMultiply + weight_ram -> OutputRegister
+// input_fifo -> evt2_decoder -> voxel_binning -> systolic_array (tiled GEMV) -> gesture_classifier
 
 module voxel_bin_core #(
-    parameter  CLK_FREQ_HZ        = 12_000_000,
-    parameter  WINDOW_MS          = 400,
-    parameter  GRID_SIZE          = 16,
-    parameter  NUM_BINS           = 4,
-    parameter  FIFO_DEPTH         = 128,
-    parameter  MIN_EVENT_THRESH   = 20,
-    parameter  MOTION_THRESH      = 8,
-    parameter  PERSISTENCE_COUNT  = 2,
-    parameter  CYCLES_PER_BIN     = 0,
-    parameter  PARALLEL_READS     = 4,
-    parameter  DATA_WIDTH         = 32,
-    parameter  ACC_SUM_BITS       = 18,
-    localparam NUM_CELLS          = NUM_BINS * GRID_SIZE * GRID_SIZE
+    parameter int              CLK_FREQ_HZ       = 12_000_000,
+    parameter int              WINDOW_MS         = 400,
+    parameter int              GRID_SIZE         = 8,
+    parameter int              NUM_BINS          = 4,
+    parameter int              READOUT_BINS      = 4,
+    parameter int              COUNTER_BITS      = 4,
+    parameter int              FIFO_DEPTH        = 256,
+    parameter int              DATA_WIDTH        = 32,
+    parameter int              REQUIRE_TIME_HIGH = 1,
+    parameter int              SWAP_INPUT_BYTES  = 0,
+    parameter int              SENSOR_WIDTH      = 320,
+    parameter int              SENSOR_HEIGHT     = 320,
+    parameter int              WEIGHT_BITS       = 8,
+    parameter int              WEIGHT_SCALE      = 1024,
+    parameter int              N                 = 4,
+    parameter int              PASS_MARGIN       = 64,
+    parameter int              PERSISTENCE_COUNT = 2,
+    parameter int              CONF_BITS         = 4,
+    parameter int              CONF_SHIFT        = 4,
+    parameter int              NUM_CLASSES       = 4,
+    parameter int              CYCLES_PER_BIN    = 0,
+    parameter [8*128-1:0]      WEIGHT            = "weights/gesture_weights_down_left_right_up_8x8_4bins.txt",
+    parameter [8*128-1:0]      WEIGHT_MEM_C0     = "../weights/256weights_q8_c0.mem",
+    parameter [8*128-1:0]      WEIGHT_MEM_C1     = "../weights/256weights_q8_c1.mem",
+    parameter [8*128-1:0]      WEIGHT_MEM_C2     = "../weights/256weights_q8_c2.mem",
+    parameter [8*128-1:0]      WEIGHT_MEM_C3     = "../weights/256weights_q8_c3.mem"
 )(
-    input  logic        clk,
-    input  logic        rst,
-    input  logic [31:0] evt_word,
-    input  logic        evt_word_valid,
-    output logic        evt_word_ready,
-    output logic [1:0]  gesture,
-    output logic        gesture_valid,
-    output logic [3:0]  gesture_confidence,
-    output logic [7:0]  debug_event_count,
-    output logic [2:0]  debug_state,
-    output logic        debug_fifo_empty,
-    output logic        debug_fifo_full,
-    output logic        debug_temporal_phase
+    input  logic                 clk,
+    input  logic                 rst,
+    input  logic [31:0]          evt_word,
+    input  logic                 evt_word_valid,
+    output logic                 evt_word_ready,
+    output logic [1:0]           gesture,
+    output logic                 gesture_valid,
+    output logic [CONF_BITS-1:0] gesture_confidence,
+    output logic [7:0]           debug_event_count,
+    output logic [2:0]           debug_state,
+    output logic                 debug_fifo_empty,
+    output logic                 debug_fifo_full,
+    output logic                 debug_temporal_phase,
+    output logic                 debug_class_valid,
+    output logic                 debug_class_pass,
+    output logic                 debug_feature_window_ready,
+    output logic                 debug_capture_active,
+    output logic                 debug_score_busy
 );
 
-    localparam integer FIFO_PTR_BITS   = $clog2(FIFO_DEPTH);
-    localparam integer COUNTER_BITS    = 6;
-    localparam integer NUM_CLASSES     = 4;
-    localparam integer WEIGHT_BITS     = 8;
-    localparam integer ACC_BITS        = 24;
-    localparam integer MIN_SCORE_THRESH = 30;
+    localparam int FEATURE_COUNT            = READOUT_BINS * GRID_SIZE * GRID_SIZE;
+    localparam int FEATURE_BITS             = $clog2(FEATURE_COUNT);
+    localparam int GRID_BITS                = $clog2(GRID_SIZE);
+    localparam int WEIGHT_ADDR_BITS         = $clog2(FEATURE_COUNT);
+    localparam int TILES                    = FEATURE_COUNT / N;
+    localparam int SA_DATA_BITS             = ((COUNTER_BITS > WEIGHT_BITS) ? COUNTER_BITS : WEIGHT_BITS) + 1;
+    localparam int SA_PRODUCT_BITS          = 2 * SA_DATA_BITS;
+    localparam int SA_ACC_BITS              = SA_PRODUCT_BITS + $clog2(N);
+    localparam int SCORE_BITS               = SA_ACC_BITS + $clog2(TILES) + 2;
+    localparam int LOAD_BITS                = $clog2(N + 1);
+    localparam int TILE_BITS                = (TILES > 1) ? $clog2(TILES) : 1;
 
-    logic        fifo_empty;
-    logic        fifo_full;
-    logic        fifo_rd_en;
-    logic [31:0] fifo_rd_data;
-    logic        fifo_rd_valid;
+    typedef enum logic [2:0] {
+        SC_IDLE      = 3'd0,
+        SC_LOAD      = 3'd1,
+        SC_SYS_START = 3'd2,
+        SC_SYS_WAIT  = 3'd3,
+        SC_ACCUM     = 3'd4,
+        SC_PUBLISH   = 3'd5
+    } score_state_t;
 
-    logic [3:0]  decoded_grid_x;
-    logic [3:0]  decoded_grid_y;
-    logic        decoded_polarity;
-    logic [15:0] decoded_timestamp;
-    logic        decoded_valid;
-    logic signed [4:0] binner_x;
-    logic signed [4:0] binner_y;
+    score_state_t score_state;
 
-    logic        readout_start;
-    logic [PARALLEL_READS*COUNTER_BITS-1:0] readout_data;
-    logic        readout_valid;
-    logic        binner_event_ready;
+    logic fifo_out_valid;
+    logic fifo_out_ready;
+    logic [31:0] fifo_out_data;
 
-    logic [PARALLEL_READS*$clog2(NUM_CELLS)-1:0]       w_addr_flat;
-    logic [PARALLEL_READS*NUM_CLASSES*WEIGHT_BITS-1:0] w_data_flat;
-    logic [$clog2(NUM_CELLS)-1:0]       w_addr [0:PARALLEL_READS-1];
-    logic [NUM_CLASSES*WEIGHT_BITS-1:0] w_data [0:PARALLEL_READS-1];
-    logic                               sys_result_valid;
-    logic [1:0]                         sys_best_class;
-    logic [NUM_CLASSES*ACC_BITS-1:0]    sys_scores_flat;
+    logic [GRID_BITS-1:0] dec_x16;
+    logic [GRID_BITS-1:0] dec_y16;
+    logic                 dec_polarity;
+    logic [33:0]          dec_timestamp;
+    logic                 dec_event_valid;
+    logic                 dec_data_ready;
 
-    logic signed [ACC_BITS-1:0] sys_scores [0:NUM_CLASSES-1];
-    logic signed [ACC_BITS-1:0] best_score;
-    logic [ACC_BITS-1:0]        abs_best_score;
-    logic                       score_above_thresh;
-    logic [17:0]                pseudo_mag_x;
-    logic [17:0]                pseudo_mag_y;
+    logic                 binner_event_ready;
+    logic                 binner_readout_ready;
+    logic                 binner_readout_start;
+    logic                 binner_readout_valid;
+    logic [COUNTER_BITS-1:0] binner_readout_data;
+    logic [FEATURE_BITS-1:0] binner_readout_index;
+    logic                 binner_readout_last;
 
-    assign evt_word_ready      = !fifo_full;
-    // Do not consume FIFO words while voxel_binning is clearing a bin.
-    // This prevents silent event loss during clear cycles.
-    assign fifo_rd_en          = !fifo_empty && binner_event_ready;
-    assign debug_fifo_empty    = fifo_empty;
-    assign debug_fifo_full     = fifo_full;
-    assign debug_temporal_phase = 1'b0;
+    logic                    capture_active;
+    logic                    feature_window_ready;
+    logic                    consume_feature_window;
+    logic                    feature_rd_valid;
+    logic [FEATURE_BITS-1:0] feature_rd_addr;
+    logic [COUNTER_BITS-1:0] feature_rd_data;
 
-    always_ff @(posedge clk) begin
-        if (rst)
-            fifo_rd_valid <= 1'b0;
-        else
-            fifo_rd_valid <= fifo_rd_en && !fifo_empty;
-    end
+    logic [WEIGHT_ADDR_BITS-1:0] weight_rd_addr;
+    logic                        weight_rd_valid;
+    logic [WEIGHT_BITS-1:0]      weight_rd_raw [0:NUM_CLASSES-1];
+
+    logic [LOAD_BITS-1:0] load_cycle;
+    logic [TILE_BITS-1:0] tile_idx;
+    logic [SA_DATA_BITS-1:0] a_row [0:N-1];
+    logic [WEIGHT_BITS-1:0]  weight_tile [0:N-1][0:NUM_CLASSES-1];
+
+    logic [N*N*SA_DATA_BITS-1:0] sa_a_flat;
+    logic [N*N*SA_DATA_BITS-1:0] sa_b_flat;
+    logic [N*N*SA_ACC_BITS-1:0]  sa_out_flat;
+    logic                        sa_start;
+    logic                        sa_busy;
+    logic                        sa_done;
+
+    logic [SCORE_BITS-1:0] score_acc [0:NUM_CLASSES-1];
+    int cap_idx;
+    logic [NUM_CLASSES*SCORE_BITS-1:0] scores_flat;
+    logic scores_valid;
+
+    logic [1:0] class_gesture;
+    logic       class_valid;
+    logic       class_pass;
+
+    generate
+        if ((FEATURE_COUNT % N) != 0) begin : gen_invalid_tile_config
+            initial $error("voxel_bin_core: FEATURE_COUNT (%0d) must be divisible by N (%0d)", FEATURE_COUNT, N);
+        end
+    endgenerate
+
+    assign debug_fifo_empty     = ~fifo_out_valid;
+    assign debug_fifo_full      = ~evt_word_ready;
+    assign debug_temporal_phase = ~binner_event_ready;
+    assign debug_class_valid    = class_valid;
+    assign debug_class_pass     = class_pass;
+    assign debug_feature_window_ready = feature_window_ready;
+    assign debug_capture_active = capture_active;
+    assign debug_score_busy     = (score_state != SC_IDLE);
+    assign fifo_out_ready       = dec_data_ready;
+    assign binner_readout_ready = (!capture_active) && (score_state == SC_IDLE) && (!feature_window_ready);
 
     always_ff @(posedge clk) begin
         if (rst)
@@ -102,150 +154,302 @@ module voxel_bin_core #(
         .FIFO_DEPTH(FIFO_DEPTH),
         .DATA_WIDTH(DATA_WIDTH)
     ) u_input_fifo (
-        .clk    (clk),
-        .rst    (rst),
-        .wr_en  (evt_word_valid && evt_word_ready),
-        .wr_data(evt_word),
-        .rd_en  (fifo_rd_en),
-        .rd_data(fifo_rd_data),
-        .empty  (fifo_empty),
-        .full   (fifo_full),
-        .count  ()
+        .clk_i   (clk),
+        .reset_i (rst),
+        .data_i  (evt_word),
+        .ready_i (fifo_out_ready),
+        .valid_i (evt_word_valid),
+        .ready_o (evt_word_ready),
+        .valid_o (fifo_out_valid),
+        .data_o  (fifo_out_data)
     );
 
     evt2_decoder #(
-        .GRID_SIZE(GRID_SIZE)
+        .SENSOR_WIDTH     (SENSOR_WIDTH),
+        .SENSOR_HEIGHT    (SENSOR_HEIGHT),
+        .GRID_SIZE        (GRID_SIZE),
+        .REQUIRE_TIME_HIGH(REQUIRE_TIME_HIGH),
+        .SWAP_INPUT_BYTES (SWAP_INPUT_BYTES)
     ) u_evt2_decoder (
-        .clk       (clk),
-        .rst       (rst),
-        .data_in   (fifo_rd_data),
-        .data_valid(fifo_rd_valid),
-        .data_ready(),
-        .x_out     (decoded_grid_x),
-        .y_out     (decoded_grid_y),
-        .polarity  (decoded_polarity),
-        .timestamp (decoded_timestamp),
-        .event_valid(decoded_valid)
+        .clk         (clk),
+        .rst         (rst),
+        .data_in     (fifo_out_data),
+        .data_valid  (fifo_out_valid),
+        .event_ready_i(binner_event_ready),
+        .data_ready  (dec_data_ready),
+        .x_out       (dec_x16),
+        .y_out       (dec_y16),
+        .polarity    (dec_polarity),
+        .timestamp   (dec_timestamp),
+        .event_valid (dec_event_valid)
     );
-
-    assign binner_x = $signed({1'b0, decoded_grid_x}) - 5'sd8;
-    assign binner_y = $signed({1'b0, decoded_grid_y}) - 5'sd8;
 
     voxel_binning #(
         .CLK_FREQ_HZ   (CLK_FREQ_HZ),
         .WINDOW_MS     (WINDOW_MS),
         .GRID_SIZE     (GRID_SIZE),
         .NUM_BINS      (NUM_BINS),
-        .READOUT_BINS  (NUM_BINS),
+        .READOUT_BINS  (READOUT_BINS),
         .COUNTER_BITS  (COUNTER_BITS),
-        .PARALLEL_READS(PARALLEL_READS),
-        .CYCLES_PER_BIN(CYCLES_PER_BIN)
+        .CYCLES_PER_BIN(CYCLES_PER_BIN) // I think this could be a problem
     ) u_voxel_binning (
-        .clk           (clk),
-        .rst           (rst),
-        .event_valid   (decoded_valid),
-        .event_x       (binner_x),
-        .event_y       (binner_y),
-        .event_polarity(decoded_polarity),
-        .event_ready   (binner_event_ready),
-        .readout_start (readout_start),
-        .readout_data  (readout_data),
-        .readout_valid (readout_valid)
-    );
-
-    voxel_systolic_array #(
-        .NUM_CLASSES    (NUM_CLASSES),
-        .GRID_SIZE      (GRID_SIZE),
-        .NUM_BINS       (NUM_BINS),
-        .VALUE_BITS     (COUNTER_BITS),
-        .WEIGHT_BITS    (WEIGHT_BITS),
-        .ACC_BITS       (ACC_BITS),
-        .PARALLEL_READS(PARALLEL_READS)
-    ) u_systolic_array (
         .clk          (clk),
         .rst          (rst),
-        .start        (readout_start),
-        .feature_in   (readout_data),
-        .feature_valid(readout_valid),
-        .w_addr_flat  (w_addr_flat),
-        .w_data_flat  (w_data_flat),
-        .result_valid (sys_result_valid),
-        .best_class   (sys_best_class),
-        .scores_flat  (sys_scores_flat)
+        .event_valid  (dec_event_valid),
+        .event_x      (dec_x16),
+        .event_y      (dec_y16),
+        .event_polarity(dec_polarity),
+        .event_ready  (binner_event_ready),
+        .readout_ready(binner_readout_ready),
+        .readout_start(binner_readout_start),
+        .readout_valid(binner_readout_valid),
+        .readout_data (binner_readout_data),
+        .readout_index(binner_readout_index),
+        .readout_last (binner_readout_last)
     );
 
-    generate
-        genvar pa;
-        for (pa = 0; pa < PARALLEL_READS; pa = pa + 1) begin : gen_unpack_addr
-            assign w_addr[pa] = w_addr_flat[(pa+1)*$clog2(NUM_CELLS)-1 : pa*$clog2(NUM_CELLS)];
-        end
-    endgenerate
+    ram_1r1w_sync #(
+        .width_p    (COUNTER_BITS),
+        .depth_p    (FEATURE_COUNT)
+    ) u_feature_ram (
+        .clk_i      (clk),
+        .reset_i    (rst),
+        .wr_valid_i (binner_readout_valid),
+        .wr_data_i  (binner_readout_data),
+        .wr_addr_i  (binner_readout_index),
+        .rd_valid_i (feature_rd_valid),
+        .rd_addr_i  (feature_rd_addr),
+        .rd_data_o  (feature_rd_data)
+    );
 
-    generate
-        genvar p, k;
-        for (p = 0; p < PARALLEL_READS; p = p + 1) begin : gen_parallel_rams
-            for (k = 0; k < NUM_CLASSES; k = k + 1) begin : gen_class_rams
-                voxel_weight_ram #(
-                    .CLASS_IDX  (k),
-                    .GRID_SIZE  (GRID_SIZE),
-                    .NUM_BINS   (NUM_BINS),
-                    .GRID_SIZE  (GRID_SIZE),
-                    .WEIGHT_BITS(WEIGHT_BITS)
-                ) u_weight_ram (
-                    .clk      (clk),
-                    .rst      (rst),
-                    .we       (1'b0),
-                    .cell_addr(w_addr[p]),
-                    .din      ('0),
-                    .dout     (w_data[p][(k+1)*WEIGHT_BITS-1 : k*WEIGHT_BITS])
-                );
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            capture_active       <= 1'b0;
+            feature_window_ready <= 1'b0;
+        end else begin
+            if (consume_feature_window)
+                feature_window_ready <= 1'b0;
+
+            if (binner_readout_start)
+                capture_active <= 1'b1;
+
+            if (binner_readout_valid && binner_readout_last) begin
+                capture_active       <= 1'b0;
+                feature_window_ready <= 1'b1;
             end
         end
-    endgenerate
-
-    generate
-        genvar pd;
-        for (pd = 0; pd < PARALLEL_READS; pd = pd + 1) begin : gen_pack_data
-            assign w_data_flat[(pd+1)*NUM_CLASSES*WEIGHT_BITS-1 : pd*NUM_CLASSES*WEIGHT_BITS] = w_data[pd];
-        end
-    endgenerate
-
-    generate
-        genvar gi;
-        for (gi = 0; gi < NUM_CLASSES; gi = gi + 1) begin : gen_unpack_sys_scores
-            assign sys_scores[gi] = sys_scores_flat[(gi+1)*ACC_BITS-1 : gi*ACC_BITS];
-        end
-    endgenerate
-
-    always_comb begin
-        best_score = sys_scores[sys_best_class];
-
-        if (best_score < 0)
-            abs_best_score = -best_score;
-        else
-            abs_best_score = best_score;
-
-        score_above_thresh = (abs_best_score >= MIN_SCORE_THRESH);
     end
 
-    assign pseudo_mag_x = {2'b0, abs_best_score[15:0]};
-    assign pseudo_mag_y = 18'd0;
+    always_comb begin
+        weight_rd_valid = 1'b0;
+        weight_rd_addr  = '0;
+        feature_rd_valid = 1'b0;
+        feature_rd_addr  = '0;
+        if ((score_state == SC_LOAD) && (load_cycle < N)) begin
+            weight_rd_valid = 1'b1;
+            weight_rd_addr  = (tile_idx * N) + load_cycle;
+            feature_rd_valid = 1'b1;
+            feature_rd_addr  = (tile_idx * N) + load_cycle;
+        end
+    end
+
+    // Weight ROMs.
+    // Synthesis: inline arrays with literal $readmemh paths. A dummy write port (if(1'b0))
+    //   is required so Yosys infers SB_RAM40_4K and propagates INIT_* attributes.
+    //   Yosys does NOT evaluate $readmemh when the filename comes from a module parameter,
+    //   so ram_1r1w_sync cannot be used for synthesis weight init.
+    // Simulation: ram_1r1w_sync with float init from 8192weights.txt.
+`ifdef SYNTHESIS
+    logic [WEIGHT_BITS-1:0] weight_mem_c0 [0:FEATURE_COUNT-1];
+    logic [WEIGHT_BITS-1:0] weight_mem_c1 [0:FEATURE_COUNT-1];
+    logic [WEIGHT_BITS-1:0] weight_mem_c2 [0:FEATURE_COUNT-1];
+    logic [WEIGHT_BITS-1:0] weight_mem_c3 [0:FEATURE_COUNT-1];
+
+    initial begin
+        $readmemh(WEIGHT_MEM_C0, weight_mem_c0);
+        $readmemh(WEIGHT_MEM_C1, weight_mem_c1);
+        $readmemh(WEIGHT_MEM_C2, weight_mem_c2);
+        $readmemh(WEIGHT_MEM_C3, weight_mem_c3);
+    end
+
+    always_ff @(posedge clk) begin
+        if (1'b0) begin  // Dummy write: required for Yosys SB_RAM40_4K inference.
+            weight_mem_c0[0] <= '0;
+            weight_mem_c1[0] <= '0;
+            weight_mem_c2[0] <= '0;
+            weight_mem_c3[0] <= '0;
+        end
+        if (weight_rd_valid) begin
+            weight_rd_raw[0] <= weight_mem_c0[weight_rd_addr];
+            weight_rd_raw[1] <= weight_mem_c1[weight_rd_addr];
+            weight_rd_raw[2] <= weight_mem_c2[weight_rd_addr];
+            weight_rd_raw[3] <= weight_mem_c3[weight_rd_addr];
+        end
+    end
+`else
+    generate
+        genvar g;
+        for (g = 0; g < NUM_CLASSES; g = g + 1) begin : gen_weight_rams
+            ram_1r1w_sync #(
+                .width_p        (WEIGHT_BITS),
+                .depth_p        (FEATURE_COUNT),
+                .filename_p     (WEIGHT),
+                .init_offset_p  (g * FEATURE_COUNT),
+                .init_count_p   (FEATURE_COUNT),
+                .init_is_float_p(1'b1),
+                .init_scale_p   (WEIGHT_SCALE),
+                .init_signed_p  (1'b0)
+            ) u_weight_ram (
+                .clk_i      (clk),
+                .reset_i    (rst),
+                .wr_valid_i (1'b0),
+                .wr_data_i  ('0),
+                .wr_addr_i  ('0),
+                .rd_valid_i (weight_rd_valid),
+                .rd_addr_i  (weight_rd_addr),
+                .rd_data_o  (weight_rd_raw[g])
+            );
+        end
+    endgenerate
+`endif
+
+    always_comb begin
+        for (int r = 0; r < N; r = r + 1) begin
+            for (int c = 0; c < N; c = c + 1) begin
+                sa_a_flat[(r*N + c)*SA_DATA_BITS +: SA_DATA_BITS] = '0;
+                sa_b_flat[(r*N + c)*SA_DATA_BITS +: SA_DATA_BITS] = '0;
+            end
+        end
+
+        for (int k = 0; k < N; k = k + 1) begin
+            sa_a_flat[(0*N + k)*SA_DATA_BITS +: SA_DATA_BITS] = a_row[k];
+            for (int gc = 0; gc < NUM_CLASSES; gc = gc + 1) begin
+                sa_b_flat[(k*N + gc)*SA_DATA_BITS +: SA_DATA_BITS] =
+                    {{(SA_DATA_BITS-WEIGHT_BITS){1'b0}}, weight_tile[k][gc]};
+            end
+        end
+    end
+
+    always_comb begin
+        for (int gi = 0; gi < NUM_CLASSES; gi = gi + 1)
+            scores_flat[gi*SCORE_BITS +: SCORE_BITS] = score_acc[gi];
+    end
+
+    assign sa_start = (score_state == SC_SYS_START);
+
+    voxel_systolic_array #(
+        .N               (N),
+        .DATA_BIT_SIZE   (SA_DATA_BITS)
+    ) u_voxel_systolic_array (
+        .clk            (clk),
+        .reset          (rst),
+        .start          (sa_start),
+        .A_matrix_flat  (sa_a_flat),
+        .B_matrix_flat  (sa_b_flat),
+        .Out_matrix_flat(sa_out_flat),
+        .busy           (sa_busy),
+        .done           (sa_done)
+    );
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            score_state           <= SC_IDLE;
+            load_cycle            <= '0;
+            tile_idx              <= '0;
+            scores_valid          <= 1'b0;
+            consume_feature_window<= 1'b0;
+            for (int c = 0; c < NUM_CLASSES; c = c + 1)
+                score_acc[c] <= '0;
+            for (int k = 0; k < N; k = k + 1) begin
+                a_row[k] <= '0;
+                for (int c = 0; c < NUM_CLASSES; c = c + 1)
+                    weight_tile[k][c] <= '0;
+            end
+        end else begin
+            scores_valid           <= 1'b0;
+            consume_feature_window <= 1'b0;
+
+            case (score_state)
+                SC_IDLE: begin
+                    if (feature_window_ready) begin
+                        consume_feature_window <= 1'b1;
+                        tile_idx   <= '0;
+                        load_cycle <= '0;
+                        for (int c = 0; c < NUM_CLASSES; c = c + 1)
+                            score_acc[c] <= '0;
+                        score_state <= SC_LOAD;
+                    end
+                end
+
+                SC_LOAD: begin
+                    if (load_cycle > 0) begin
+                        cap_idx = load_cycle - 1;
+                        a_row[cap_idx] <= {{(SA_DATA_BITS-COUNTER_BITS){1'b0}}, feature_rd_data};
+                        for (int c = 0; c < NUM_CLASSES; c = c + 1)
+                            weight_tile[cap_idx][c] <= weight_rd_raw[c];
+                    end
+
+                    if (load_cycle == N) begin
+                        score_state <= SC_SYS_START;
+                    end else begin
+                        load_cycle <= load_cycle + 1'b1;
+                    end
+                end
+
+                SC_SYS_START: begin
+                    score_state <= SC_SYS_WAIT;
+                end
+
+                SC_SYS_WAIT: begin
+                    if (sa_done)
+                        score_state <= SC_ACCUM;
+                end
+
+                SC_ACCUM: begin
+                    for (int c = 0; c < NUM_CLASSES; c = c + 1) begin
+                        score_acc[c] <= score_acc[c] + sa_out_flat[(0*N + c)*SA_ACC_BITS +: SA_ACC_BITS];
+                    end
+
+                    if (tile_idx == TILES - 1) begin
+                        score_state <= SC_PUBLISH;
+                    end else begin
+                        tile_idx    <= tile_idx + 1'b1;
+                        load_cycle  <= '0;
+                        score_state <= SC_LOAD;
+                    end
+                end
+
+                SC_PUBLISH: begin
+                    scores_valid <= 1'b1;
+                    score_state  <= SC_IDLE;
+                end
+
+                default: score_state <= SC_IDLE;
+            endcase
+        end
+    end
 
     voxel_gesture_classifier #(
-        .ACC_SUM_BITS     (ACC_SUM_BITS),
-        .PERSISTENCE_COUNT(PERSISTENCE_COUNT)
-    ) u_gesture_classifier (
+        .NUM_CLASSES       (NUM_CLASSES),
+        .SCORE_BITS        (SCORE_BITS),
+        .PASS_MARGIN       (PASS_MARGIN),
+        .PERSISTENCE_COUNT (PERSISTENCE_COUNT),
+        .CONF_BITS         (CONF_BITS),
+        .CONF_SHIFT        (CONF_SHIFT)
+    ) u_voxel_gesture_classifier (
         .clk               (clk),
         .rst               (rst),
-        .class_gesture     (sys_best_class),
-        .class_valid       (sys_result_valid),
-        .class_pass        (sys_result_valid && score_above_thresh),
-        .abs_delta_x       (pseudo_mag_x),
-        .abs_delta_y       (pseudo_mag_y),
+        .scores_flat       (scores_flat),
+        .scores_valid      (scores_valid),
+        .class_gesture     (class_gesture),
+        .class_valid       (class_valid),
+        .class_pass        (class_pass),
         .gesture           (gesture),
         .gesture_valid     (gesture_valid),
         .gesture_confidence(gesture_confidence),
         .debug_state       (debug_state)
     );
+
+    wire _unused_decoder_outputs = dec_timestamp[0];
 
 endmodule
