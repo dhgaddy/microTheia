@@ -1,443 +1,535 @@
 `timescale 1ns/1ps
 
-// Parallel voxel-bin core:
-// - Buffers EVT2 words in a FIFO
-// - Decodes EVT2 words into (x,y,polarity,timestamp) events
-// - Bins events into a NUM_BINS ring of GRID_SIZE*GRID_SIZE histograms
-// - When a bin readout starts, capture ONE bin (GRID_SIZE*GRID_SIZE values) into A_matrix_flat
-// - In parallel, request weights for each cell (for 4 classes) and build B_matrix_flat[class]
-// - Run 4 MatMul engines in parallel: A * B_class
-// - Reduce each output matrix into a single score (sum of all outputs)
-// - Pick best class, threshold it, and feed persistence-based gesture classifier
+// Parallel version of voxel_bin_core
+//
+// Data flow:
+// input_fifo -> evt2_decoder -> voxel_binning -> feature_ram
+// -> (tile load) -> 4x voxel_systolic_array (one per class) -> accumulate scores
+// -> voxel_gesture_classifier
 
 module voxel_bin_core_parallel #(
-    parameter  CLK_FREQ_HZ        = 12_000_000,
-    parameter  WINDOW_MS          = 400,
-    parameter  GRID_SIZE          = 16,
-    parameter  NUM_BINS           = 4,
-    parameter  FIFO_DEPTH         = 128,
-    parameter  PERSISTENCE_COUNT  = 2,
-    parameter  CYCLES_PER_BIN     = 0,
-    parameter  PARALLEL_READS     = 4,     // how many bin counters stream out per cycle
-    parameter  DATA_WIDTH         = 32,
-    parameter  ACC_SUM_BITS       = 18,
-    localparam NUM_CELLS          = NUM_BINS * GRID_SIZE * GRID_SIZE
+    parameter int              CLK_FREQ_HZ       = 12_000_000,
+    parameter int              WINDOW_MS         = 400,
+    parameter int              GRID_SIZE         = 8,
+    parameter int              NUM_BINS          = 4,
+    parameter int              READOUT_BINS      = 4,
+    parameter int              COUNTER_BITS      = 4,
+    parameter int              FIFO_DEPTH        = 256,
+    parameter int              DATA_WIDTH        = 32,
+    parameter int              REQUIRE_TIME_HIGH = 1,
+    parameter int              SWAP_INPUT_BYTES  = 0,
+    parameter int              SENSOR_WIDTH      = 320,
+    parameter int              SENSOR_HEIGHT     = 320,
+    parameter int              WEIGHT_BITS       = 8,
+    parameter int              WEIGHT_SCALE      = 1024,
+    parameter int              N                 = 4,
+    parameter int              PASS_MARGIN       = 64,
+    parameter int              PERSISTENCE_COUNT = 2,
+    parameter int              CONF_BITS         = 4,
+    parameter int              CONF_SHIFT        = 4,
+    parameter int              NUM_CLASSES       = 4,
+    parameter int              CYCLES_PER_BIN    = 0,
+    parameter [8*128-1:0]      WEIGHT            = "weights/gesture_weights_down_left_right_up_8x8_4bins.txt",
+    parameter [8*128-1:0]      WEIGHT_MEM_C0     = "../weights/256weights_q8_c0.mem",
+    parameter [8*128-1:0]      WEIGHT_MEM_C1     = "../weights/256weights_q8_c1.mem",
+    parameter [8*128-1:0]      WEIGHT_MEM_C2     = "../weights/256weights_q8_c2.mem",
+    parameter [8*128-1:0]      WEIGHT_MEM_C3     = "../weights/256weights_q8_c3.mem"
 )(
-    input  logic        clk,
-    input  logic        rst,
-
-    // Input EVT2 word stream
-    input  logic [31:0] evt_word,
-    input  logic        evt_word_valid,
-    output logic        evt_word_ready,
-
-    // Final gesture outputs
-    output logic [1:0]  gesture,
-    output logic        gesture_valid,
-    output logic [3:0]  gesture_confidence,
-
-    // Debug
-    output logic [7:0]  debug_event_count,
-    output logic [2:0]  debug_state,
-    output logic        debug_fifo_empty,
-    output logic        debug_fifo_full,
-    output logic        debug_temporal_phase
+    input  logic                 clk,
+    input  logic                 rst,
+    input  logic [31:0]          evt_word,
+    input  logic                 evt_word_valid,
+    output logic                 evt_word_ready,
+    output logic [1:0]           gesture,
+    output logic                 gesture_valid,
+    output logic [CONF_BITS-1:0] gesture_confidence,
+    output logic [7:0]           debug_event_count,
+    output logic [2:0]           debug_state,
+    output logic                 debug_fifo_empty,
+    output logic                 debug_fifo_full,
+    output logic                 debug_temporal_phase,
+    output logic                 debug_class_valid,
+    output logic                 debug_class_pass,
+    output logic                 debug_feature_window_ready,
+    output logic                 debug_capture_active,
+    output logic                 debug_score_busy
 );
 
-    localparam integer COUNTER_BITS       = 6;  // per-cell event counter width in binning
-    localparam integer NUM_CLASSES        = 4;  // 4 gesture directions/classes
-    localparam integer WEIGHT_BITS        = 8;  // weight width from weight RAM
-    localparam integer CELLS_PER_BIN      = GRID_SIZE * GRID_SIZE; // 256 for 16x16
-    localparam integer CELL_ADDR_BITS     = $clog2(NUM_CELLS);     // address over all bins
-    localparam integer BIN_CELL_ADDR_BITS = $clog2(CELLS_PER_BIN); // address within a bin
+    // Derived sizes
+    localparam int FEATURE_COUNT    = READOUT_BINS * GRID_SIZE * GRID_SIZE;
+    localparam int FEATURE_BITS     = $clog2(FEATURE_COUNT);
+    localparam int GRID_BITS        = $clog2(GRID_SIZE);
+    localparam int WEIGHT_ADDR_BITS = $clog2(FEATURE_COUNT);
+    localparam int TILES            = FEATURE_COUNT / N;
+    localparam int SA_DATA_BITS     = ((COUNTER_BITS > WEIGHT_BITS) ? COUNTER_BITS : WEIGHT_BITS) + 1;
+    localparam int SA_PRODUCT_BITS  = 2 * SA_DATA_BITS;
+    localparam int SA_ACC_BITS      = SA_PRODUCT_BITS + $clog2(N);
+    localparam int SCORE_BITS       = SA_ACC_BITS + $clog2(TILES) + 2;
+    localparam int LOAD_BITS        = $clog2(N + 1);
+    localparam int TILE_BITS        = (TILES > 1) ? $clog2(TILES) : 1;
 
-    // MatMul sizing
-    localparam integer MAT_N              = GRID_SIZE;
-    localparam integer MAT_DATA_BITS      = WEIGHT_BITS;          // MatMul inputs are 8-bit
-    localparam integer MAT_PRODUCT_BITS   = 2 * MAT_DATA_BITS;
-    localparam integer MAT_ACC_BITS       = MAT_PRODUCT_BITS + $clog2(MAT_N);
-    localparam integer SCORE_BITS         = MAT_ACC_BITS + $clog2(CELLS_PER_BIN);
-    localparam integer MIN_SCORE_THRESH   = 30;
+    // Sanity: tile config must be valid
+    generate
+        if ((FEATURE_COUNT % N) != 0) begin : gen_invalid_tile_config
+            initial $error("voxel_bin_core_parallel: FEATURE_COUNT (%0d) must be divisible by N (%0d)", FEATURE_COUNT, N);
+        end
+    endgenerate
 
-    // FIFO wires
-    logic        fifo_empty, fifo_full;
-    logic        fifo_rd_en;
-    logic [31:0] fifo_rd_data;
-    logic        fifo_rd_valid;
-
-    // EVT2 decoder outputs
-    logic [3:0]  decoded_grid_x;
-    logic [3:0]  decoded_grid_y;
-    logic        decoded_polarity;
-    logic [15:0] decoded_timestamp;
-    logic        decoded_valid;
-
-    // Convert grid coords to signed center-relative for binner
-    logic signed [4:0] binner_x, binner_y;
-
-    // Binner readout interface
-    logic        readout_start;  // pulse: bin window ended, readout begins
-    logic [PARALLEL_READS*COUNTER_BITS-1:0] readout_data; // packed counters
-    logic        readout_valid;  // high while readout_data is valid
-    logic        binner_event_ready; // binner can accept events (not clearing)
-
-    // Classification result
-    logic [1:0]  sys_best_class;
-    logic [SCORE_BITS-1:0] sys_best_score;
-    logic        sys_result_valid;
-
-    // Inputs to gesture classifier
-    logic [17:0] pseudo_mag_x, pseudo_mag_y;
-    logic        score_above_thresh;
-
-
-    // FSM
+    // Score FSM 
     typedef enum logic [2:0] {
-        ST_IDLE,         // waiting for bin readout_start
-        ST_CAPTURE,      // capture A from readout stream, request weights
-        ST_WAIT_WEIGHTS, // wait until all weights have returned
-        ST_MAT_START,    // pulse start to all MatMul blocks (1 cycle)
-        ST_MAT_WAIT      // wait for all MatMul done, then latch result
-    } core_state_t;
+        SC_IDLE      = 3'd0,
+        SC_LOAD      = 3'd1,
+        SC_SYS_START = 3'd2,
+        SC_SYS_WAIT  = 3'd3,
+        SC_ACCUM     = 3'd4,
+        SC_PUBLISH   = 3'd5
+    } score_state_t;
 
-    core_state_t core_state;
+    score_state_t score_state;
 
-    // Flattened matrices:
-    // A is one 16x16 captured bin
-    // B is one 16x16 weight matrix per class
-    // Out is one 16x16 output per class
-    logic [MAT_N*MAT_N*MAT_DATA_BITS-1:0] A_matrix_flat;
-    logic [MAT_N*MAT_N*MAT_DATA_BITS-1:0] B_matrix_flat   [0:NUM_CLASSES-1];
-    logic [MAT_N*MAT_N*MAT_ACC_BITS-1:0]  Out_matrix_flat [0:NUM_CLASSES-1];
+    // FIFO -> decoder wiring (ready/valid)
+    logic fifo_out_valid;
+    logic fifo_out_ready;
+    logic [31:0] fifo_out_data;
 
-    // MatMul status per class
-    logic [NUM_CLASSES-1:0] mat_busy;
-    logic [NUM_CLASSES-1:0] mat_done;
+    // Decoder outputs
+    logic [GRID_BITS-1:0] dec_x16;
+    logic [GRID_BITS-1:0] dec_y16;
+    logic                 dec_polarity;
+    logic [33:0]          dec_timestamp;
+    logic                 dec_event_valid;
+    logic                 dec_data_ready;
 
-    wire all_mat_done = &mat_done; // 1 when every mat_done is 1
+    // Binner control
+    logic                 binner_event_ready;
+    logic                 binner_readout_ready;
+    logic                 binner_readout_start;
+    logic                 binner_readout_valid;
+    logic [COUNTER_BITS-1:0] binner_readout_data;
+    logic [FEATURE_BITS-1:0] binner_readout_index;
+    logic                 binner_readout_last;
 
-    // Counters tracking how much we loaded
-    logic [BIN_CELL_ADDR_BITS:0] a_load_count; // number of A cells written
-    logic [BIN_CELL_ADDR_BITS:0] w_load_count; // number of weight cells written
+    // Capture window tracking
+    logic capture_active;
+    logic feature_window_ready;
+    logic consume_feature_window;
 
-    // Weight RAM address/data plumbing
-    // We read 4 lanes at once
-    // Each lane returns 4 weights one cycle later
-    logic [CELL_ADDR_BITS-1:0] w_addr_lane      [0:PARALLEL_READS-1]; // current request address
-    logic [CELL_ADDR_BITS-1:0] w_addr_pipe      [0:PARALLEL_READS-1]; // delayed address (for returned data)
-    logic                      w_lane_valid_pipe[0:PARALLEL_READS-1]; // delayed valid for returned RAM data
+    // Feature RAM read port (tile load)
+    logic                    feature_rd_valid;
+    logic [FEATURE_BITS-1:0] feature_rd_addr;
+    logic [COUNTER_BITS-1:0] feature_rd_data;
 
-    logic signed [WEIGHT_BITS-1:0] w_data_lane [0:PARALLEL_READS-1][0:NUM_CLASSES-1];
+    // Weight ROM read port (tile load)
+    logic [WEIGHT_ADDR_BITS-1:0] weight_rd_addr;
+    logic                        weight_rd_valid;
+    logic [WEIGHT_BITS-1:0]      weight_rd_raw [0:NUM_CLASSES-1];
 
-    // Scoring combinational logic:
-    // score[class] = sum of all 256 output elements (reduce matrix -> scalar)
-    // Then pick argmax
-    logic [SCORE_BITS-1:0] class_score_comb [0:NUM_CLASSES-1];
-    logic [1:0]            best_class_comb;
-    logic [SCORE_BITS-1:0] best_score_comb;
+    // Tile counters + registers for a tile
+    logic [LOAD_BITS-1:0] load_cycle;
+    logic [TILE_BITS-1:0] tile_idx;
+    logic [SA_DATA_BITS-1:0] a_row [0:N-1];
+    logic [WEIGHT_BITS-1:0]  weight_tile [0:N-1][0:NUM_CLASSES-1];
 
-    // Ready/handshake wiring
-    // - ready to accept new evt_word when FIFO not full
-    // - only read FIFO when binner can accept events
-    assign evt_word_ready       = !fifo_full;
-    assign fifo_rd_en           = !fifo_empty && binner_event_ready;
-    assign debug_fifo_empty     = fifo_empty;
-    assign debug_fifo_full      = fifo_full;
-    assign debug_temporal_phase = !binner_event_ready; // 1 when binner is NOT ready (clearing)
+    // Parallel systolic engines:
+    // Each class gets its own A/B/Out and done/busy.
+    // We'll build B matrices so only column 0 carries the class's weights.
+    // Then output[0,0] equals the dot-product for that class.
+    logic [N*N*SA_DATA_BITS-1:0] sa_a_flat;
+    logic [N*N*SA_DATA_BITS-1:0] sa_b_flat_cls [0:NUM_CLASSES-1];
+    logic [N*N*SA_ACC_BITS-1:0]  sa_out_flat_cls [0:NUM_CLASSES-1];
+    logic [NUM_CLASSES-1:0]      sa_busy_cls;
+    logic [NUM_CLASSES-1:0]      sa_done_cls;
 
-    // Register fifo_rd_valid so decoder sees valid aligned with data
+    logic sa_start;
+    wire  all_sa_done = &sa_done_cls;
+
+    // Accumulated class scores
+    logic [SCORE_BITS-1:0] score_acc [0:NUM_CLASSES-1];
+    logic [NUM_CLASSES*SCORE_BITS-1:0] scores_flat;
+    logic scores_valid;
+
+    // Gesture classifier interface
+    logic [1:0] class_gesture;
+    logic       class_valid;
+    logic       class_pass;
+
+    // Debug outputs
+    assign debug_fifo_empty            = ~fifo_out_valid;
+    assign debug_fifo_full             = ~evt_word_ready;
+    assign debug_temporal_phase        = ~binner_event_ready;
+    assign debug_class_valid           = class_valid;
+    assign debug_class_pass            = class_pass;
+    assign debug_feature_window_ready  = feature_window_ready;
+    assign debug_capture_active        = capture_active;
+    assign debug_score_busy            = (score_state != SC_IDLE);
+
+    // FIFO ready comes from decoder ready
+    assign fifo_out_ready = dec_data_ready;
+
+    // Binner readout is allowed only when we are idle and not holding a prior window
+    assign binner_readout_ready = (!capture_active) && (score_state == SC_IDLE) && (!feature_window_ready);
+
+    // Count accepted input words
     always_ff @(posedge clk) begin
-        if (rst) fifo_rd_valid <= 1'b0;
-        else     fifo_rd_valid <= fifo_rd_en && !fifo_empty;
-    end
-
-    // Simple debug counter: count accepted input words
-    always_ff @(posedge clk) begin
-        if (rst) debug_event_count <= '0;
+        if (rst)
+            debug_event_count <= '0;
         else if (evt_word_valid && evt_word_ready)
             debug_event_count <= debug_event_count + 1'b1;
     end
 
-    // FIFO instance: buffers incoming EVT2 words
+    // input_fifo (ready/valid style)
     input_fifo #(
         .FIFO_DEPTH(FIFO_DEPTH),
         .DATA_WIDTH(DATA_WIDTH)
     ) u_input_fifo (
-        .clk    (clk),
-        .rst    (rst),
-        .wr_en  (evt_word_valid && evt_word_ready),
-        .wr_data(evt_word),
-        .rd_en  (fifo_rd_en),
-        .rd_data(fifo_rd_data),
-        .empty  (fifo_empty),
-        .full   (fifo_full),
-        .count  ()
+        .clk_i   (clk),
+        .reset_i (rst),
+        .data_i  (evt_word),
+        .ready_i (fifo_out_ready),
+        .valid_i (evt_word_valid),
+        .ready_o (evt_word_ready),
+        .valid_o (fifo_out_valid),
+        .data_o  (fifo_out_data)
     );
 
-    // EVT2 decoder: turns 32-bit words into events
+    // EVT2 decoder
     evt2_decoder #(
-        .GRID_SIZE(GRID_SIZE)
+        .SENSOR_WIDTH     (SENSOR_WIDTH),
+        .SENSOR_HEIGHT    (SENSOR_HEIGHT),
+        .GRID_SIZE        (GRID_SIZE),
+        .REQUIRE_TIME_HIGH(REQUIRE_TIME_HIGH),
+        .SWAP_INPUT_BYTES (SWAP_INPUT_BYTES)
     ) u_evt2_decoder (
-        .clk        (clk),
-        .rst        (rst),
-        .data_in    (fifo_rd_data),
-        .data_valid (fifo_rd_valid),
-        .data_ready (),
-        .x_out      (decoded_grid_x),
-        .y_out      (decoded_grid_y),
-        .polarity   (decoded_polarity),
-        .timestamp  (decoded_timestamp),
-        .event_valid(decoded_valid)
+        .clk          (clk),
+        .rst          (rst),
+        .data_in      (fifo_out_data),
+        .data_valid   (fifo_out_valid),
+        .event_ready_i(binner_event_ready),
+        .data_ready   (dec_data_ready),
+        .x_out        (dec_x16),
+        .y_out        (dec_y16),
+        .polarity     (dec_polarity),
+        .timestamp    (dec_timestamp),
+        .event_valid  (dec_event_valid)
     );
 
-    // Center grid coords to signed [-8..+7] space for binner
-    assign binner_x = $signed({1'b0, decoded_grid_x}) - 5'sd8;
-    assign binner_y = $signed({1'b0, decoded_grid_y}) - 5'sd8;
-
-    // Voxel binning:
-    // - accumulates events into ring of NUM_BINS histograms
-    // - produces readout_start/readout_valid/readout_data at end of bin window
+    // Voxel binning
     voxel_binning #(
         .CLK_FREQ_HZ   (CLK_FREQ_HZ),
         .WINDOW_MS     (WINDOW_MS),
         .GRID_SIZE     (GRID_SIZE),
         .NUM_BINS      (NUM_BINS),
-        .READOUT_BINS  (NUM_BINS),
+        .READOUT_BINS  (READOUT_BINS),
         .COUNTER_BITS  (COUNTER_BITS),
-        .PARALLEL_READS(PARALLEL_READS),
         .CYCLES_PER_BIN(CYCLES_PER_BIN)
     ) u_voxel_binning (
         .clk           (clk),
         .rst           (rst),
-        .event_valid   (decoded_valid),
-        .event_x       (binner_x),
-        .event_y       (binner_y),
-        .event_polarity(decoded_polarity),
+        .event_valid   (dec_event_valid),
+        .event_x       (dec_x16),
+        .event_y       (dec_y16),
+        .event_polarity(dec_polarity),
         .event_ready   (binner_event_ready),
-        .readout_start (readout_start),
-        .readout_data  (readout_data),
-        .readout_valid (readout_valid)
+        .readout_ready (binner_readout_ready),
+        .readout_start (binner_readout_start),
+        .readout_valid (binner_readout_valid),
+        .readout_data  (binner_readout_data),
+        .readout_index (binner_readout_index),
+        .readout_last  (binner_readout_last)
     );
 
-    // Weight RAMs:
-    // For each lane (0..PARALLEL_READS-1), instantiate one RAM per class.
-    // Output comes back 1 cycle after address (sync RAM behavior).
-    genvar p, c;
-    generate
-        for (p = 0; p < PARALLEL_READS; p = p + 1) begin : gen_weight_lanes
-            for (c = 0; c < NUM_CLASSES; c = c + 1) begin : gen_weight_classes
-                voxel_weight_ram #(
-                    .CLASS_IDX  (c),
-                    .GRID_SIZE  (GRID_SIZE),
-                    .NUM_BINS   (NUM_BINS),
-                    .WEIGHT_BITS(WEIGHT_BITS)
-                ) u_weight_ram (
-                    .clk      (clk),
-                    .rst      (rst),
-                    .we       (1'b0),          // ROM behavior (no writes)
-                    .cell_addr(w_addr_lane[p]),// address requested this cycle
-                    .din      ('0),
-                    .dout     (w_data_lane[p][c]) // returned weight (next cycle)
-                );
+    // Feature RAM: store the full feature window (FEATURE_COUNT entries)
+    // - binner streams (data,index) pairs
+    // - we write them into RAM for later tile reads
+    ram_1r1w_sync #(
+        .width_p (COUNTER_BITS),
+        .depth_p (FEATURE_COUNT)
+    ) u_feature_ram (
+        .clk_i      (clk),
+        .reset_i    (rst),
+        .wr_valid_i (binner_readout_valid),
+        .wr_data_i  (binner_readout_data),
+        .wr_addr_i  (binner_readout_index),
+        .rd_valid_i (feature_rd_valid),
+        .rd_addr_i  (feature_rd_addr),
+        .rd_data_o  (feature_rd_data)
+    );
+
+    // Track capture_active and feature_window_ready
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            capture_active       <= 1'b0;
+            feature_window_ready <= 1'b0;
+        end else begin
+            if (consume_feature_window)
+                feature_window_ready <= 1'b0;
+
+            if (binner_readout_start)
+                capture_active <= 1'b1;
+
+            if (binner_readout_valid && binner_readout_last) begin
+                capture_active       <= 1'b0;
+                feature_window_ready <= 1'b1;
             end
         end
-    endgenerate
+    end
 
-    // 4 MatMul engines in parallel:
-    // - same A matrix
-    // - different B matrix per class
-    // - start pulse when we enter ST_MAT_START
+    // Tile load control:
+    // During SC_LOAD, read 1 feature + 1 weight address each cycle for N cycles
+    always_comb begin
+        weight_rd_valid  = 1'b0;
+        weight_rd_addr   = '0;
+        feature_rd_valid = 1'b0;
+        feature_rd_addr  = '0;
+
+        if ((score_state == SC_LOAD) && (load_cycle < N)) begin
+            weight_rd_valid  = 1'b1;
+            weight_rd_addr   = (tile_idx * N) + load_cycle;
+            feature_rd_valid = 1'b1;
+            feature_rd_addr  = (tile_idx * N) + load_cycle;
+        end
+    end
+
+    // Weight ROMs
+    // - simulation uses ram_1r1w_sync reading from WEIGHT file
+    // - synthesis uses $readmemh paths (parameters)
+`ifdef SYNTHESIS
+    logic [WEIGHT_BITS-1:0] weight_mem_c0 [0:FEATURE_COUNT-1];
+    logic [WEIGHT_BITS-1:0] weight_mem_c1 [0:FEATURE_COUNT-1];
+    logic [WEIGHT_BITS-1:0] weight_mem_c2 [0:FEATURE_COUNT-1];
+    logic [WEIGHT_BITS-1:0] weight_mem_c3 [0:FEATURE_COUNT-1];
+
+    initial begin
+        $readmemh(WEIGHT_MEM_C0, weight_mem_c0);
+        $readmemh(WEIGHT_MEM_C1, weight_mem_c1);
+        $readmemh(WEIGHT_MEM_C2, weight_mem_c2);
+        $readmemh(WEIGHT_MEM_C3, weight_mem_c3);
+    end
+
+    always_ff @(posedge clk) begin
+        if (1'b0) begin
+            weight_mem_c0[0] <= '0;
+            weight_mem_c1[0] <= '0;
+            weight_mem_c2[0] <= '0;
+            weight_mem_c3[0] <= '0;
+        end
+        if (weight_rd_valid) begin
+            weight_rd_raw[0] <= weight_mem_c0[weight_rd_addr];
+            weight_rd_raw[1] <= weight_mem_c1[weight_rd_addr];
+            weight_rd_raw[2] <= weight_mem_c2[weight_rd_addr];
+            weight_rd_raw[3] <= weight_mem_c3[weight_rd_addr];
+        end
+    end
+`else
+    genvar g;
     generate
-        for (c = 0; c < NUM_CLASSES; c = c + 1) begin : gen_matmul
-            MatMul #(
-                .N               (MAT_N),
-                .DATA_BIT_SIZE   (MAT_DATA_BITS),
-                .PRODUCT_BIT_SIZE(MAT_PRODUCT_BITS),
-                .ACC_BIT_SIZE    (MAT_ACC_BITS)
-            ) u_matmul (
+        for (g = 0; g < NUM_CLASSES; g = g + 1) begin : gen_weight_rams
+            ram_1r1w_sync #(
+                .width_p        (WEIGHT_BITS),
+                .depth_p        (FEATURE_COUNT),
+                .filename_p     (WEIGHT),
+                .init_offset_p  (g * FEATURE_COUNT),
+                .init_count_p   (FEATURE_COUNT),
+                .init_is_float_p(1'b1),
+                .init_scale_p   (WEIGHT_SCALE),
+                .init_signed_p  (1'b0)
+            ) u_weight_ram (
+                .clk_i      (clk),
+                .reset_i    (rst),
+                .wr_valid_i (1'b0),
+                .wr_data_i  ('0),
+                .wr_addr_i  ('0),
+                .rd_valid_i (weight_rd_valid),
+                .rd_addr_i  (weight_rd_addr),
+                .rd_data_o  (weight_rd_raw[g])
+            );
+        end
+    endgenerate
+`endif
+
+    // Build systolic inputs:
+    // - sa_a_flat: put a_row[k] into row 0, col k
+    // - sa_b_flat_cls[class]:
+    //      put weight_tile[k][class] into row k, col 0
+    //      (everything else zero)
+    // This makes output[0,0] == dot(a_row, weight_vec_for_class).
+    always_comb begin
+        // default clear A
+        for (int r = 0; r < N; r = r + 1)
+            for (int c = 0; c < N; c = c + 1)
+                sa_a_flat[(r*N + c)*SA_DATA_BITS +: SA_DATA_BITS] = '0;
+
+        // default clear all class B matrices
+        for (int cls = 0; cls < NUM_CLASSES; cls = cls + 1)
+            for (int r = 0; r < N; r = r + 1)
+                for (int c = 0; c < N; c = c + 1)
+                    sa_b_flat_cls[cls][(r*N + c)*SA_DATA_BITS +: SA_DATA_BITS] = '0;
+
+        // fill row0 of A
+        for (int k = 0; k < N; k = k + 1) begin
+            sa_a_flat[(0*N + k)*SA_DATA_BITS +: SA_DATA_BITS] = a_row[k];
+        end
+
+        // fill col0 of each class's B
+        for (int k = 0; k < N; k = k + 1) begin
+            for (int cls = 0; cls < NUM_CLASSES; cls = cls + 1) begin
+                sa_b_flat_cls[cls][(k*N + 0)*SA_DATA_BITS +: SA_DATA_BITS] =
+                    {{(SA_DATA_BITS-WEIGHT_BITS){1'b0}}, weight_tile[k][cls]};
+            end
+        end
+    end
+
+    // Start pulse to all systolic engines
+    assign sa_start = (score_state == SC_SYS_START);
+
+    // Instantiate 4 systolic engines (one per class)
+    genvar gc;
+    generate
+        for (gc = 0; gc < NUM_CLASSES; gc = gc + 1) begin : gen_sa_per_class
+            voxel_systolic_array #(
+                .N             (N),
+                .DATA_BIT_SIZE (SA_DATA_BITS)
+            ) u_voxel_systolic_array (
                 .clk            (clk),
                 .reset          (rst),
-                .start          (core_state == ST_MAT_START),
-                .A_matrix_flat  (A_matrix_flat),
-                .B_matrix_flat  (B_matrix_flat[c]),
-                .Out_matrix_flat(Out_matrix_flat[c]),
-                .busy           (mat_busy[c]),
-                .done           (mat_done[c])
+                .start          (sa_start),
+                .A_matrix_flat  (sa_a_flat),
+                .B_matrix_flat  (sa_b_flat_cls[gc]),
+                .Out_matrix_flat(sa_out_flat_cls[gc]),
+                .busy           (sa_busy_cls[gc]),
+                .done           (sa_done_cls[gc])
             );
         end
     endgenerate
 
-    // Score calculation + argmax:
-    // score[class] = sum of all 256 output cells
-    // best_class = argmax(score)
+    // Pack scores for gesture classifier
     always_comb begin
-        for (int cls = 0; cls < NUM_CLASSES; cls = cls + 1) begin
-            class_score_comb[cls] = '0;
-            for (int idx = 0; idx < CELLS_PER_BIN; idx = idx + 1)
-                class_score_comb[cls] = class_score_comb[cls] +
-                    Out_matrix_flat[cls][idx*MAT_ACC_BITS +: MAT_ACC_BITS];
-        end
-
-        best_class_comb = 2'd0;
-        best_score_comb = class_score_comb[0];
-        for (int cls2 = 1; cls2 < NUM_CLASSES; cls2 = cls2 + 1) begin
-            if (class_score_comb[cls2] > best_score_comb) begin
-                best_score_comb = class_score_comb[cls2];
-                best_class_comb = cls2[1:0];
-            end
-        end
+        for (int gi = 0; gi < NUM_CLASSES; gi = gi + 1)
+            scores_flat[gi*SCORE_BITS +: SCORE_BITS] = score_acc[gi];
     end
 
-    // Core FSM:
-    // - capture A from readout
-    // - request and capture weights into B
-    // - start MatMul blocks
-    // - wait done, latch best class/score
+    // Score FSM
+    //  - waits for all_sa_done instead of sa_done
+    //  - accumulates from each class's sa_out_flat_cls[cls]
     always_ff @(posedge clk) begin
         if (rst) begin
-            core_state        <= ST_IDLE;
-            a_load_count      <= '0;
-            w_load_count      <= '0;
-            sys_result_valid  <= 1'b0;
-            sys_best_class    <= '0;
-            sys_best_score    <= '0;
+            score_state            <= SC_IDLE;
+            load_cycle             <= '0;
+            tile_idx               <= '0;
+            scores_valid           <= 1'b0;
+            consume_feature_window <= 1'b0;
 
-            // clear weight address pipes
-            for (int i = 0; i < PARALLEL_READS; i = i + 1) begin
-                w_addr_lane[i]       <= '0;
-                w_addr_pipe[i]       <= '0;
-                w_lane_valid_pipe[i] <= 1'b0;
+            for (int c = 0; c < NUM_CLASSES; c = c + 1)
+                score_acc[c] <= '0;
+
+            for (int k = 0; k < N; k = k + 1) begin
+                a_row[k] <= '0;
+                for (int c = 0; c < NUM_CLASSES; c = c + 1)
+                    weight_tile[k][c] <= '0;
             end
 
-            // clear A storage
-            for (int a = 0; a < CELLS_PER_BIN; a = a + 1)
-                A_matrix_flat[a*MAT_DATA_BITS +: MAT_DATA_BITS] <= '0;
-
-            // clear B storage for all classes
-            for (int cls = 0; cls < NUM_CLASSES; cls = cls + 1)
-                for (int b = 0; b < CELLS_PER_BIN; b = b + 1)
-                    B_matrix_flat[cls][b*MAT_DATA_BITS +: MAT_DATA_BITS] <= '0;
         end else begin
-            integer prev_weight_writes;
-            integer next_a_writes;
-            integer rd_idx;
+            scores_valid           <= 1'b0;
+            consume_feature_window <= 1'b0;
 
-            // default: sys_result_valid is only a pulse when we finish
-            sys_result_valid <= 1'b0;
+            case (score_state)
+                // Wait until a full feature window has been captured into feature_ram
+                SC_IDLE: begin
+                    if (feature_window_ready) begin
+                        consume_feature_window <= 1'b1;
+                        tile_idx   <= '0;
+                        load_cycle <= '0;
 
-            // Weight return capture (1-cycle delayed)
-            // If last cycle we requested weights (w_lane_valid_pipe=1),
-            // then this cycle we write those weights into B_matrix_flat.
-            prev_weight_writes = 0;
-            for (int lane = 0; lane < PARALLEL_READS; lane = lane + 1) begin
-                if (w_lane_valid_pipe[lane]) begin
-                    prev_weight_writes = prev_weight_writes + 1;
-                    for (int clsw = 0; clsw < NUM_CLASSES; clsw = clsw + 1) begin
-                        B_matrix_flat[clsw][w_addr_pipe[lane]*MAT_DATA_BITS +: MAT_DATA_BITS] <=
-                            w_data_lane[lane][clsw];
-                    end
-                end
-            end
-            if (prev_weight_writes != 0)
-                w_load_count <= w_load_count + prev_weight_writes[BIN_CELL_ADDR_BITS:0];
+                        for (int c = 0; c < NUM_CLASSES; c = c + 1)
+                            score_acc[c] <= '0;
 
-            // Default: no new weight returns next cycle unless we set it below
-            for (int lane2 = 0; lane2 < PARALLEL_READS; lane2 = lane2 + 1)
-                w_lane_valid_pipe[lane2] <= 1'b0;
-
-            // State machine
-            case (core_state)
-                // Wait for a new binner window to start readout
-                ST_IDLE: begin
-                    if (readout_start) begin
-                        a_load_count <= '0;
-                        w_load_count <= '0;
-                        core_state   <= ST_CAPTURE;
+                        score_state <= SC_LOAD;
                     end
                 end
 
-                // Capture one full 16x16 bin into A_matrix_flat.
-                // In the same loop, issue weight RAM reads for each captured index.
-                ST_CAPTURE: begin
-                    next_a_writes = 0;
+                // Load N features + N weights (one per cycle).
+                // NOTE: reads are synchronous; data arrives the following cycle.
+                SC_LOAD: begin
+                    if (load_cycle > 0) begin
+                        int cap_idx;
+                        cap_idx = load_cycle - 1;
 
-                    if (readout_valid && (a_load_count < CELLS_PER_BIN)) begin
-                        for (int lane3 = 0; lane3 < PARALLEL_READS; lane3 = lane3 + 1) begin
-                            rd_idx = a_load_count + lane3;
-                            if (rd_idx < CELLS_PER_BIN) begin
-                                // Store bin counter into A (zero-extend 6-bit -> 8-bit)
-                                A_matrix_flat[rd_idx*MAT_DATA_BITS +: MAT_DATA_BITS] <=
-                                    {{(MAT_DATA_BITS-COUNTER_BITS){1'b0}},
-                                     readout_data[lane3*COUNTER_BITS +: COUNTER_BITS]};
+                        // feature -> a_row
+                        a_row[cap_idx] <= {{(SA_DATA_BITS-COUNTER_BITS){1'b0}}, feature_rd_data};
 
-                                // Request weights for this same cell index
-                                w_addr_lane[lane3]       <= rd_idx[CELL_ADDR_BITS-1:0];
-                                w_addr_pipe[lane3]       <= rd_idx[CELL_ADDR_BITS-1:0];
-                                w_lane_valid_pipe[lane3] <= 1'b1; // enables write-back NEXT cycle
-                                next_a_writes            = next_a_writes + 1;
-                            end
-                        end
+                        // weights -> weight_tile[cap_idx][class]
+                        for (int c = 0; c < NUM_CLASSES; c = c + 1)
+                            weight_tile[cap_idx][c] <= weight_rd_raw[c];
                     end
 
-                    if (next_a_writes != 0)
-                        a_load_count <= a_load_count + next_a_writes[BIN_CELL_ADDR_BITS:0];
-
-                    // once A is captured, move on to waiting for weights to finish returning
-                    if (a_load_count >= CELLS_PER_BIN)
-                        core_state <= ST_WAIT_WEIGHTS;
-                end
-
-                // Wait until we have written ALL weight cells into B_matrix_flat
-                ST_WAIT_WEIGHTS: begin
-                    if (w_load_count >= CELLS_PER_BIN)
-                        core_state <= ST_MAT_START;
-                end
-
-                // Pulse start to MatMul blocks for 1 cycle
-                ST_MAT_START: begin
-                    core_state <= ST_MAT_WAIT;
-                end
-
-                // Wait until all MatMul blocks done, then publish best class
-                ST_MAT_WAIT: begin
-                    if (all_mat_done) begin
-                        sys_best_class   <= best_class_comb;
-                        sys_best_score   <= best_score_comb;
-                        sys_result_valid <= 1'b1;
-                        core_state       <= ST_IDLE;
+                    if (load_cycle == N) begin
+                        score_state <= SC_SYS_START;
+                    end else begin
+                        load_cycle <= load_cycle + 1'b1;
                     end
                 end
 
-                default: core_state <= ST_IDLE;
+                // Pulse start to all systolic engines
+                SC_SYS_START: begin
+                    score_state <= SC_SYS_WAIT;
+                end
+
+                // Wait for all 4 systolic engines to finish
+                SC_SYS_WAIT: begin
+                    if (all_sa_done)
+                        score_state <= SC_ACCUM;
+                end
+
+                // Accumulate the dot-product outputs into score_acc[class]
+                // We read output[0,0] from each class engine.
+                SC_ACCUM: begin
+                    for (int c = 0; c < NUM_CLASSES; c = c + 1) begin
+                        score_acc[c] <= score_acc[c] + sa_out_flat_cls[c][(0*N + 0)*SA_ACC_BITS +: SA_ACC_BITS];
+                    end
+
+                    if (tile_idx == TILES - 1) begin
+                        score_state <= SC_PUBLISH;
+                    end else begin
+                        tile_idx    <= tile_idx + 1'b1;
+                        load_cycle  <= '0;
+                        score_state <= SC_LOAD;
+                    end
+                end
+
+                // Publish the scores vector for gesture classifier
+                SC_PUBLISH: begin
+                    scores_valid <= 1'b1;
+                    score_state  <= SC_IDLE;
+                end
+
+                default: score_state <= SC_IDLE;
             endcase
         end
     end
 
-    // Threshold and confidence inputs for gesture classifier
-    assign score_above_thresh = (sys_best_score >= MIN_SCORE_THRESH);
-    assign pseudo_mag_x       = {2'b0, sys_best_score[15:0]};
-    assign pseudo_mag_y       = 18'd0;
-
-    // Gesture classifier:
-    // adds persistence: requires same class multiple times before outputting gesture_valid
+    // Gesture classifier
     voxel_gesture_classifier #(
-        .ACC_SUM_BITS     (ACC_SUM_BITS),
-        .PERSISTENCE_COUNT(PERSISTENCE_COUNT)
-    ) u_gesture_classifier (
+        .NUM_CLASSES       (NUM_CLASSES),
+        .SCORE_BITS        (SCORE_BITS),
+        .PASS_MARGIN       (PASS_MARGIN),
+        .PERSISTENCE_COUNT (PERSISTENCE_COUNT),
+        .CONF_BITS         (CONF_BITS),
+        .CONF_SHIFT        (CONF_SHIFT)
+    ) u_voxel_gesture_classifier (
         .clk               (clk),
         .rst               (rst),
-        .class_gesture     (sys_best_class),
-        .class_valid       (sys_result_valid),
-        .class_pass        (sys_result_valid && score_above_thresh),
-        .abs_delta_x       (pseudo_mag_x),
-        .abs_delta_y       (pseudo_mag_y),
+        .scores_flat       (scores_flat),
+        .scores_valid      (scores_valid),
+        .class_gesture     (class_gesture),
+        .class_valid       (class_valid),
+        .class_pass        (class_pass),
         .gesture           (gesture),
         .gesture_valid     (gesture_valid),
         .gesture_confidence(gesture_confidence),
         .debug_state       (debug_state)
     );
 
-    // Prevent "unused signal" warnings (timestamp not used here)
-    wire _unused_decoder_timestamp = decoded_timestamp[0];
+    // Avoid unused warning
+    wire _unused_decoder_outputs = dec_timestamp[0];
 
 endmodule
