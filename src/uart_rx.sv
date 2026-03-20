@@ -1,6 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024-2025 Group G Contributors
 `timescale 1ns/1ps
-
-// UART Receiver - 8N1, synchronous active-high reset
 
 module uart_rx #(
     parameter int CLK_FREQ_HZ = 12_000_000,

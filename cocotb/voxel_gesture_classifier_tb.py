@@ -1,5 +1,5 @@
-"""Robust cocotb testbench for gesture_classifier using a cycle-accurate golden model."""
-
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2025 Group G Contributors
 import random
 
 import cocotb
@@ -10,123 +10,92 @@ import os
 from util.config_parser import load_config
 
 MODULE = os.environ.get("TOPLEVEL")
-CFG = load_config(MODULE)
+CFG    = load_config(MODULE)
 
-NUM_CLASSES       = CFG["NUM_CLASSES"]
-SCORE_BITS        = CFG["SCORE_BITS"]
-PASS_MARGIN       = CFG["PASS_MARGIN"]
-PERSISTENCE_COUNT = CFG["PERSISTENCE_COUNT"]
-CONF_BITS         = CFG["CONF_BITS"]
-CONF_SHIFT        = CFG["CONF_SHIFT"]
+NUM_CLASSES = CFG["NUM_CLASSES"]
+SCORE_BITS  = CFG["SCORE_BITS"]
 
-CONF_MAX   = (1 << CONF_BITS) - 1
 SCORE_MASK = (1 << SCORE_BITS) - 1
-# scores_valid -> class_valid latency through the pipelined classifier.
-CLASSIFY_PIPE_CYCLES = 3
 
+# scores_valid → outputs latency: 4 cycles (capture → pair-reduce → merge → hold → compare)
+CLASSIFY_PIPE_CYCLES = 4
 
-def to_signed(val, bits):
-    val &= (1 << bits) - 1
-    if val & (1 << (bits - 1)):
-        return val - (1 << bits)
-    return val
-
-
-def from_signed(val, bits):
-    return val & ((1 << bits) - 1)
+# Must match weights/thresholds.mem (all zeros by default).
+CLASS_THRESHOLDS = [0, 0, 0, 0]
+DIFF_THRESHOLDS  = [0, 0, 0, 0]
 
 
 def pack_scores(scores):
     packed = 0
     for i, s in enumerate(scores):
-        packed |= from_signed(s, SCORE_BITS) << (i * SCORE_BITS)
+        packed |= (s & SCORE_MASK) << (i * SCORE_BITS)
     return packed
 
 
 class GestureClassifierModel:
-    """Cycle-accurate golden model for rtl/gesture_classifier.sv defaults."""
+    """Cycle-accurate golden model for voxel_gesture_classifier (per-class threshold)."""
 
     def __init__(self):
         self.reset()
 
     def reset(self):
-        self.class_gesture = 0
-        self.class_valid = 0
-        self.class_pass = 0
-        self.gesture = 0
-        self.gesture_valid = 0
+        self.class_gesture      = 0
+        self.class_valid        = 0
+        self.class_pass         = 0
+        self.gesture            = 0
+        self.gesture_valid      = 0
         self.gesture_confidence = 0
-        self.last_pass_class = 0
-        self.pass_streak = 0
-        self.debug_state = 0
 
     def step(self, scores_flat, scores_valid):
-        self.class_valid = 0
-        self.class_pass = 0
-        self.gesture_valid = 0
-        self.debug_state = 0
+        self.class_valid        = 0
+        self.class_pass         = 0
+        self.gesture_valid      = 0
+        self.gesture_confidence = 0
 
         if not scores_valid:
             return
 
-        scores = [to_signed((scores_flat >> (i * SCORE_BITS)) & SCORE_MASK, SCORE_BITS)
+        scores = [(scores_flat >> (i * SCORE_BITS)) & SCORE_MASK
                   for i in range(NUM_CLASSES)]
 
-        max_score = scores[0]
-        second_score = -(1 << (SCORE_BITS - 1))
-        max_class = 0
+        if scores[0] >= scores[1]:
+            p0_max, p0_min, p0_cls = scores[0], scores[1], 0
+        else:
+            p0_max, p0_min, p0_cls = scores[1], scores[0], 1
+        if scores[2] >= scores[3]:
+            p1_max, p1_min, p1_cls = scores[2], scores[3], 2
+        else:
+            p1_max, p1_min, p1_cls = scores[3], scores[2], 3
 
-        for i in range(1, NUM_CLASSES):
-            if scores[i] > max_score:
-                second_score = max_score
-                max_score = scores[i]
-                max_class = i
-            elif scores[i] > second_score:
-                second_score = scores[i]
+        if p0_max >= p1_max:
+            max_score, max_class = p0_max, p0_cls
+            second_a, second_b   = p1_max, p0_min
+        else:
+            max_score, max_class = p1_max, p1_cls
+            second_a, second_b   = p0_max, p1_min
 
-        margin = max_score - second_score
-        passed = int(margin > PASS_MARGIN)
+        second_score = second_a if second_a >= second_b else second_b
+        diff         = max_score - second_score
+
+        class_thresh = CLASS_THRESHOLDS[max_class]
+        diff_thresh  = DIFF_THRESHOLDS[max_class]
 
         self.class_gesture = max_class
-        self.class_valid = 1
-        self.class_pass = passed
+        self.class_valid   = 1
+        self.class_pass    = 1 if max_score > class_thresh else 0
 
-        if passed:
-            if max_class == self.last_pass_class:
-                if self.pass_streak < PERSISTENCE_COUNT:
-                    next_streak = self.pass_streak + 1
-                else:
-                    next_streak = self.pass_streak
-            else:
-                next_streak = 1
-
-            self.last_pass_class = max_class
-            self.pass_streak = next_streak
-
-            if next_streak >= PERSISTENCE_COUNT:
-                self.gesture = max_class
-                self.gesture_valid = 1
-                self.debug_state = 2
-            else:
-                self.debug_state = 1
-
-            conf_shifted = margin >> CONF_SHIFT
-            if conf_shifted > CONF_MAX:
-                self.gesture_confidence = CONF_MAX
-            elif margin <= 0:
-                self.gesture_confidence = 0
-            else:
-                self.gesture_confidence = conf_shifted & CONF_MAX
-        else:
-            self.pass_streak = 0
-            self.debug_state = 0
+        if self.class_pass:
+            self.gesture            = max_class
+            self.gesture_valid      = 1
+            self.gesture_confidence = 1 if diff > diff_thresh else 0
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
-    dut.rst.value = 1
-    dut.scores_flat.value = 0
-    dut.scores_valid.value = 0
+    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    dut.rst.value              = 1
+    dut.scores_flat.value      = 0
+    dut.scores_valid.value     = 0
+    dut.thresh_data.value      = 0
     await ClockCycles(dut.clk, 5)
     dut.rst.value = 0
     await ClockCycles(dut.clk, 2)
@@ -134,16 +103,14 @@ async def setup(dut):
 
 async def drive_and_check(dut, model, scores, valid, tag):
     packed = pack_scores(scores)
-    dut.scores_flat.value = packed
+    dut.scores_flat.value  = packed
     dut.scores_valid.value = valid
 
     model.step(packed, valid)
 
-    # Launch input into stage-0.
     await RisingEdge(dut.clk)
     dut.scores_valid.value = 0
 
-    # Wait for the pipelined decision point corresponding to this input.
     for stage in range(CLASSIFY_PIPE_CYCLES):
         await RisingEdge(dut.clk)
         if stage != CLASSIFY_PIPE_CYCLES - 1:
@@ -162,229 +129,165 @@ async def drive_and_check(dut, model, scores, valid, tag):
             f"{tag}: gesture_valid DUT={int(dut.gesture_valid.value)} model={model.gesture_valid}"
         assert int(dut.gesture_confidence.value) == model.gesture_confidence, \
             f"{tag}: confidence DUT={int(dut.gesture_confidence.value)} model={model.gesture_confidence}"
-        assert int(dut.debug_state.value) == model.debug_state, \
-            f"{tag}: debug_state DUT={int(dut.debug_state.value)} model={model.debug_state}"
 
     await NextTimeStep()
 
 
 @logged_test()
 async def test_reset_defaults(dut):
+    """After reset all outputs are deasserted."""
     await setup(dut)
     assert int(dut.class_valid.value) == 0
     assert int(dut.class_pass.value) == 0
     assert int(dut.gesture_valid.value) == 0
-    assert int(dut.debug_state.value) == 0
 
 
 @logged_test()
-async def test_tie_break_and_threshold(dut):
+async def test_single_pass_immediate(dut):
+    """CLASS_THRESHOLD=0: a single window with max_score>0 immediately fires gesture_valid."""
     await setup(dut)
     model = GestureClassifierModel()
 
-    # All tied: class 0 should win tie-break.
-    await drive_and_check(dut, model, [10, 10, 10, 10], 1, "tie")
-    assert int(dut.class_gesture.value) == 0
+    await drive_and_check(dut, model, [100, 1, 1, 1], 1, "single-pass")
+    assert int(dut.class_valid.value) == 1
+    assert int(dut.gesture_valid.value) == 1
+    assert int(dut.gesture.value) == 0
 
-    # Margin exactly PASS_MARGIN should fail (strict >).
-    await drive_and_check(dut, model, [100, 36, 36, 36], 1, "margin-eq")
+
+@logged_test()
+async def test_no_pass_zero(dut):
+    """Scores ≤ CLASS_THRESHOLD (=0) fail; gesture_valid stays deasserted."""
+    await setup(dut)
+    model = GestureClassifierModel()
+
+    # max_score = 0, threshold = 0 — strict > means this fails.
+    await drive_and_check(dut, model, [0, 0, 0, 0], 1, "zero-max")
     assert int(dut.class_pass.value) == 0
+    assert int(dut.gesture_valid.value) == 0
 
-    # Margin PASS_MARGIN+1 should pass.
-    await drive_and_check(dut, model, [101, 36, 36, 36], 1, "margin-gt")
+    # All at minimum (0).
+    await drive_and_check(dut, model, [0, 0, 0, 0], 1, "all-zero")
+    assert int(dut.class_pass.value) == 0
+    assert int(dut.gesture_valid.value) == 0
+
+
+@logged_test()
+async def test_confidence_bit(dut):
+    """DIFF_THRESHOLD=0: confidence=1 when diff>0, confidence=0 when diff=0."""
+    await setup(dut)
+    model = GestureClassifierModel()
+
+    # All equal scores: diff=0, not >0 → confidence=0; max_score=100>0 → pass.
+    await drive_and_check(dut, model, [100, 100, 100, 100], 1, "equal")
     assert int(dut.class_pass.value) == 1
+    assert int(dut.gesture_confidence.value) == 0
+
+    # Clear winner: diff > 0 → confidence=1.
+    await drive_and_check(dut, model, [500, 10, 10, 10], 1, "clear")
+    assert int(dut.gesture_confidence.value) == 1
 
 
 @logged_test()
-async def test_persistence_and_class_change(dut):
-    await setup(dut)
-    model = GestureClassifierModel()
-
-    # Two consecutive passes on same class needed to assert gesture_valid.
-    await drive_and_check(dut, model, [300, 0, -10, -20], 1, "persist-1")
-    assert int(dut.gesture_valid.value) == 0
-    await drive_and_check(dut, model, [350, 0, -10, -20], 1, "persist-2")
-    assert int(dut.gesture_valid.value) == 1
-
-    # Class change should restart streak.
-    await drive_and_check(dut, model, [0, 400, -10, -20], 1, "change-1")
-    assert int(dut.gesture_valid.value) == 0
-    await drive_and_check(dut, model, [0, 420, -10, -20], 1, "change-2")
-    assert int(dut.gesture_valid.value) == 1
-
-
-@logged_test()
-async def test_confidence_edges(dut):
-    await setup(dut)
-    model = GestureClassifierModel()
-
-    # Build streak first.
-    await drive_and_check(dut, model, [300, 0, 0, 0], 1, "warm-1")
-    await drive_and_check(dut, model, [301, 0, 0, 0], 1, "warm-2")
-
-    # Saturation case.
-    huge = (1 << 20)
-    await drive_and_check(dut, model, [huge, -huge, -huge, -huge], 1, "conf-sat")
-    assert int(dut.gesture_confidence.value) == CONF_MAX
-
-    # Not-valid cycle keeps confidence stable (model enforces hold behavior).
-    prev = int(dut.gesture_confidence.value)
-    await drive_and_check(dut, model, [0, 0, 0, 0], 0, "conf-hold")
-    assert int(dut.gesture_confidence.value) == prev
-
-
-@logged_test()
-async def test_randomized_golden_scoreboard(dut):
-    await setup(dut)
-    model = GestureClassifierModel()
-    rng = random.Random(0xBADC0DE)
-
-    for cycle in range(1500):
-        valid = rng.choice([0, 1, 1, 1])
-        scores = [rng.randint(-(1 << 20), (1 << 20) - 1) for _ in range(NUM_CLASSES)]
-        await drive_and_check(dut, model, scores, valid, f"rnd-{cycle}")
-
-
-@logged_test()
-async def test_all_negative_scores(dut):
-    """All-negative scores: argmax finds the least-negative class correctly."""
-    await setup(dut)
-    model = GestureClassifierModel()
-
-    # class 2 is least negative -> max; margin = (-50) - (-150) = 100 > PASS_MARGIN.
-    scores = [-200, -150, -50, -180]
-    for i in range(PERSISTENCE_COUNT + 1):
-        await drive_and_check(dut, model, scores, 1, f"neg-{i}")
-
-    assert int(dut.class_gesture.value) == 2, \
-        f"Expected class 2 (least negative), got {int(dut.class_gesture.value)}"
-
-
-@logged_test()
-async def test_rapid_class_switch_never_fires_gesture(dut):
-    """Alternating classes each cycle must never accumulate a streak."""
-    await setup(dut)
-    model = GestureClassifierModel()
-
-    for cycle in range(20):
-        # Alternate between class 0 and class 1 each cycle.
-        scores = [500, 0, 0, 0] if (cycle % 2 == 0) else [0, 500, 0, 0]
-        await drive_and_check(dut, model, scores, 1, f"alt-{cycle}")
-        assert int(dut.gesture_valid.value) == 0, \
-            f"gesture_valid unexpectedly asserted at cycle {cycle}"
-
-
-@logged_test()
-async def test_invalid_cycles_do_not_break_streak(dut):
-    """scores_valid=0 cycles between two passing windows must not reset the streak."""
-    await setup(dut)
-    model = GestureClassifierModel()
-
-    # Build streak=1 on class 3.
-    await drive_and_check(dut, model, [0, 0, 0, 500], 1, "streak-1")
-    assert int(dut.gesture_valid.value) == 0
-
-    # Insert invalid (scores_valid=0) cycles.
-    for _ in range(10):
-        await drive_and_check(dut, model, [0, 0, 0, 0], 0, "invalid")
-
-    # Next passing window on the same class completes the streak.
-    await drive_and_check(dut, model, [0, 0, 0, 500], 1, "streak-2")
-    assert int(dut.gesture_valid.value) == 1, \
-        "Streak should have reached PERSISTENCE_COUNT"
-    assert int(dut.gesture.value) == 3, "Expected gesture class 3"
-
-
-@logged_test()
-async def test_large_score_no_overflow(dut):
-    """Near-maximum score values must not overflow the confidence computation."""
-    await setup(dut)
-    model = GestureClassifierModel()
-
-    # Scores sized to fit in SCORE_BITS=32 signed; margin >> CONF_SHIFT saturates at CONF_MAX.
-    huge = (1 << 28) - 1
-    scores = [huge, 0, 0, 0]
-    for _ in range(PERSISTENCE_COUNT):
-        await drive_and_check(dut, model, scores, 1, "large")
-
-    assert int(dut.gesture_valid.value) == 1
-    assert int(dut.gesture_confidence.value) == CONF_MAX, \
-        f"Confidence should saturate at {CONF_MAX}, got {int(dut.gesture_confidence.value)}"
-
-
-@logged_test()
-async def test_fail_then_pass_resets_streak(dut):
-    """A non-passing window resets the streak; subsequent passes start fresh."""
-    await setup(dut)
-    model = GestureClassifierModel()
-
-    # First passing window (streak=1).
-    await drive_and_check(dut, model, [300, 0, 0, 0], 1, "pass-1")
-    assert int(dut.gesture_valid.value) == 0
-
-    # Failing window (margin <= PASS_MARGIN) — streak drops to 0.
-    await drive_and_check(dut, model, [100, 64, 64, 64], 1, "fail")
-    assert int(dut.class_pass.value) == 0
-
-    # Two more passing windows needed to reach gesture_valid.
-    await drive_and_check(dut, model, [300, 0, 0, 0], 1, "pass-2")
-    assert int(dut.gesture_valid.value) == 0
-
-    await drive_and_check(dut, model, [300, 0, 0, 0], 1, "pass-3")
-    assert int(dut.gesture_valid.value) == 1
-
-
-@logged_test()
-async def test_each_class_can_win(dut):
-    """Exercise each of the four classes as the winner; golden model tracks all."""
+async def test_argmax_all_classes(dut):
+    """Each of the four classes can be the winning class."""
     await setup(dut)
     model = GestureClassifierModel()
 
     for cls in range(NUM_CLASSES):
-        # Build a score vector where only class `cls` is high.
-        scores = [-100] * NUM_CLASSES
+        scores = [1] * NUM_CLASSES
         scores[cls] = 500
-        for _ in range(PERSISTENCE_COUNT + 1):
-            await drive_and_check(dut, model, scores, 1, f"cls{cls}-run")
-
+        await drive_and_check(dut, model, scores, 1, f"cls{cls}")
+        assert int(dut.gesture_valid.value) == 1
         assert int(dut.gesture.value) == cls, \
             f"Expected gesture class {cls}, got {int(dut.gesture.value)}"
-        assert int(dut.gesture_valid.value) == 1
 
 
 @logged_test()
-async def test_debug_state_transitions(dut):
-    """Explicit check of all three debug_state values: 0=fail, 1=accumulating, 2=gesture valid."""
+async def test_invalid_cycles_no_output(dut):
+    """scores_valid=0 produces class_valid=0 (pipeline idles)."""
     await setup(dut)
     model = GestureClassifierModel()
 
-    # debug_state=0: margin <= PASS_MARGIN (fails threshold).
-    await drive_and_check(dut, model, [100, 64, 64, 64], 1, "fail")
-    assert int(dut.debug_state.value) == 0, \
-        f"Expected debug_state=0 on fail, got {int(dut.debug_state.value)}"
-    assert int(dut.gesture_valid.value) == 0
+    for i in range(5):
+        await drive_and_check(dut, model, [500, 0, 0, 0], 0, f"invalid-{i}")
+        assert int(dut.class_valid.value) == 0
+        assert int(dut.gesture_valid.value) == 0
 
-    # debug_state=1: first passing window — streak=1 < PERSISTENCE_COUNT=2.
-    await drive_and_check(dut, model, [300, 0, 0, 0], 1, "pass-1")
-    assert int(dut.debug_state.value) == 1, \
-        f"Expected debug_state=1 on first pass, got {int(dut.debug_state.value)}"
-    assert int(dut.gesture_valid.value) == 0
 
-    # debug_state=2: second consecutive passing window — streak reaches PERSISTENCE_COUNT.
-    await drive_and_check(dut, model, [300, 0, 0, 0], 1, "pass-2")
-    assert int(dut.debug_state.value) == 2, \
-        f"Expected debug_state=2 on gesture valid, got {int(dut.debug_state.value)}"
+@logged_test()
+async def test_consecutive_passes_each_valid(dut):
+    """No persistence: every passing window fires gesture_valid independently."""
+    await setup(dut)
+    model = GestureClassifierModel()
+
+    for i in range(5):
+        await drive_and_check(dut, model, [300, 1, 1, 1], 1, f"pass-{i}")
+        assert int(dut.gesture_valid.value) == 1, f"Expected gesture_valid at pass {i}"
+
+
+@logged_test()
+async def test_class_changes_fire_each_time(dut):
+    """No streak needed: alternating classes each independently fire gesture_valid."""
+    await setup(dut)
+    model = GestureClassifierModel()
+
+    for cycle in range(8):
+        cls = cycle % NUM_CLASSES
+        scores = [1] * NUM_CLASSES
+        scores[cls] = 200
+        await drive_and_check(dut, model, scores, 1, f"alt-{cycle}")
+        assert int(dut.gesture_valid.value) == 1
+        assert int(dut.gesture.value) == cls, \
+            f"cycle {cycle}: expected cls {cls}, got {int(dut.gesture.value)}"
+
+
+@logged_test()
+async def test_tie_break(dut):
+    """Tied scores: RTL pair-reduce favors lower class index."""
+    await setup(dut)
+    model = GestureClassifierModel()
+
+    # All equal: s0==s1 → pair0 winner=cls0; s2==s3 → pair1 winner=cls2.
+    # pair0_max==pair1_max → merge winner=cls0.
+    await drive_and_check(dut, model, [100, 100, 100, 100], 1, "full-tie")
+    assert int(dut.class_gesture.value) == 0
+
+
+@logged_test()
+async def test_large_score_no_overflow(dut):
+    """Near-maximum unsigned values must not overflow the diff computation."""
+    await setup(dut)
+    model = GestureClassifierModel()
+
+    huge = (1 << 28) - 1
+    await drive_and_check(dut, model, [huge, 1, 1, 1], 1, "huge")
     assert int(dut.gesture_valid.value) == 1
-    assert int(dut.gesture.value) == 0
+    assert int(dut.gesture_confidence.value) == 1
 
-    # Fail resets streak -> debug_state=0, gesture_valid deasserts.
-    await drive_and_check(dut, model, [100, 64, 64, 64], 1, "fail-2")
-    assert int(dut.debug_state.value) == 0
+
+@logged_test()
+async def test_fail_then_immediate_pass(dut):
+    """After a failing window, the very next passing window fires gesture_valid."""
+    await setup(dut)
+    model = GestureClassifierModel()
+
+    # Fail (max_score = 0).
+    await drive_and_check(dut, model, [0, 0, 0, 0], 1, "fail")
     assert int(dut.gesture_valid.value) == 0
 
-    # Class change on first pass: streak restarts at 1 -> debug_state=1.
-    await drive_and_check(dut, model, [0, 400, 0, 0], 1, "class-change")
-    assert int(dut.debug_state.value) == 1, \
-        f"Expected debug_state=1 after class change pass, got {int(dut.debug_state.value)}"
-    assert int(dut.class_gesture.value) == 1
-    assert int(dut.gesture_valid.value) == 0
+    # Pass immediately after — no streak required.
+    await drive_and_check(dut, model, [100, 1, 1, 1], 1, "pass-after-fail")
+    assert int(dut.gesture_valid.value) == 1
+
+
+@logged_test()
+async def test_randomized_golden_scoreboard(dut):
+    """Random inputs: DUT must match golden model on all outputs for 500 cycles."""
+    await setup(dut)
+    model = GestureClassifierModel()
+    rng   = random.Random(0xBADC0DE)
+
+    for cycle in range(500):
+        valid  = rng.choice([0, 1, 1, 1])
+        scores = [rng.randint(0, (1 << 20) - 1) for _ in range(NUM_CLASSES)]
+        await drive_and_check(dut, model, scores, valid, f"rnd-{cycle}")

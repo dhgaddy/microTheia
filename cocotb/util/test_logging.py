@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2025 Group G Contributors
 """Shared cocotb test logging helpers for real-time progress visibility."""
 
 from functools import wraps

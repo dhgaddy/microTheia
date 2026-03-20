@@ -1,0 +1,8 @@
+# voxel_mac_engine simulation config.
+# Small FEATURE_COUNT for fast unit testing (~66 cycles per run).
+# SCORE_BITS is derived inside the module and read back from the DUT by the TB.
+
+FEATURE_COUNT = 64
+COUNTER_BITS  = 8
+WEIGHT_BITS   = 8
+NUM_CLASSES   = 4

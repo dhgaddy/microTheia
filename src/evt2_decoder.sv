@@ -1,10 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024-2025 Group G Contributors
 `timescale 1ns/1ps
 
-// EVT2.0 decoder with spatial compression from sensor coordinates to GRID_SIZE.
-// EVT word fields:
-//   [31:28] type, [27:22] ts_lsb, [21:11] x, [10:0] y
-// Supported packet types:
-//   0x0 CD OFF, 0x1 CD ON, 0x8 TIME_HIGH
+// EVT2 word fields: [31:28] type, [27:22] ts_lsb, [21:11] x, [10:0] y
+// Packet types: 0x0 CD_OFF, 0x1 CD_ON, 0x8 TIME_HIGH
 
 module evt2_decoder #(
     parameter int SENSOR_WIDTH      = 320,
@@ -21,8 +20,6 @@ module evt2_decoder #(
     output logic                        data_ready,
     output logic [$clog2(GRID_SIZE)-1:0] x_out,
     output logic [$clog2(GRID_SIZE)-1:0] y_out,
-    output logic                        polarity,
-    output logic [33:0]                 timestamp,
     output logic                        event_valid
 );
 
@@ -45,15 +42,12 @@ module evt2_decoder #(
                          ? {data_in[7:0], data_in[15:8], data_in[23:16], data_in[31:24]}
                          : data_in;
 
-    wire [3:0]  pkt_type          = evt_word[31:28];
-    wire [5:0]  ts_lsb            = evt_word[27:22];
-    wire [10:0] x_raw             = evt_word[21:11];
-    wire [10:0] y_raw             = evt_word[10:0];
-    wire [27:0] time_high_payload = evt_word[27:0];
-    wire        is_cd             = (pkt_type == EVT_CD_OFF) || (pkt_type == EVT_CD_ON);
+    wire [3:0]  pkt_type = evt_word[31:28];
+    wire [10:0] x_raw    = evt_word[21:11];
+    wire [10:0] y_raw    = evt_word[10:0];
+    wire        is_cd    = (pkt_type == EVT_CD_OFF) || (pkt_type == EVT_CD_ON);
 
-    logic [27:0] time_high_reg;
-    logic        have_time_high;
+    logic have_time_high;
 
     logic [10:0] x_clamped;
     logic [10:0] y_clamped;
@@ -73,16 +67,12 @@ module evt2_decoder #(
         else
             y_clamped = y_raw;
 
-        // Multiply vs Division implementations
-        // x_prod_c   = x_clamped * X_M;
-        // y_prod_c   = y_clamped * Y_M;
-        // x_grid_raw = x_prod_c[GRID_BITS+DIV_K:DIV_K];
-        // y_grid_raw = y_prod_c[GRID_BITS+DIV_K:DIV_K];
-        x_grid_raw = x_clamped / X_BIN_DIV;
-        y_grid_raw = y_clamped / Y_BIN_DIV;
+        // Reciprocal-multiply: floor(v/D) = (v*M) >> DIV_K, exact for v < SENSOR_DIM.
+        x_prod_c   = x_clamped * X_M;
+        y_prod_c   = y_clamped * Y_M;
+        x_grid_raw = x_prod_c[GRID_BITS+DIV_K:DIV_K];
+        y_grid_raw = y_prod_c[GRID_BITS+DIV_K:DIV_K];
 
-        // x_grid = (x_grid_raw > GRID_SIZE-1) ? GRID_BITS'(GRID_SIZE-1) : x_grid_raw[GRID_BITS-1:0];
-        // y_grid = (y_grid_raw > GRID_SIZE-1) ? GRID_BITS'(GRID_SIZE-1) : y_grid_raw[GRID_BITS-1:0];
         x_grid = (x_grid_raw >= GRID_SIZE) ? GRID_SIZE-1 : x_grid_raw;
         y_grid = (y_grid_raw >= GRID_SIZE) ? GRID_SIZE-1 : y_grid_raw;
     end
@@ -92,20 +82,16 @@ module evt2_decoder #(
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            time_high_reg <= '0;
             have_time_high <= 1'b0;
-            x_out         <= '0;
-            y_out         <= '0;
-            polarity      <= 1'b0;
-            timestamp     <= '0;
-            event_valid   <= 1'b0;
+            x_out          <= '0;
+            y_out          <= '0;
+            event_valid    <= 1'b0;
         end else begin
             event_valid <= 1'b0;
 
             if (data_valid && data_ready) begin
                 case (pkt_type)
                     EVT_TIME_HIGH: begin
-                        time_high_reg <= time_high_payload;
                         have_time_high <= 1'b1;
                     end
 
@@ -114,8 +100,6 @@ module evt2_decoder #(
                         if (!REQUIRE_TIME_HIGH || have_time_high) begin
                             x_out       <= x_grid;
                             y_out       <= y_grid;
-                            polarity    <= (pkt_type == EVT_CD_ON);
-                            timestamp   <= {time_high_reg, ts_lsb};
                             event_valid <= 1'b1;
                         end
                     end

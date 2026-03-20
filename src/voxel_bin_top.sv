@@ -1,19 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024-2025 Group G Contributors
 `timescale 1ns/1ps
-
-// UART top-level wrapper for voxel_bin_core.
-// - Ingests raw EVT2.0 words over UART (4 bytes/word, MSB first)
-// - Supports control bytes at packet-boundary:
-//     0xFF: echo -> 0x55
-//     0xFE: status -> 0xBx (bit2=fifo_full, bit1=fifo_empty, bit3=temporal_phase)
-//     0xFD: config -> 2 bytes (CONFIG_BYTE0, CONFIG_BYTE1)
-//     0xFB: diag -> 2 bytes ({debug_event_count}, {debug bits})
-//     0xFC: soft reset
-// - Sends gesture packets on valid gesture detection:
-//     byte0: 0xA0 | gesture[1:0]
-//     byte1: {confidence[CONF_BITS-1:0], event_count[7:4]}
-//
-// Gesture encoding (matches weight file and core class order):
-//   0=Down, 1=Left, 2=Right, 3=Up
 
 module voxel_bin_top #(
     parameter int         CLK_FREQ_HZ          = 12_000_000,
@@ -30,23 +17,15 @@ module voxel_bin_top #(
     parameter int         SWAP_INPUT_BYTES     = 0,
     parameter int         SENSOR_WIDTH         = 320,
     parameter int         SENSOR_HEIGHT        = 320,
-    parameter int         WEIGHT_BITS          = 8,
-    parameter int         WEIGHT_SCALE         = 1024,
-    parameter int         N                    = 16,
-    parameter int         PASS_MARGIN          = 0,
-    parameter int         PERSISTENCE_COUNT    = 2,
-    parameter int         CONF_BITS            = 4,
-    parameter int         CONF_SHIFT           = 4,
-    parameter int         UART_WORD_FIFO_DEPTH = 16,
-    parameter int         TX_FIFO_DEPTH        = 32,
-    parameter int         POR_CYCLES           = 1024,
-    parameter int         NUM_CLASSES          = 4,
-    parameter int         SOFT_RESET_CYCLES    = 64,
-    parameter [8*128-1:0] WEIGHT               = "weights/gesture_weights_down_left_right_up_8x8_4bins.txt",
-    parameter [8*128-1:0] WEIGHT_MEM_C0        = "../weights/256weights_q8_c0.mem",
-    parameter [8*128-1:0] WEIGHT_MEM_C1        = "../weights/256weights_q8_c1.mem",
-    parameter [8*128-1:0] WEIGHT_MEM_C2        = "../weights/256weights_q8_c2.mem",
-    parameter [8*128-1:0] WEIGHT_MEM_C3        = "../weights/256weights_q8_c3.mem"
+    parameter int WEIGHT_BITS          = 8,
+    parameter int UART_WORD_FIFO_DEPTH = 16,
+    parameter int TX_FIFO_DEPTH        = 32,
+    parameter int POR_CYCLES           = 1024,
+    parameter int NUM_CLASSES          = 4,
+    parameter int SOFT_RESET_CYCLES    = 64,
+    // SCORE_BITS must match voxel_bin_core's formula: COUNTER_BITS+WEIGHT_BITS+clog2(FC)+1
+    parameter int SCORE_BITS           = COUNTER_BITS + WEIGHT_BITS +
+                                         $clog2(READOUT_BINS * GRID_SIZE * GRID_SIZE) + 1
 )(
     input  logic clk,
     input  logic uart_rx,
@@ -60,12 +39,9 @@ module voxel_bin_top #(
     output logic led_right
 );
 
-    localparam logic [7:0] CONFIG_BYTE0       = 8'h08; // NUM_BINS default
-    localparam logic [7:0] CONFIG_BYTE1       = 8'h08; // READOUT_BINS default
+    localparam logic [7:0] CONFIG_BYTE0       = 8'(NUM_BINS);
+    localparam logic [7:0] CONFIG_BYTE1       = 8'(READOUT_BINS);
 
-    localparam int CLK_FREQ               = CLK_FREQ_HZ; // compatibility alias
-
-    localparam int ACTIVE_CLK_FREQ        = (CLK_FREQ != 0) ? CLK_FREQ : CLK_FREQ_HZ;
     localparam int CLKS_PER_BIT           = (BAUD_RATE > 0) ? (CLK_FREQ_HZ / BAUD_RATE) : 1;
     localparam int POR_BITS               = (POR_CYCLES > 1) ? $clog2(POR_CYCLES) : 1;
     localparam int SOFT_RST_BITS          = (SOFT_RESET_CYCLES > 1) ? $clog2(SOFT_RESET_CYCLES + 1) : 1;
@@ -79,12 +55,23 @@ module voxel_bin_top #(
     localparam logic [7:0] CMD_CONFIG     = 8'hFD;
     localparam logic [7:0] CMD_DIAG       = 8'hFB;
     localparam logic [7:0] CMD_SOFT_RESET = 8'hFC;
+    localparam logic [7:0] CMD_LOAD_WEIGHT = 8'hFA;
+    localparam logic [7:0] CMD_LOAD_THRESH = 8'hF9;
 
-    typedef enum logic [1:0] {
-        PKT_IDLE = 2'd0,
-        PKT_B1   = 2'd1,
-        PKT_B2   = 2'd2,
-        PKT_B3   = 2'd3
+    typedef enum logic [3:0] {
+        PKT_IDLE = 4'd0,
+        PKT_B1   = 4'd1,
+        PKT_B2   = 4'd2,
+        PKT_B3   = 4'd3,
+        WLD_B1   = 4'd4,
+        WLD_B2   = 4'd5,
+        WLD_B3   = 4'd6,
+        TLD_B1   = 4'd7,
+        TLD_B2   = 4'd8,
+        TLD_B3   = 4'd9,
+        TLD_B4   = 4'd10,
+        TLD_B5   = 4'd11,
+        TLD_B6   = 4'd12
     } pkt_state_t;
 
     // Internal reset (visible as dut.rst in simulation).
@@ -94,14 +81,12 @@ module voxel_bin_top #(
     logic [SOFT_RST_BITS-1:0] soft_rst_ctr;
     logic soft_rst_cmd_pulse;
 
-    // UART RX/TX byte interfaces.
     logic [7:0] rx_byte;
     logic       rx_byte_valid;
     logic [7:0] tx_byte;
     logic       tx_byte_valid;
     logic       tx_busy;
 
-    // Assembler -> word FIFO -> core input.
     pkt_state_t pkt_state;
     logic [31:0] asm_word;
     logic [31:0] word_fifo_in_data;
@@ -111,7 +96,6 @@ module voxel_bin_top #(
     logic        core_evt_valid;
     logic        core_evt_ready;
 
-    // TX response FIFO.
     logic [7:0] tx_fifo_in_data;
     logic       tx_fifo_in_valid;
     logic       tx_fifo_in_ready;
@@ -119,26 +103,23 @@ module voxel_bin_top #(
     logic       tx_fifo_out_valid;
     logic       tx_fifo_out_ready;
 
-    // Pending response flags.
     logic cmd_echo_pending;
     logic cmd_status_pending;
     logic cmd_config_pending;
     logic cmd_diag_pending;
     logic gesture_pkt_pending;
     logic [1:0] gesture_pkt_code;
-    logic [3:0] gesture_pkt_conf;
+    logic       gesture_pkt_conf;
     logic [3:0] gesture_pkt_evthi;
     logic second_byte_pending;
     logic [7:0] second_byte_data;
     logic [7:0] status_byte;
     logic [7:0] diag_byte1;
 
-    // Core outputs.
-    logic [1:0]          core_gesture;
-    logic                core_gesture_valid;
-    logic [CONF_BITS-1:0] core_gesture_confidence;
+    logic [1:0] core_gesture;
+    logic       core_gesture_valid;
+    logic       core_gesture_confidence;
     logic [7:0] core_debug_event_count;
-    logic [2:0] core_debug_state;
     logic       core_debug_fifo_empty;
     logic       core_debug_fifo_full;
     logic       core_debug_temporal_phase;
@@ -148,7 +129,26 @@ module voxel_bin_top #(
     logic       core_debug_capture_active;
     logic       core_debug_score_busy;
 
-    // Sticky diagnostic bits (clear on reset).
+    // Weight/threshold write interface (driven by UART load commands)
+    localparam int FEATURE_COUNT     = READOUT_BINS * GRID_SIZE * GRID_SIZE;
+    localparam int WEIGHT_ADDR_BITS  = $clog2(FEATURE_COUNT);
+    logic                       weight_wr_valid;
+    logic [1:0]                 weight_wr_class;
+    logic [WEIGHT_ADDR_BITS-1:0] weight_wr_addr;
+    logic [WEIGHT_BITS-1:0]     weight_wr_data;
+    logic                       thresh_wr_valid;
+    logic [2:0]                 thresh_wr_addr;
+    logic [SCORE_BITS-1:0]      thresh_wr_data;
+
+    // Staging registers for multi-byte UART load commands
+    logic [13:0]                wld_addr_staging;
+    logic [31:0]                tld_data_staging;
+
+    // Pending word register — holds an assembled EVT2 word when the word FIFO
+    // was full at the time the 4th UART byte arrived.  Retried every cycle.
+    logic                       word_pending;
+    logic [31:0]                word_pending_data;
+
     logic diag_seen_capture;
     logic diag_seen_feature_window;
     logic diag_seen_score_busy;
@@ -156,8 +156,7 @@ module voxel_bin_top #(
     logic diag_seen_class_pass;
     logic diag_seen_gesture_valid;
 
-    // Gesture LED/output mapping.
-    // Gesture class directly matches weight file order: 0=Down,1=Left,2=Right,3=Up
+    // Gesture class order: 0=Down, 1=Left, 2=Right, 3=Up
     logic [1:0] last_gesture;
     logic [LED_HOLD_BITS-1:0] gesture_led_ctr;
     logic [LED_HOLD_BITS-1:0] activity_led_ctr;
@@ -170,15 +169,10 @@ module voxel_bin_top #(
         status_byte[1]   = core_debug_fifo_empty;
         status_byte[0]   = 1'b0;
 
-        // Sticky stage visibility:
-        // [7]=capture_active seen
-        // [6]=feature_window_ready seen
-        // [5]=score_busy seen
-        // [4]=class_valid seen
-        // [3]=class_pass seen
-        // [2]=gesture_valid seen
-        // [1]=live gesture pulse
-        // [0]=temporal phase (live)
+        // diag_byte1 bit layout:
+        // [7]=capture_active seen, [6]=feature_window_ready seen, [5]=score_busy seen
+        // [4]=class_valid seen, [3]=class_pass seen, [2]=gesture_valid seen
+        // [1]=live gesture pulse, [0]=temporal phase (live)
         diag_byte1       = 8'h00;
         diag_byte1[7]    = diag_seen_capture;
         diag_byte1[6]    = diag_seen_feature_window;
@@ -190,7 +184,6 @@ module voxel_bin_top #(
         diag_byte1[0]    = core_debug_temporal_phase;
     end
 
-    // Power-on reset generator.
     initial begin
         rst_por = 1'b1;
         por_ctr = '0;
@@ -206,7 +199,6 @@ module voxel_bin_top #(
         end
     end
 
-    // Soft reset pulse stretcher.
     always_ff @(posedge clk) begin
         if (soft_rst_cmd_pulse)
             soft_rst_ctr <= SOFT_RESET_CYCLES[SOFT_RST_BITS-1:0];
@@ -283,38 +275,34 @@ module voxel_bin_top #(
         .SENSOR_WIDTH     (SENSOR_WIDTH),
         .SENSOR_HEIGHT    (SENSOR_HEIGHT),
         .WEIGHT_BITS      (WEIGHT_BITS),
-        .WEIGHT_SCALE     (WEIGHT_SCALE),
-        .N                (N),
-        .PASS_MARGIN      (PASS_MARGIN),
-        .PERSISTENCE_COUNT(PERSISTENCE_COUNT),
-        .CONF_BITS        (CONF_BITS),
-        .CONF_SHIFT       (CONF_SHIFT),
-        .CYCLES_PER_BIN   (CYCLES_PER_BIN),
         .NUM_CLASSES      (NUM_CLASSES),
-        .WEIGHT           (WEIGHT),
-        .WEIGHT_MEM_C0    (WEIGHT_MEM_C0),
-        .WEIGHT_MEM_C1    (WEIGHT_MEM_C1),
-        .WEIGHT_MEM_C2    (WEIGHT_MEM_C2),
-        .WEIGHT_MEM_C3    (WEIGHT_MEM_C3)
+        .CYCLES_PER_BIN   (CYCLES_PER_BIN),
+        .SCORE_BITS       (SCORE_BITS)
     ) u_core (
-        .clk                (clk),
-        .rst                (rst),
-        .evt_word           (core_evt_word),
-        .evt_word_valid     (core_evt_valid),
-        .evt_word_ready     (core_evt_ready),
-        .gesture            (core_gesture),
-        .gesture_valid      (core_gesture_valid),
-        .gesture_confidence (core_gesture_confidence),
-        .debug_event_count  (core_debug_event_count),
-        .debug_state        (core_debug_state),
-        .debug_fifo_empty   (core_debug_fifo_empty),
-        .debug_fifo_full    (core_debug_fifo_full),
-        .debug_temporal_phase(core_debug_temporal_phase),
-        .debug_class_valid  (core_debug_class_valid),
-        .debug_class_pass   (core_debug_class_pass),
-        .debug_feature_window_ready(core_debug_feature_window_ready),
-        .debug_capture_active(core_debug_capture_active),
-        .debug_score_busy   (core_debug_score_busy)
+        .clk                        (clk),
+        .rst                        (rst),
+        .evt_word                   (core_evt_word),
+        .evt_word_valid             (core_evt_valid),
+        .evt_word_ready             (core_evt_ready),
+        .gesture                    (core_gesture),
+        .gesture_valid              (core_gesture_valid),
+        .gesture_confidence         (core_gesture_confidence),
+        .weight_wr_valid_i          (weight_wr_valid),
+        .weight_wr_class_i          (weight_wr_class),
+        .weight_wr_addr_i           (weight_wr_addr),
+        .weight_wr_data_i           (weight_wr_data),
+        .thresh_wr_valid_i          (thresh_wr_valid),
+        .thresh_wr_addr_i           (thresh_wr_addr),
+        .thresh_wr_data_i           (thresh_wr_data),
+        .debug_event_count          (core_debug_event_count),
+        .debug_fifo_empty           (core_debug_fifo_empty),
+        .debug_fifo_full            (core_debug_fifo_full),
+        .debug_temporal_phase       (core_debug_temporal_phase),
+        .debug_class_valid          (core_debug_class_valid),
+        .debug_class_pass           (core_debug_class_pass),
+        .debug_feature_window_ready (core_debug_feature_window_ready),
+        .debug_capture_active       (core_debug_capture_active),
+        .debug_score_busy           (core_debug_score_busy)
     );
 
     always_ff @(posedge clk) begin
@@ -335,7 +323,7 @@ module voxel_bin_top #(
             cmd_diag_pending    <= 1'b0;
             gesture_pkt_pending <= 1'b0;
             gesture_pkt_code    <= '0;
-            gesture_pkt_conf    <= '0;
+            gesture_pkt_conf    <= 1'b0;
             gesture_pkt_evthi   <= '0;
             second_byte_pending <= 1'b0;
             second_byte_data    <= '0;
@@ -350,14 +338,33 @@ module voxel_bin_top #(
             diag_seen_class_valid     <= 1'b0;
             diag_seen_class_pass      <= 1'b0;
             diag_seen_gesture_valid   <= 1'b0;
+            weight_wr_valid     <= 1'b0;
+            weight_wr_class     <= '0;
+            weight_wr_addr      <= '0;
+            weight_wr_data      <= '0;
+            thresh_wr_valid     <= 1'b0;
+            thresh_wr_addr      <= '0;
+            thresh_wr_data      <= '0;
+            wld_addr_staging    <= '0;
+            tld_data_staging    <= '0;
+            word_pending        <= 1'b0;
+            word_pending_data   <= '0;
         end else begin
             word_fifo_in_valid <= 1'b0;
             tx_fifo_in_valid   <= 1'b0;
             tx_byte_valid      <= 1'b0;
             tx_fifo_out_ready  <= 1'b0;
             soft_rst_cmd_pulse <= 1'b0;
+            weight_wr_valid    <= 1'b0;
+            thresh_wr_valid    <= 1'b0;
 
-            // Sticky stage diagnostics.
+            // Retry pending word push when FIFO has space (runs every cycle).
+            if (word_pending && word_fifo_in_ready) begin
+                word_fifo_in_valid <= 1'b1;
+                word_fifo_in_data  <= word_pending_data;
+                word_pending       <= 1'b0;
+            end
+
             if (core_debug_capture_active)
                 diag_seen_capture <= 1'b1;
             if (core_debug_feature_window_ready)
@@ -371,7 +378,6 @@ module voxel_bin_top #(
             if (core_gesture_valid)
                 diag_seen_gesture_valid <= 1'b1;
 
-            // UART RX packet/command parsing.
             if (rx_byte_valid) begin
                 activity_led_ctr <= LED_HOLD_CYCLES[LED_HOLD_BITS-1:0];
 
@@ -387,6 +393,10 @@ module voxel_bin_top #(
                             cmd_diag_pending <= 1'b1;
                         end else if (rx_byte == CMD_SOFT_RESET) begin
                             soft_rst_cmd_pulse <= 1'b1;
+                        end else if (rx_byte == CMD_LOAD_WEIGHT) begin
+                            pkt_state <= WLD_B1;
+                        end else if (rx_byte == CMD_LOAD_THRESH) begin
+                            pkt_state <= TLD_B1;
                         end else begin
                             asm_word[31:24] <= rx_byte;
                             pkt_state       <= PKT_B1;
@@ -404,22 +414,80 @@ module voxel_bin_top #(
                     end
 
                     PKT_B3: begin
-                        if (word_fifo_in_ready) begin
+                        if (word_fifo_in_ready && !word_pending) begin
                             word_fifo_in_valid <= 1'b1;
                             word_fifo_in_data  <= {asm_word[31:8], rx_byte};
+                        end else if (!word_pending) begin
+                            word_pending      <= 1'b1;
+                            word_pending_data <= {asm_word[31:8], rx_byte};
+                        end
+                        // If word_pending is already set (prior word still
+                        // waiting), this word is dropped — unavoidable without
+                        // UART-level flow control.
+                        pkt_state <= PKT_IDLE;
+                    end
+
+                    // ----- Weight load: 3 payload bytes after CMD_LOAD_WEIGHT -----
+                    WLD_B1: begin
+                        weight_wr_class        <= rx_byte[7:6];
+                        wld_addr_staging[13:8] <= rx_byte[5:0];
+                        pkt_state              <= WLD_B2;
+                    end
+
+                    WLD_B2: begin
+                        wld_addr_staging[7:0] <= rx_byte;
+                        pkt_state             <= WLD_B3;
+                    end
+
+                    WLD_B3: begin
+                        if (!core_debug_score_busy) begin
+                            weight_wr_valid <= 1'b1;
+                            weight_wr_addr  <= wld_addr_staging[WEIGHT_ADDR_BITS-1:0];
+                            weight_wr_data  <= rx_byte;
                         end
                         pkt_state <= PKT_IDLE;
+                    end
+
+                    // ----- Threshold load: 6 payload bytes after CMD_LOAD_THRESH -----
+                    TLD_B1: begin
+                        thresh_wr_addr <= rx_byte[2:0];
+                        pkt_state      <= TLD_B2;
+                    end
+
+                    TLD_B2: begin
+                        tld_data_staging[7:0] <= rx_byte;
+                        pkt_state             <= TLD_B3;
+                    end
+
+                    TLD_B3: begin
+                        tld_data_staging[15:8] <= rx_byte;
+                        pkt_state              <= TLD_B4;
+                    end
+
+                    TLD_B4: begin
+                        tld_data_staging[23:16] <= rx_byte;
+                        pkt_state               <= TLD_B5;
+                    end
+
+                    TLD_B5: begin
+                        tld_data_staging[31:24] <= rx_byte;
+                        pkt_state               <= TLD_B6;
+                    end
+
+                    TLD_B6: begin
+                        thresh_wr_valid <= 1'b1;
+                        thresh_wr_data  <= {rx_byte, tld_data_staging[31:0]};
+                        pkt_state       <= PKT_IDLE;
                     end
 
                     default: pkt_state <= PKT_IDLE;
                 endcase
             end
 
-            // Queue gesture response packet.
             if (core_gesture_valid) begin
                 gesture_pkt_pending <= 1'b1;
                 gesture_pkt_code    <= core_gesture;
-                gesture_pkt_conf    <= core_gesture_confidence[3:0];
+                gesture_pkt_conf    <= core_gesture_confidence;
                 gesture_pkt_evthi   <= core_debug_event_count[7:4];
                 last_gesture        <= core_gesture;
                 gesture_led_ctr     <= LED_HOLD_CYCLES[LED_HOLD_BITS-1:0];
@@ -430,7 +498,6 @@ module voxel_bin_top #(
             if (activity_led_ctr != 0)
                 activity_led_ctr <= activity_led_ctr - 1'b1;
 
-            // Response producer (one byte/cycle into TX FIFO).
             if (tx_fifo_in_ready) begin
                 if (second_byte_pending) begin
                     tx_fifo_in_valid   <= 1'b1;
@@ -460,19 +527,17 @@ module voxel_bin_top #(
                     tx_fifo_in_valid    <= 1'b1;
                     tx_fifo_in_data     <= 8'hA0 | gesture_pkt_code;
                     second_byte_pending <= 1'b1;
-                    second_byte_data    <= {gesture_pkt_conf, gesture_pkt_evthi};
+                    second_byte_data    <= {3'b0, gesture_pkt_conf, gesture_pkt_evthi};
                     gesture_pkt_pending <= 1'b0;
                 end
             end
 
-            // UART TX consume from TX FIFO.
             if (!tx_busy && tx_fifo_out_valid) begin
                 tx_byte           <= tx_fifo_out_data;
                 tx_byte_valid     <= 1'b1;
                 tx_fifo_out_ready <= 1'b1;
             end
 
-            // Heartbeat LED.
             if (heartbeat_ctr == HEARTBEAT_HALF_PERIOD - 1) begin
                 heartbeat_ctr <= '0;
                 led_heartbeat <= ~led_heartbeat;

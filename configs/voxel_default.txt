@@ -28,17 +28,14 @@ WEIGHT_SCALE        = 1024
 
 # voxel_gesture_classifier
 NUM_CLASSES         = 4
-SCORE_BITS          = 32
-PASS_MARGIN         = 64
-PERSISTENCE_COUNT   = 2
-CONF_BITS           = 8
-CONF_SHIFT          = 4
+SCORE_BITS          = 36
 
 WEIGHT        = "weights/gesture_weights_down_left_right_up_16x16_8bins.txt"
-WEIGHT_MEM_C0 = "../weights/2048weights_q8_c0.mem"
-WEIGHT_MEM_C1 = "../weights/2048weights_q8_c1.mem"
-WEIGHT_MEM_C2 = "../weights/2048weights_q8_c2.mem"
-WEIGHT_MEM_C3 = "../weights/2048weights_q8_c3.mem"
+WEIGHT_MEM_C0 = "weights/2048weights_q8_c0.mem"
+WEIGHT_MEM_C1 = "weights/2048weights_q8_c1.mem"
+WEIGHT_MEM_C2 = "weights/2048weights_q8_c2.mem"
+WEIGHT_MEM_C3 = "weights/2048weights_q8_c3.mem"
+THRESH_FILE   = "weights/thresholds.mem"
 
 # voxel_bin_top
 UART_WORD_FIFO_DEPTH = 16

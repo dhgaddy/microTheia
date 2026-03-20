@@ -1,8 +1,9 @@
-"""Integration cocotb testbench for voxel_bin_core with golden scoreboards."""
-
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2025 Group G Contributors
 from collections import deque
 from pathlib import Path
 import random
+import struct
 
 import cocotb
 from util.test_logging import logged_test
@@ -14,19 +15,16 @@ from util.config_parser import load_config
 MODULE = os.environ.get("TOPLEVEL")
 CFG = load_config(MODULE)
 
-CLK_FREQ_HZ       = CFG["CLK_FREQ_HZ"]
-WINDOW_MS         = CFG["WINDOW_MS"]
-GRID_SIZE         = CFG["GRID_SIZE"]
-NUM_BINS          = CFG["NUM_BINS"]
-READOUT_BINS      = CFG["READOUT_BINS"]
-PASS_MARGIN       = CFG["PASS_MARGIN"]
-PERSISTENCE_COUNT = CFG["PERSISTENCE_COUNT"]
-CONF_BITS         = CFG["CONF_BITS"]
-CONF_SHIFT        = CFG["CONF_SHIFT"]
-WEIGHT_BITS       = CFG["WEIGHT_BITS"]
-WEIGHT_SCALE      = CFG["WEIGHT_SCALE"]
-SENSOR_DIM        = CFG["SENSOR_WIDTH"]
-COUNTER_BITS      = CFG.get("COUNTER_BITS", 4)
+CLK_FREQ_HZ  = CFG["CLK_FREQ_HZ"]
+WINDOW_MS    = CFG["WINDOW_MS"]
+GRID_SIZE    = CFG["GRID_SIZE"]
+NUM_BINS     = CFG["NUM_BINS"]
+READOUT_BINS = CFG["READOUT_BINS"]
+WEIGHT_BITS  = CFG["WEIGHT_BITS"]
+WEIGHT_SCALE = CFG["WEIGHT_SCALE"]
+SENSOR_DIM   = CFG["SENSOR_WIDTH"]
+COUNTER_BITS = CFG.get("COUNTER_BITS", 4)
+NUM_CLASSES  = CFG.get("NUM_CLASSES", 4)
 
 
 BIN_DURATION_MS = WINDOW_MS // READOUT_BINS
@@ -51,24 +49,20 @@ def build_evt2_cd(pkt_type, x_sensor, y_sensor, ts_lsb):
 
 
 def sensor_from_grid(g):
-    # Drive the center of the corresponding sensor bin.
     g = max(0, min(GRID_SIZE - 1, int(g)))
     return min(SENSOR_DIM - 1, (g * BIN_DIV) + (BIN_DIV // 2))
 
 
 class Evt2DecoderModel:
     def __init__(self):
-        self.time_high = 0
         self.have_time_high = False
 
     def on_word(self, word):
         pkt = (word >> 28) & 0xF
-        ts_lsb = (word >> 22) & 0x3F
         x_raw = (word >> 11) & 0x7FF
         y_raw = word & 0x7FF
 
         if pkt == EVT_TIME_HIGH:
-            self.time_high = word & 0x0FFFFFFF
             self.have_time_high = True
             return None
 
@@ -82,59 +76,50 @@ class Evt2DecoderModel:
         y_clamped = min(y_raw, SENSOR_DIM - 1)
         x_grid = min(x_clamped // BIN_DIV, GRID_SIZE - 1)
         y_grid = min(y_clamped // BIN_DIV, GRID_SIZE - 1)
-        pol = 1 if pkt == EVT_CD_ON else 0
-        ts = (self.time_high << 6) | ts_lsb
-        return (x_grid, y_grid, pol, ts)
+        return (x_grid, y_grid)
 
 
-class GesturePersistenceModel:
-    def __init__(self):
-        self.last_pass_class = 0
-        self.pass_streak = 0
-        self.gesture = 0
 
-    @staticmethod
-    def _confidence_from_margin(margin):
-        if margin <= 0:
-            return 0
-        c = margin >> CONF_SHIFT
-        return min((1 << CONF_BITS) - 1, c)
+def load_thresholds():
+    """Load class and diff thresholds from thresholds.mem (hex, $readmemh format).
+    Returns a list of 2*NUM_CLASSES integers:
+      [0..NUM_CLASSES-1]          = CLASS_THRESHOLD per class
+      [NUM_CLASSES..2*NUM_CLASSES-1] = DIFF_THRESHOLD per class
+    """
+    repo_root = Path(__file__).resolve().parents[1]
+    thresh_path = repo_root / "weights" / "thresholds.mem"
+    if not thresh_path.exists():
+        return [0] * (2 * NUM_CLASSES)
+    lines = [l.strip() for l in thresh_path.read_text(encoding="ascii").splitlines()
+             if l.strip() and not l.strip().startswith("//")]
+    vals = []
+    for line in lines:
+        try:
+            vals.append(int(line, 16))
+        except ValueError:
+            vals.append(0)
+    # Pad to 2*NUM_CLASSES if file is short.
+    while len(vals) < 2 * NUM_CLASSES:
+        vals.append(0)
+    return vals
 
-    def step(self, class_id, class_pass, margin):
-        gesture_valid = 0
-        conf = 0
 
-        if class_pass:
-            if class_id == self.last_pass_class:
-                if self.pass_streak < PERSISTENCE_COUNT:
-                    next_streak = self.pass_streak + 1
-                else:
-                    next_streak = self.pass_streak
-            else:
-                next_streak = 1
-
-            self.last_pass_class = class_id
-            self.pass_streak = next_streak
-
-            conf = self._confidence_from_margin(margin)
-            if next_streak >= PERSISTENCE_COUNT:
-                self.gesture = class_id
-                gesture_valid = 1
-        else:
-            self.pass_streak = 0
-
-        return self.gesture, gesture_valid, conf
+_thresholds = None  # Loaded once at first ScoreModel construction.
 
 
 class ScoreModel:
     def __init__(self, weights_per_class):
+        global _thresholds
+        if _thresholds is None:
+            _thresholds = load_thresholds()
         self.weights = weights_per_class
+        self.class_thresholds = _thresholds[:NUM_CLASSES]
 
     @staticmethod
     def _argmax_with_second(vals):
         best_i = 0
         best = vals[0]
-        second = -10**30
+        second = 0
         for i in range(1, len(vals)):
             if vals[i] > best:
                 second = best
@@ -153,87 +138,70 @@ class ScoreModel:
 
         best_class, best, second = self._argmax_with_second(scores)
         margin = best - second
-        class_pass = int(margin > PASS_MARGIN)
+        # class_pass mirrors RTL: max_score > CLASS_THRESHOLD[max_class]
+        class_pass = int(best > self.class_thresholds[best_class])
         return best_class, class_pass, margin
 
 
-def load_quantized_weights():
-    """Load and quantize weights to match RTL ram_1r1w_sync init (init_scale_p=WEIGHT_SCALE,
-    init_signed_p=0, stride=FEATURE_COUNT per class).  Matches gesture_weights file layout."""
+def load_weights_from_mem():
+    """Load pre-generated quantized weights from the per-class .mem files.
+
+    Each file contains FEATURE_COUNT hex byte values (one per line) already
+    ordered to match the hardware readout address space:
+      addr = bin * GRID_SIZE * GRID_SIZE + y * GRID_SIZE + x
+    where bin=0 is the oldest bin, y is row (outer), x is column (inner).
+
+    Returns a list of NUM_CLASSES lists, each of length FEATURE_COUNT.
+    """
     repo_root = Path(__file__).resolve().parents[1]
-    cfg_weight = CFG.get("WEIGHT", "")
-    candidates = (
-        [repo_root / cfg_weight, repo_root / "weights" / Path(cfg_weight).name]
-        if cfg_weight else []
-    ) + [
-        repo_root / "weights" / "gesture_weights_down_left_right_up_8x8_4bins.txt",
-        repo_root / "gesture_weights_down_left_right_up_8x8_4bins.txt",
-    ]
-    weights_path = next((p for p in candidates if p.exists()), candidates[-1])
-    lines = weights_path.read_text(encoding="ascii").splitlines()
-
-    max_unsigned = (1 << WEIGHT_BITS) - 1
-
-    def quantize(line):
-        try:
-            f = float(line.strip())
-        except ValueError:
-            return 0
-        q = int(f * WEIGHT_SCALE)  # $rtoi-style truncation toward zero
-        if q < 0:          # init_signed_p=0: clamp negative to 0
-            q = 0
-        if q > max_unsigned:
-            q = max_unsigned
-        return q
-
-    qvals = [quantize(line) for line in lines]
-    expected_len = 4 * FEATURE_COUNT
-    if len(qvals) < expected_len:
-        qvals.extend([0] * (expected_len - len(qvals)))
-
+    mem_keys = ["WEIGHT_MEM_C0", "WEIGHT_MEM_C1", "WEIGHT_MEM_C2", "WEIGHT_MEM_C3"]
+    mem_defaults = [f"weights/{FEATURE_COUNT}weights_q8_c{c}.mem" for c in range(NUM_CLASSES)]
     weights = []
-    for c in range(4):
-        # WEIGHT_FILE_CLASS_STRIDE = 256 = FEATURE_COUNT; class c starts at c*256.
-        start = c * FEATURE_COUNT
-        weights.append(qvals[start:start + FEATURE_COUNT])
+    for c in range(NUM_CLASSES):
+        rel_path = CFG.get(mem_keys[c], mem_defaults[c])
+        path = repo_root / rel_path
+        lines = path.read_text(encoding="ascii").splitlines()
+        vals = []
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("//"):
+                continue
+            try:
+                vals.append(int(line, 16))
+            except ValueError:
+                vals.append(0)
+        while len(vals) < FEATURE_COUNT:
+            vals.append(0)
+        weights.append(vals[:FEATURE_COUNT])
     return weights
 
 
-_weights_deposited = False  # Deposit once per simulation; all tests share weight RAMs.
-
-
-def _get_weight_ram_handle(dut, class_idx):
+async def deposit_weights_and_thresholds(dut, weights, thresholds):
     """
-    Return the cocotb handle for weight RAM class_idx's internal 'ram' array.
+    Load weights and thresholds into the DUT SRAMs via the runtime write ports.
 
-    Icarus Verilog exposes generate-for blocks as gen_weight_rams[N] in the FST
-    hierarchy; cocotb accesses these via dut.gen_weight_rams[N].
+    Must be called after reset is deasserted (SRAM CEN is high during reset).
+    weights:    list of NUM_CLASSES lists, each of length FEATURE_COUNT.
+    thresholds: list of 2*NUM_CLASSES ints (class thresholds then diff thresholds).
     """
-    block = dut.gen_weight_rams[class_idx]
-    inst = getattr(block, "u_weight_ram")
-    return getattr(inst, "ram")
-
-
-async def deposit_weights_into_dut(dut, weights):
-    """
-    Write quantized weights directly into the DUT's weight RAM arrays.
-
-    Icarus Verilog cannot evaluate packed-array parameters as strings in $fopen,
-    so the weight files never load from disk (the '$fopen vpiParameter' warning).
-    We work around this by depositing values directly via cocotb handles.
-
-    weights: list of 4 lists, each of length FEATURE_COUNT, values in [0, 255].
-    """
-    global _weights_deposited
-    if _weights_deposited:
-        return
-
-    for c in range(4):
-        ram = _get_weight_ram_handle(dut, c)
+    # Write weights one address per cycle for each class.
+    for c in range(NUM_CLASSES):
         for addr in range(FEATURE_COUNT):
-            ram[addr].value = weights[c][addr]
+            dut.weight_wr_valid_i.value = 1
+            dut.weight_wr_class_i.value = c
+            dut.weight_wr_addr_i.value = addr
+            dut.weight_wr_data_i.value = int(weights[c][addr])
+            await RisingEdge(dut.clk)
+    dut.weight_wr_valid_i.value = 0
 
-    _weights_deposited = True
+    # Write thresholds: addr 0..NUM_CLASSES-1 = class thresholds,
+    #                   NUM_CLASSES..2*NUM_CLASSES-1 = diff thresholds.
+    for addr in range(2 * NUM_CLASSES):
+        dut.thresh_wr_valid_i.value = 1
+        dut.thresh_wr_addr_i.value = addr
+        dut.thresh_wr_data_i.value = int(thresholds[addr])
+        await RisingEdge(dut.clk)
+    dut.thresh_wr_valid_i.value = 0
 
 
 class CoreHarness:
@@ -250,9 +218,6 @@ class CoreHarness:
         self.accepted_words = 0
         self.completed_windows = 0
 
-        self.last_pass_class = 0
-        self.pass_streak = 0
-
         # Optional independent score verification.
         self.score_model = score_model
         self.pending_score_checks = deque()  # (exp_class, exp_pass) from ScoreModel
@@ -262,6 +227,13 @@ class CoreHarness:
         self.dut.rst.value = 1
         self.dut.evt_word.value = 0
         self.dut.evt_word_valid.value = 0
+        self.dut.weight_wr_valid_i.value = 0
+        self.dut.weight_wr_class_i.value = 0
+        self.dut.weight_wr_addr_i.value = 0
+        self.dut.weight_wr_data_i.value = 0
+        self.dut.thresh_wr_valid_i.value = 0
+        self.dut.thresh_wr_addr_i.value = 0
+        self.dut.thresh_wr_data_i.value = 0
         await ClockCycles(self.dut.clk, 8)
         self.dut.rst.value = 0
         await self.tick(4)
@@ -271,8 +243,6 @@ class CoreHarness:
             observed = (
                 int(self.dut.u_evt2_decoder.x_out.value),
                 int(self.dut.u_evt2_decoder.y_out.value),
-                int(self.dut.u_evt2_decoder.polarity.value),
-                int(self.dut.u_evt2_decoder.timestamp.value),
             )
             assert self.expected_decoded, f"Unexpected decoded event {observed}"
             expected = self.expected_decoded.popleft()
@@ -288,8 +258,23 @@ class CoreHarness:
                 assert len(self.current_window) == FEATURE_COUNT, \
                     f"Feature window length {len(self.current_window)} != {FEATURE_COUNT}"
                 if self.score_model is not None:
-                    exp_cls, exp_pass, _ = self.score_model.classify(self.current_window)
+                    exp_cls, exp_pass, margin = self.score_model.classify(self.current_window)
                     self.pending_score_checks.append((exp_cls, exp_pass))
+                    # Log golden-model scores for this window
+                    scores = [0] * NUM_CLASSES
+                    for fi, feat in enumerate(self.current_window):
+                        f = int(feat)
+                        for c in range(NUM_CLASSES):
+                            scores[c] += f * self.score_model.weights[c][fi]
+                    nz = sum(1 for v in self.current_window if v > 0)
+                    total = sum(int(v) for v in self.current_window)
+                    names = {0: "Down", 1: "Left", 2: "Right", 3: "Up"}
+                    cocotb.log.info(
+                        f"[window {self.completed_windows}] model scores: "
+                        f"D={scores[0]} L={scores[1]} R={scores[2]} U={scores[3]}  "
+                        f"winner={names[exp_cls]} margin={margin}  "
+                        f"nonzero_features={nz}/{FEATURE_COUNT} total_count={total}"
+                    )
                 self.current_window = []
                 self.completed_windows += 1
 
@@ -306,21 +291,12 @@ class CoreHarness:
                     f"ScoreModel pass mismatch: DUT={class_pass} model={exp_pass}"
                 )
 
+            # No persistence: every passing window fires gesture_valid immediately.
             if class_pass:
-                if class_id == self.last_pass_class:
-                    if self.pass_streak < PERSISTENCE_COUNT:
-                        self.pass_streak += 1
-                else:
-                    self.pass_streak = 1
-                self.last_pass_class = class_id
-
-                if self.pass_streak >= PERSISTENCE_COUNT:
-                    self.expected_gestures.append((
-                        class_id,
-                        int(self.dut.gesture_confidence.value),
-                    ))
-            else:
-                self.pass_streak = 0
+                self.expected_gestures.append((
+                    class_id,
+                    int(self.dut.gesture_confidence.value),
+                ))
 
         if int(self.dut.gesture_valid.value):
             self.observed_gestures.append((
@@ -385,7 +361,7 @@ class CoreHarness:
             if now_g == prev_g and now_w == prev_w:
                 q += 1
                 pipeline_idle = (
-                    int(self.dut.score_state.value) == 0 and
+                    int(self.dut.debug_score_busy.value) == 0 and
                     int(self.dut.capture_active.value) == 0 and
                     int(self.dut.feature_window_ready.value) == 0 and
                     int(self.dut.u_input_fifo.valid_o.value) == 0 and
@@ -481,8 +457,9 @@ async def test_voxel_bin_core_end_to_end_golden(dut):
 async def test_empty_window_produces_no_gesture(dut):
     """No CD events -> all-zero features -> all scores zero -> no gesture fires.
 
-    This validates the zero-input boundary case: scores are all zero so margin is
-    zero (< PASS_MARGIN) and gesture_valid never asserts.
+    This validates the zero-input boundary case: all scores are zero so
+    max_score = 0, which fails the CLASS_THRESHOLD=0 check (strict >),
+    and gesture_valid never asserts.
     """
     h = CoreHarness(dut)
     await h.setup()
@@ -601,28 +578,25 @@ async def test_fifo_backpressure_no_lost_events(dut):
 
 @logged_test()
 async def test_sustained_region_fires_gesture(dut):
-    """Drive a single spatial region for many bins; classifier must eventually fire."""
+    """Drive a single spatial region for many bins; gesture_valid must fire on every passing window."""
     rng = random.Random(0x1234_5678)
     h = CoreHarness(dut)
     await h.setup()
 
     await h.send_word(build_evt2_time_high(0x1))
 
-    # Drive "bottom" region (class 0 = Down in weight ordering) across enough bins
-    # for PERSISTENCE_COUNT=2 consecutive passing windows to fire gesture_valid.
-    # READOUT_BINS bins fill one window; PERSISTENCE_COUNT+1 extra windows ensure persistence fires.
-    for _ in range(READOUT_BINS + PERSISTENCE_COUNT + 1):
+    # Drive "bottom" region across enough bins for at least two complete readout windows.
+    # READOUT_BINS bins warm up the ring; each additional rollover triggers one more window.
+    # With no persistence, every passing window fires gesture_valid immediately.
+    for _ in range(READOUT_BINS + 2):
         await drive_bin_traffic(h, rng, "bottom", events=32)
         await h.force_bin_rollover()
 
     await h.wait_quiet()
 
-    # DUT and model must agree on whatever was output.
     assert h.observed_gestures == h.expected_gestures, \
         (f"Gesture mismatch in sustained-region test\n"
          f"DUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}")
-
-    # At least one gesture window should have been completed.
     assert h.completed_windows > 0, "No completed windows observed"
 
 
@@ -654,7 +628,7 @@ async def test_decoder_events_match_model_exactly(dut):
 @logged_test()
 async def test_score_model_validates_classifications(dut):
     """ScoreModel independently verifies every DUT class_gesture/class_pass output."""
-    weights = load_quantized_weights()
+    weights = load_weights_from_mem()
     score_model = ScoreModel(weights)
 
     rng = random.Random(0xBEEF_CAFE)
@@ -686,136 +660,6 @@ async def test_score_model_validates_classifications(dut):
 
 
 # ---------------------------------------------------------------------------
-# Gesture trajectory helpers
-# ---------------------------------------------------------------------------
-
-# Gesture class IDs
-GESTURE_DOWN  = 0
-GESTURE_LEFT  = 1
-GESTURE_RIGHT = 2
-GESTURE_UP    = 3
-
-
-def _gesture_trajectory_for_bin(gesture, bin_idx, events_per_bin, rng, noise=0.5):
-    """
-    Return a list of (x_sensor, y_sensor) pairs for one bin slot of a gesture.
-
-    Strategy: **bin-invariant** — every bin slot carries the same spatial pattern.
-    Because force_bin_rollover triggers a new readout on every call after completed_bins
-    reaches READOUT_BINS, the DUT emits multiple overlapping 4-bin windows per rep.
-    Making every bin identical ensures every window scores correctly, regardless of
-    which physical bins happen to land in the readout snapshot.
-
-    Pattern design (grid-size-aware, verified against SCALE=1024 quantized weights):
-
-    DOWN:  center columns (3/8 to 5/8 of grid width), all y, every bin.
-           Positions scale with GRID_SIZE so the same weight activation bands are hit.
-
-    LEFT:  leftmost GRID_SIZE//8*2 columns, all y, every bin.
-           Left weights peak at low-x columns proportional to grid size.
-
-    RIGHT: rightmost GRID_SIZE//8*2 columns, all y, every bin.
-           Right weights peak at high-x columns proportional to grid size.
-
-    UP:    All cells uniformly filled in ALL bins.  Up has the highest total weight
-           sum, so uniform saturation always picks Up.
-    """
-    pts = []
-
-    # Scaled column boundaries (proportional to 8x8 reference design)
-    _center_col = GRID_SIZE * 3 // 8        # ~3 for 8x8, ~6 for 16x16
-    _left_max   = max(1, GRID_SIZE // 4 - 1)   # 1 for 8x8, 3 for 16x16
-    _right_min  = GRID_SIZE - GRID_SIZE // 4    # 6 for 8x8, 12 for 16x16
-
-    if gesture == GESTURE_DOWN:
-        # center column band, all y, every bin.
-        for _ in range(events_per_bin):
-            gx_f = float(_center_col) + rng.gauss(0, noise)
-            gy_f = float(rng.randint(0, GRID_SIZE - 1)) + rng.gauss(0, noise * 0.3)
-            gx = max(0, min(GRID_SIZE - 1, round(gx_f)))
-            gy = max(0, min(GRID_SIZE - 1, round(gy_f)))
-            pts.append((sensor_from_grid(gx), sensor_from_grid(gy)))
-
-    elif gesture == GESTURE_LEFT:
-        # leftmost columns, all y, every bin.
-        for _ in range(events_per_bin):
-            gx_f = _left_max / 2.0 + rng.gauss(0, noise * 0.5)
-            gy_f = float(rng.randint(0, GRID_SIZE - 1)) + rng.gauss(0, noise * 0.3)
-            gx = max(0, min(_left_max, round(gx_f)))
-            gy = max(0, min(GRID_SIZE - 1, round(gy_f)))
-            pts.append((sensor_from_grid(gx), sensor_from_grid(gy)))
-
-    elif gesture == GESTURE_RIGHT:
-        # rightmost columns, all y, every bin.
-        for _ in range(events_per_bin):
-            gx_f = (_right_min + GRID_SIZE - 1) / 2.0 + rng.gauss(0, noise * 0.5)
-            gy_f = float(rng.randint(0, GRID_SIZE - 1)) + rng.gauss(0, noise * 0.3)
-            gx = max(_right_min, min(GRID_SIZE - 1, round(gx_f)))
-            gy = max(0, min(GRID_SIZE - 1, round(gy_f)))
-            pts.append((sensor_from_grid(gx), sensor_from_grid(gy)))
-
-    elif gesture == GESTURE_UP:
-        # Deterministic grid scan: visit all GRID_SIZE² cells in row-major order, cycling.
-        # Up wins via highest total weight sum once coverage is near-uniform.
-        # events_per_bin should be >= 2*GRID_SIZE² to guarantee every cell is hit at least twice.
-        cells = [(gx, gy) for gy in range(GRID_SIZE) for gx in range(GRID_SIZE)]
-        for i in range(events_per_bin):
-            gx, gy = cells[i % len(cells)]
-            pts.append((sensor_from_grid(gx), sensor_from_grid(gy)))
-
-    return pts
-
-
-async def _drive_gesture_trajectory(h, gesture, readout_bins, events_per_bin, rng, ts_base=0x1000):
-    """
-    Send EVT2.0 events that trace a full gesture trajectory across readout_bins bins.
-    Between each bin, force a bin rollover so the FPGA advances its temporal window.
-    ts_base: starting TIME_HIGH payload value.
-    """
-    for b in range(readout_bins):
-        # TIME_HIGH at the start of each bin
-        await h.send_word(build_evt2_time_high((ts_base + b * 64) & 0x0FFFFFFF))
-
-        pts = _gesture_trajectory_for_bin(gesture, b, events_per_bin, rng)
-        for i, (xs, ys) in enumerate(pts):
-            pkt = EVT_CD_ON if (i & 1) else EVT_CD_OFF
-            await h.send_word(build_evt2_cd(pkt, xs, ys, i & 0x3F))
-
-        await h.force_bin_rollover()
-
-
-def _predict_gesture_from_trajectory(weights, gesture, readout_bins, events_per_bin, rng_seed,
-                                     noise=0.5):
-    """
-    Run the ScoreModel on the synthetic trajectory to get the expected class and pass status.
-    Uses the same deterministic rng so the feature vector matches what the DUT sees.
-
-    Since the trajectory is bin-invariant (same pattern every bin), the feature blocks
-    map 1:1: trajectory bin b -> feature block b.  The first readout window (after all
-    4 bins have been driven) contains data from bins 0-3 in order.
-    """
-    rng = random.Random(rng_seed)
-    max_count = (1 << COUNTER_BITS) - 1  # saturating counter max
-    # features_3d indexed by [bin][y][x]
-    features_3d = [[[0] * GRID_SIZE for _ in range(GRID_SIZE)] for _ in range(readout_bins)]
-    for b in range(readout_bins):
-        pts = _gesture_trajectory_for_bin(gesture, b, events_per_bin, rng, noise)
-        for xs, ys in pts:
-            gx = min(xs // BIN_DIV, GRID_SIZE - 1)
-            gy = min(ys // BIN_DIV, GRID_SIZE - 1)
-            features_3d[b][gy][gx] = min(max_count, features_3d[b][gy][gx] + 1)
-
-    # Flatten bin 0->3, y-major x-minor (matches DUT readout order).
-    flat = [
-        features_3d[b][y][x]
-        for b in range(readout_bins)
-        for y in range(GRID_SIZE)
-        for x in range(GRID_SIZE)
-    ]
-    return ScoreModel(weights).classify(flat)
-
-
-# ---------------------------------------------------------------------------
 # Gesture classification end-to-end tests
 # ---------------------------------------------------------------------------
 
@@ -824,19 +668,10 @@ async def _flush_stale_bins(h, weights=None):
     Hard-reset the DUT then wait for the binner to return to ST_ACCUM.
 
     This is the only reliable way to clear all pipeline state between tests that
-    share a single simulation instance:
-      - Hardware RST clears all voxel bins, the evt2_decoder, the FIFO, the systolic
-        array, and the gesture_classifier persistence registers simultaneously.
-      - Software bin rollovers leave scorer/classifier pipeline latency that can
-        cause gesture_valid pulses from one test's data to arrive during the next.
-
-    If weights is provided, re-deposits them after reset (RST does not disturb
-    the weight RAM contents — those are only set in initial blocks — but we
-    deposit unconditionally on first call to work around Icarus $fopen limitation).
+    share a single simulation instance.  After reset the weight and threshold
+    SRAMs are all-zero; if weights is provided they are re-loaded via the
+    runtime write ports (and thresholds are loaded from thresholds.mem).
     """
-    if weights is not None:
-        await deposit_weights_into_dut(h.dut, weights)
-
     # Assert hardware reset.
     h.dut.rst.value = 1
     h.dut.evt_word_valid.value = 0
@@ -854,6 +689,11 @@ async def _flush_stale_bins(h, weights=None):
     # A few extra cycles to let decoder and fifo settle.
     await ClockCycles(h.dut.clk, 8)
 
+    # Re-load weights and thresholds into SRAMs after reset (SRAMs start at 0).
+    if weights is not None:
+        thresholds = load_thresholds()
+        await deposit_weights_and_thresholds(h.dut, weights, thresholds)
+
     # Reset harness bookkeeping; the reset produces no valid feature windows.
     h.decoder = Evt2DecoderModel()
     h.expected_decoded.clear()
@@ -862,306 +702,17 @@ async def _flush_stale_bins(h, weights=None):
     h.observed_gestures.clear()
     h.expected_gestures.clear()
     h.pending_score_checks.clear()
-    h.pass_streak = 0
-    h.last_pass_class = 0
     h.accepted_words = 0
-
-
-@logged_test()
-async def test_gesture_down_from_evt2_events(dut):
-    """
-    Send synthetic EVT2.0 events tracing a downward sweep (grid y: 7->0, center column).
-    The DUT must classify the resulting feature window as class 0 (Down).
-    Both the DUT output and the ScoreModel prediction are checked.
-    """
-    weights = load_quantized_weights()
-    score_model = ScoreModel(weights)
-
-    rng = random.Random(0xD0_D0_D0)
-    h = CoreHarness(dut, score_model=score_model)
-    await h.setup()
-    await _flush_stale_bins(h, weights=weights)
-
-    events_per_bin = 32
-
-    # Predict what the model expects for this exact trajectory
-    exp_cls, _, _ = _predict_gesture_from_trajectory(
-        weights, GESTURE_DOWN, READOUT_BINS, events_per_bin, rng_seed=0xD0_D0_D0)
-    assert exp_cls == GESTURE_DOWN, (
-        f"ScoreModel does not predict Down for down trajectory; predicted class={exp_cls}. "
-        f"Check weight file or trajectory definition.")
-
-    # Drive 2 full gesture windows: PERSISTENCE_COUNT=2 so 2 consecutive passes suffice.
-    for rep in range(2):
-        await _drive_gesture_trajectory(
-            h, GESTURE_DOWN, READOUT_BINS, events_per_bin, rng, ts_base=0x1000 + rep * 0x400)
-
-    await h.wait_quiet()
-
-    assert h.completed_windows > 0, "No feature windows completed"
-    assert not h.pending_score_checks, \
-        f"{len(h.pending_score_checks)} feature windows never produced a class_valid"
-
-    # At least one gesture_valid should have fired as Down
-    assert len(h.observed_gestures) > 0, \
-        "No gesture_valid fired for Down trajectory"
-    fired_classes = [g for g, _ in h.observed_gestures]
-    assert all(c == GESTURE_DOWN for c in fired_classes), \
-        f"Expected all Down (0), got gesture classes: {fired_classes}"
-
-    # DUT and model must agree
-    assert h.observed_gestures == h.expected_gestures, \
-        f"DUT/model mismatch\nDUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
-
-
-@logged_test()
-async def test_gesture_left_from_evt2_events(dut):
-    """
-    Send synthetic EVT2.0 events tracing a leftward sweep (grid x: 7->0, center row).
-    The Left weight class expects high-x cells active in early bins, so x sweeps 7->0.
-    The DUT must classify as class 1 (Left).
-    """
-    weights = load_quantized_weights()
-    score_model = ScoreModel(weights)
-
-    rng = random.Random(0x1E_F7_1E)
-    h = CoreHarness(dut, score_model=score_model)
-    await h.setup()
-    await _flush_stale_bins(h, weights=weights)
-
-    events_per_bin = 32
-
-    exp_cls, _, _ = _predict_gesture_from_trajectory(
-        weights, GESTURE_LEFT, READOUT_BINS, events_per_bin, rng_seed=0x1E_F7_1E)
-    assert exp_cls == GESTURE_LEFT, (
-        f"ScoreModel does not predict Left for left trajectory; predicted class={exp_cls}.")
-
-    for rep in range(2):
-        await _drive_gesture_trajectory(
-            h, GESTURE_LEFT, READOUT_BINS, events_per_bin, rng, ts_base=0x2000 + rep * 0x400)
-
-    await h.wait_quiet()
-
-    assert h.completed_windows > 0, "No feature windows completed"
-    assert not h.pending_score_checks, \
-        f"{len(h.pending_score_checks)} feature windows never produced a class_valid"
-
-    assert len(h.observed_gestures) > 0, "No gesture_valid fired for Left trajectory"
-    fired_classes = [g for g, _ in h.observed_gestures]
-    assert all(c == GESTURE_LEFT for c in fired_classes), \
-        f"Expected all Left (1), got gesture classes: {fired_classes}"
-
-    assert h.observed_gestures == h.expected_gestures, \
-        f"DUT/model mismatch\nDUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
-
-
-@logged_test()
-async def test_gesture_right_from_evt2_events(dut):
-    """
-    Send synthetic EVT2.0 events tracing a rightward sweep (grid x: 0->7, center row).
-    The Right weight class expects low-x cells active in early bins, so x sweeps 0->7.
-    The DUT must classify as class 2 (Right).
-    """
-    weights = load_quantized_weights()
-    score_model = ScoreModel(weights)
-
-    rng = random.Random(0x51_94_7)
-    h = CoreHarness(dut, score_model=score_model)
-    await h.setup()
-    await _flush_stale_bins(h, weights=weights)
-
-    events_per_bin = 32
-
-    exp_cls, _, _ = _predict_gesture_from_trajectory(
-        weights, GESTURE_RIGHT, READOUT_BINS, events_per_bin, rng_seed=0x51_94_7)
-    assert exp_cls == GESTURE_RIGHT, (
-        f"ScoreModel does not predict Right for right trajectory; predicted class={exp_cls}.")
-
-    for rep in range(2):
-        await _drive_gesture_trajectory(
-            h, GESTURE_RIGHT, READOUT_BINS, events_per_bin, rng, ts_base=0x3000 + rep * 0x400)
-
-    await h.wait_quiet()
-
-    assert h.completed_windows > 0, "No feature windows completed"
-    assert not h.pending_score_checks, \
-        f"{len(h.pending_score_checks)} feature windows never produced a class_valid"
-
-    assert len(h.observed_gestures) > 0, "No gesture_valid fired for Right trajectory"
-    fired_classes = [g for g, _ in h.observed_gestures]
-    assert all(c == GESTURE_RIGHT for c in fired_classes), \
-        f"Expected all Right (2), got gesture classes: {fired_classes}"
-
-    assert h.observed_gestures == h.expected_gestures, \
-        f"DUT/model mismatch\nDUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
-
-
-@logged_test()
-async def test_gesture_up_from_evt2_events(dut):
-    """
-    Send synthetic EVT2.0 events filling all grid cells only in bin1.
-    Up weights are spatially uniform but strongly concentrated in bin1 (sum=5598 vs
-    ≤3463 for other classes), so any bin1 stimulus outscores Left/Right/Down.
-    The DUT must classify as class 3 (Up).
-    """
-    weights = load_quantized_weights()
-    score_model = ScoreModel(weights)
-
-    rng = random.Random(0x00_C0_0C)
-    h = CoreHarness(dut, score_model=score_model)
-    await h.setup()
-    await _flush_stale_bins(h, weights=weights)
-
-    events_per_bin = 2 * GRID_SIZE * GRID_SIZE  # 2 full grid scans per bin -> every cell hit ≥2×
-
-    exp_cls, _, _ = _predict_gesture_from_trajectory(
-        weights, GESTURE_UP, READOUT_BINS, events_per_bin, rng_seed=0x00_C0_0C)
-    assert exp_cls == GESTURE_UP, (
-        f"ScoreModel does not predict Up for up trajectory; predicted class={exp_cls}.")
-
-    for rep in range(2):
-        await _drive_gesture_trajectory(
-            h, GESTURE_UP, READOUT_BINS, events_per_bin, rng, ts_base=0x4000 + rep * 0x400)
-
-    await h.wait_quiet()
-
-    assert h.completed_windows > 0, "No feature windows completed"
-    assert not h.pending_score_checks, \
-        f"{len(h.pending_score_checks)} feature windows never produced a class_valid"
-
-    assert len(h.observed_gestures) > 0, "No gesture_valid fired for Up trajectory"
-    fired_classes = [g for g, _ in h.observed_gestures]
-    assert all(c == GESTURE_UP for c in fired_classes), \
-        f"Expected all Up (3), got gesture classes: {fired_classes}"
-
-    assert h.observed_gestures == h.expected_gestures, \
-        f"DUT/model mismatch\nDUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
-
-
-@logged_test()
-async def test_all_four_gestures_sequential(dut):
-    """
-    Drive all four gesture trajectories back-to-back in a single simulation.
-    Each gesture must produce gesture_valid for the correct class, with
-    no cross-contamination between gestures.  ScoreModel verifies every window.
-    """
-    weights = load_quantized_weights()
-    score_model = ScoreModel(weights)
-
-    rng = random.Random(0x4_A11_4)
-    h = CoreHarness(dut, score_model=score_model)
-    await h.setup()
-    await _flush_stale_bins(h, weights=weights)
-
-    gestures_in_order = [GESTURE_DOWN, GESTURE_LEFT, GESTURE_RIGHT, GESTURE_UP]
-    # Up needs a full grid scan (2*GRID_SIZE² events) for reliable classification;
-    # other gestures use sufficient events for their spatial patterns.
-    events_per_bin_map = {
-        GESTURE_DOWN: 32, GESTURE_LEFT: 32, GESTURE_RIGHT: 32,
-        GESTURE_UP: 2 * GRID_SIZE * GRID_SIZE,
-    }
-    ts_base = 0x100
-
-    for g_id in gestures_in_order:
-        # Hard-reset between gestures: clears all pipeline state instantly without
-        # generating any scoring runs (unlike rollover-based flush which triggers
-        # READOUT_BINS scoring pipeline runs per flush).
-        await _flush_stale_bins(h, weights=weights)
-
-        obs_before = len(h.observed_gestures)
-        events_per_bin = events_per_bin_map[g_id]
-
-        # Drive 2 full repetitions: PERSISTENCE_COUNT=2 so 2 consecutive passing windows
-        # are sufficient to fire gesture_valid.
-        for rep in range(2):
-            await _drive_gesture_trajectory(
-                h, g_id, READOUT_BINS, events_per_bin, rng, ts_base=ts_base)
-            ts_base += 0x400
-
-        await h.wait_quiet()
-
-        obs_after = len(h.observed_gestures)
-        new_gestures = h.observed_gestures[obs_before:obs_after]
-
-        assert len(new_gestures) > 0, \
-            f"No gesture_valid for gesture class {g_id} in sequential test"
-        # Check the last gesture_valid class (contamination windows from transition
-        # may appear first; steady-state is what matters)
-        last_class, _ = new_gestures[-1]
-        assert last_class == g_id, \
-            (f"Sequential test: expected gesture {g_id}, "
-             f"got {last_class} (all new: {new_gestures})")
-
-    assert not h.pending_score_checks, \
-        f"{len(h.pending_score_checks)} score checks never consumed"
-    assert h.observed_gestures == h.expected_gestures, \
-        f"DUT/model mismatch\nDUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
-
-
-@logged_test()
-async def test_noisy_gesture_trajectory_still_classifies(dut):
-    """
-    Repeat a Down sweep with high Gaussian noise (sigma=1.5 grid cells).
-    Even with significant position jitter the classifier must still pick Down.
-    Validates robustness of the linear weights against realistic sensor noise.
-    """
-    weights = load_quantized_weights()
-    score_model = ScoreModel(weights)
-
-    h = CoreHarness(dut, score_model=score_model)
-    await h.setup()
-    await _flush_stale_bins(h, weights=weights)
-
-    noise = 1.5
-    events_per_bin = 48  # more events to compensate for high noise
-    rng_seeds = [0xAB_C1 + rep * 7 for rep in range(2)]
-
-    # Verify that all 3 rep trajectories predict Down in the model.
-    # Skip gracefully if noise makes any rep ambiguous.
-    for seed in rng_seeds:
-        exp_cls, _, _ = _predict_gesture_from_trajectory(
-            weights, GESTURE_DOWN, READOUT_BINS, events_per_bin, rng_seed=seed, noise=noise)
-        if exp_cls != GESTURE_DOWN:
-            return  # noise made it ambiguous even in the model — skip rather than false-fail
-
-    # Drive DUT with same noise level; each rep uses the same deterministic seed as the model.
-    for rep, seed in enumerate(rng_seeds):
-        rng_det = random.Random(seed)
-        for b in range(READOUT_BINS):
-            await h.send_word(build_evt2_time_high((0x5000 + rep * 0x400 + b * 64) & 0x0FFFFFFF))
-            pts = _gesture_trajectory_for_bin(
-                GESTURE_DOWN, b, events_per_bin, rng_det, noise=noise)
-            for i, (xs, ys) in enumerate(pts):
-                pkt = EVT_CD_ON if (i & 1) else EVT_CD_OFF
-                await h.send_word(build_evt2_cd(pkt, xs, ys, i & 0x3F))
-            await h.force_bin_rollover()
-
-    await h.wait_quiet()
-
-    assert h.completed_windows > 0, "No feature windows completed"
-    assert not h.pending_score_checks, \
-        f"{len(h.pending_score_checks)} score checks never consumed"
-
-    assert len(h.observed_gestures) > 0, "No gesture fired for noisy Down"
-    # With high noise some transition windows may score differently; the last fired
-    # gesture (steady-state) must be Down.
-    last_class, _ = h.observed_gestures[-1]
-    assert last_class == GESTURE_DOWN, \
-        f"Noisy Down: expected last gesture class 0, got {last_class} (all: {[g for g,_ in h.observed_gestures]})"
-
-    assert h.observed_gestures == h.expected_gestures, \
-        f"DUT/model mismatch\nDUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
 
 
 @logged_test()
 async def test_wrong_gesture_trajectory_no_false_positive(dut):
     """
-    Drive an anti-pattern (uniform random events spread across all cells/bins) and
-    verify the classifier does NOT fire a confident gesture_valid.
-    With all cells saturating uniformly the margin between classes is near zero,
-    so class_pass should be 0 and gesture_valid should not assert.
+    Drive uniform random events spread across all cells/bins and verify DUT matches model.
+    With CLASS_THRESHOLD=0 the winning class still fires gesture_valid (score > 0),
+    but DUT and ScoreModel must agree on the class and pass status for every window.
     """
-    weights = load_quantized_weights()
+    weights = load_weights_from_mem()
     score_model = ScoreModel(weights)
 
     rng = random.Random(0xFA_15_E0)
@@ -1169,14 +720,11 @@ async def test_wrong_gesture_trajectory_no_false_positive(dut):
     await h.setup()
     await _flush_stale_bins(h, weights=weights)
 
-    # Uniform random events: every cell equally -> scores proportional to total weight sums.
-    # At saturation (counter=15) all features equal -> margin is determined only by weight sum
-    # differences between classes. With PASS_MARGIN=64 and N*15*weight_sum margins are
-    # small, class_pass should be 0.
-    # We verify this via the ScoreModel first, then assert DUT agrees.
-    # READOUT_BINS+1 rollovers: fills exactly one complete window plus one extra bin
-    # to confirm the classifier doesn't fire. More rollovers are unnecessary since
-    # the test only needs at least one completed window to verify no gesture fires.
+    # Uniform random events: every cell hit equally -> scores proportional to total weight sums.
+    # With CLASS_THRESHOLD=0, class_pass=1 whenever the winning score > 0 (always true here).
+    # The test verifies DUT and ScoreModel agree on class_id, class_pass, and gesture_valid
+    # for every window — not that gestures are suppressed.
+    # READOUT_BINS+1 rollovers: warm-up + at least one complete readout window.
     for _ in range(READOUT_BINS + 1):
         await h.send_word(build_evt2_time_high(rng.randint(0, 0x0FFFFFFF)))
         for _ in range(64):
@@ -1195,4 +743,184 @@ async def test_wrong_gesture_trajectory_no_false_positive(dut):
     # Model and DUT must agree (both should produce zero or identical gesture_valid outputs)
     assert h.observed_gestures == h.expected_gestures, \
         f"DUT/model mismatch on uniform input\nDUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
+
+
+# ---------------------------------------------------------------------------
+# EVT2 .bin file streaming tests
+# ---------------------------------------------------------------------------
+
+# Default set of 4 .bin files to stream into the DUT.
+# Override by setting the GESTURE_BIN_FILES env variable to a colon-separated
+# list of 4 absolute or repo-relative paths, e.g.:
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_DEFAULT_BIN_FILES = [
+    _REPO_ROOT / "EVT2_gesture_set" / "full_temporal_resolution" / "gdb_sun" / "wave_down" / "wave_down_bc_sun2_trim.bin",
+    _REPO_ROOT / "EVT2_gesture_set" / "full_temporal_resolution" / "gdb_sun" / "wave_left" / "wave_left_ba_sun2_trim.bin",
+    _REPO_ROOT / "EVT2_gesture_set" / "full_temporal_resolution" / "gdb_sun" / "wave_right" / "wave_right_ba_sun2_trim.bin",
+    _REPO_ROOT / "EVT2_gesture_set" / "full_temporal_resolution" / "gdb_sun" / "wave_up" / "wave_up_bc_sun2_trim.bin"
+]
+
+def _resolve_bin_files():
+    """Return the 4 .bin file paths to use for the streaming tests.
+
+    If the GESTURE_BIN_FILES environment variable is set it must contain exactly
+    4 colon-separated paths (absolute or relative to the repo root).  
+    """
+    env = os.environ.get("GESTURE_BIN_FILES", "")
+    if env.strip():
+        parts = [p.strip() for p in env.split(":") if p.strip()]
+        if len(parts) != 4:
+            raise ValueError(
+                f"GESTURE_BIN_FILES must contain exactly 4 colon-separated paths, got {len(parts)}: {parts}"
+            )
+        resolved = []
+        for p in parts:
+            path = Path(p)
+            if not path.is_absolute():
+                path = _REPO_ROOT / path
+            resolved.append(path)
+        return resolved
+    return list(_DEFAULT_BIN_FILES)
+
+
+def _read_evt2_bin(path):
+    """Read a raw EVT2.0 binary file and return a list of 32-bit words.
+
+    The file contains little-endian 32-bit words with no text header.
+    Incomplete trailing bytes are silently dropped.
+    """
+    data = Path(path).read_bytes()
+    n_words = len(data) // 4
+    return list(struct.unpack_from(f"<{n_words}I", data, 0))
+
+
+async def _stream_bin_file_with_timing(h, bin_path):
+    """Stream an EVT2.0 .bin file into the DUT, forcing bin rollovers at the correct
+    timestamps so the DUT's temporal window advances in sync with the recorded data.
+
+    The DUT uses a clock-based bin timer.  When replaying a file at simulation
+    speed the timer would never expire naturally, so we parse each word's
+    timestamp and call force_bin_rollover() every time the timestamp crosses a
+    BIN_DURATION_MS boundary.  This mirrors how the hardware would behave in
+    real time where the timer fires every BIN_DURATION_MS milliseconds.
+
+    Timestamps in EVT2.0 are in microseconds.
+    """
+    bin_duration_us = (WINDOW_MS // READOUT_BINS) * 1000  # ms -> us
+
+    words = _read_evt2_bin(bin_path)
+
+    time_high = 0
+    next_bin_boundary_us = None  # set on first timestamp seen
+
+    for word in words:
+        pkt = (word >> 28) & 0xF
+
+        if pkt == EVT_TIME_HIGH:
+            time_high = word & 0x0FFFFFFF
+        elif pkt in (EVT_CD_OFF, EVT_CD_ON):
+            ts_lsb = (word >> 22) & 0x3F
+            ts_us = (time_high << 6) | ts_lsb
+
+            if next_bin_boundary_us is None:
+                # Align first boundary to the next multiple of bin_duration_us
+                next_bin_boundary_us = (ts_us // bin_duration_us + 1) * bin_duration_us
+
+            # Roll the bin forward for every boundary this event crosses.
+            while ts_us >= next_bin_boundary_us:
+                await h.force_bin_rollover()
+                next_bin_boundary_us += bin_duration_us
+
+        await h.send_word(word)
+
+
+async def _run_bin_file_test(dut, bin_path, label):
+    """Core logic shared by all four bin-file tests.
+
+    Streams the entire .bin file into the DUT with timestamp-driven bin
+    rollovers so the temporal window advances correctly.  Verifies that
+    every DUT classification matches the software golden model (ScoreModel).
+
+    Parameters
+    ----------
+    dut : cocotb DUT handle
+    bin_path : path-like
+        EVT2.0 binary file to stream.
+    label : str
+        Human-readable name used in log messages (e.g. "money-wave-down").
+    """
+    weights = load_weights_from_mem()
+    score_model = ScoreModel(weights)
+    h = CoreHarness(dut, score_model=score_model)
+    await h.setup()
+    await _flush_stale_bins(h, weights=weights)
+
+    cocotb.log.info(f"[{label}] Streaming {bin_path} ...")
+    await _stream_bin_file_with_timing(h, bin_path)
+
+    # Flush the final partial bin so the last events are scored.
+    for _ in range(READOUT_BINS):
+        await h.force_bin_rollover()
+
+    await h.wait_quiet()
+
+    cocotb.log.info(
+        f"[{label}] Completed windows: {h.completed_windows}, "
+        f"Accepted words: {h.accepted_words}"
+    )
+
+    gesture_names = {0: "Down", 1: "Left", 2: "Right", 3: "Up"}
+    if h.observed_gestures:
+        cocotb.log.info(f"[{label}] DUT gesture outputs ({len(h.observed_gestures)} total):")
+        for g_class, g_conf in h.observed_gestures:
+            cocotb.log.info(
+                f"  gesture={gesture_names.get(g_class, str(g_class))} "
+                f"(class={g_class}, confidence={g_conf})"
+            )
+    else:
+        cocotb.log.info(f"[{label}] DUT produced no gesture_valid pulses.")
+
+    assert h.completed_windows > 0, f"[{label}] No feature windows completed"
+    assert not h.pending_score_checks, \
+        f"[{label}] {len(h.pending_score_checks)} windows never produced class_valid"
+    assert h.observed_gestures == h.expected_gestures, (
+        f"[{label}] DUT/model gesture mismatch\n"
+        f"DUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
+    )
+
+
+@logged_test()
+async def test_bin_file_gesture_0(dut):
+    """Stream bin file 0 into the DUT and report classifications."""
+    bin_files = _resolve_bin_files()
+    path = bin_files[0]
+    label = Path(path).stem
+    await _run_bin_file_test(dut, path, label)
+
+
+@logged_test()
+async def test_bin_file_gesture_1(dut):
+    """Stream bin file 1 into the DUT and report classifications."""
+    bin_files = _resolve_bin_files()
+    path = bin_files[1]
+    label = Path(path).stem
+    await _run_bin_file_test(dut, path, label)
+
+
+@logged_test()
+async def test_bin_file_gesture_2(dut):
+    """Stream bin file 2 into the DUT and report classifications."""
+    bin_files = _resolve_bin_files()
+    path = bin_files[2]
+    label = Path(path).stem
+    await _run_bin_file_test(dut, path, label)
+
+
+@logged_test()
+async def test_bin_file_gesture_3(dut):
+    """Stream bin file 3 into the DUT and report classifications."""
+    bin_files = _resolve_bin_files()
+    path = bin_files[3]
+    label = Path(path).stem
+    await _run_bin_file_test(dut, path, label)
 

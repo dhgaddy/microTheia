@@ -1,5 +1,5 @@
-"""Robust cocotb testbench for ram_1r1w_sync with cycle-accurate golden model."""
-
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2025 Group G Contributors
 import os
 import random
 
@@ -157,7 +157,6 @@ async def test_randomized_golden_scoreboard(dut):
         await drive_and_check(dut, model, 0, 0, 0, 0, 0, 0, "idle")
 
     for cycle in range(3000):
-        # Mostly out of reset, with occasional reset pulses.
         reset_i = 1 if rng.randint(0, 199) == 0 else 0
         wr_valid_i = rng.randint(0, 1)
         rd_valid_i = rng.randint(0, 1)
@@ -189,14 +188,11 @@ async def test_rd_valid_low_holds_output(dut):
     for _ in range(2):
         await drive_and_check(dut, model, 0, 0, 0, 0, 0, 0, "idle")
 
-    # Write a known value then read it to latch into rd_data_l.
     await drive_and_check(dut, model, 0, 1, 0xBE, 5, 0, 0, "write")
     await drive_and_check(dut, model, 0, 0, 0, 0, 1, 5, "read")
     latched = int(dut.rd_data_o.value)
     assert latched == 0xBE, f"Expected 0xBE, got 0x{latched:02X}"
 
-    # Issue several cycles with rd_valid_i=0 pointing at different (zero) addresses.
-    # Output must not change even though the address changes.
     for addr in [0, 100, 255, DEPTH - 1]:
         await drive_and_check(dut, model, 0, 0, 0, 0, 0, addr, f"hold-{addr}")
         assert int(dut.rd_data_o.value) == 0xBE, \

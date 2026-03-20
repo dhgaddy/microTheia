@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024-2025 Group G Contributors
 `ifndef BINPATH
 `define BINPATH ""
 `endif
@@ -7,12 +9,7 @@ module ram_1r1w_sync #(
     parameter width_p = 8,
     parameter depth_p = 512,
     parameter [8*128-1:0] filename_p = "",
-    parameter synth_init_file_p = 1'b0,
-    parameter init_offset_p = 0,
-    parameter init_count_p = depth_p,
-    parameter init_is_float_p = 1'b0,
-    parameter init_scale_p = 1,
-    parameter init_signed_p = 1'b1
+    parameter synth_init_file_p = 1'b0
 )(
     input [0:0] clk_i,
     input [0:0] reset_i,
@@ -40,17 +37,10 @@ module ram_1r1w_sync #(
       $readmemh(filename_p, ram);
   end
 `else
-  localparam longint signed MAX_INIT_SIGNED   = (64'sd1 << (width_p - 1)) - 1;
-  localparam longint signed MIN_INIT_SIGNED   = -(64'sd1 << (width_p - 1));
-  localparam longint signed MAX_INIT_UNSIGNED = (64'sd1 << width_p) - 1;
-
   integer fd;
   integer scan_rc;
   integer i;
-  integer loaded;
-  real fval;
-  integer ival;
-  longint signed qval;
+  longint unsigned ival;
 
   initial begin
     for (i = 0; i < depth_p; i = i + 1)
@@ -58,46 +48,15 @@ module ram_1r1w_sync #(
 
     if (filename_p != "") begin
       fd = $fopen(filename_p, "r");
-      if (fd != 0) begin
-        for (i = 0; i < init_offset_p; i = i + 1) begin
-          if (init_is_float_p)
-            scan_rc = $fscanf(fd, "%f\n", fval);
-          else
-            scan_rc = $fscanf(fd, "%d\n", ival);
+      if (fd == 0)
+        $warning("ram_1r1w_sync: could not open '%s' — RAM will be zero-initialised", filename_p);
+      else begin
+        for (i = 0; i < depth_p; i = i + 1) begin
+          scan_rc = $fscanf(fd, "%h\n", ival);
           if (scan_rc != 1)
-            i = init_offset_p;
-        end
-
-        loaded = 0;
-        for (i = 0; i < depth_p && loaded < init_count_p; i = i + 1) begin
-          if (init_is_float_p)
-            scan_rc = $fscanf(fd, "%f\n", fval);
-          else
-            scan_rc = $fscanf(fd, "%d\n", ival);
-
-          if (scan_rc == 1) begin
-            if (init_is_float_p)
-              qval = $rtoi(fval * init_scale_p);
-            else
-              qval = ival;
-
-            if (init_signed_p) begin
-              if (qval > MAX_INIT_SIGNED)
-                qval = MAX_INIT_SIGNED;
-              else if (qval < MIN_INIT_SIGNED)
-                qval = MIN_INIT_SIGNED;
-            end else begin
-              if (qval < 0)
-                qval = 0;
-              else if (qval > MAX_INIT_UNSIGNED)
-                qval = MAX_INIT_UNSIGNED;
-            end
-
-            ram[i] = qval[width_p-1:0];
-            loaded = loaded + 1;
-          end else begin
             i = depth_p;
-          end
+          else
+            ram[i] = ival[width_p-1:0];
         end
         $fclose(fd);
       end
