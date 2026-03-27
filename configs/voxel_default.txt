@@ -43,6 +43,9 @@ TX_FIFO_DEPTH        = 32
 POR_CYCLES           = 1024
 SOFT_RESET_CYCLES    = 64
 
+# voxel_mac_engine
+FEATURE_COUNT = 64
+
 # Legacy/optional compatibility knobs (safe to keep, ignored by modules without matching params)
 MIN_EVENT_THRESH    = 20
 MOTION_THRESH       = 8

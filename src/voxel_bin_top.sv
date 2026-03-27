@@ -3,20 +3,20 @@
 `timescale 1ns/1ps
 
 module voxel_bin_top #(
-    parameter int         CLK_FREQ_HZ          = 12_000_000,
-    parameter int         BAUD_RATE            = 1_000_000,
-    parameter int         WINDOW_MS            = 1000,
-    parameter int         CYCLES_PER_BIN       = 0,
-    parameter int         GRID_SIZE            = 16,
-    parameter int         NUM_BINS             = 8,
-    parameter int         READOUT_BINS         = 8,
-    parameter int         COUNTER_BITS         = 16,
-    parameter int         FIFO_DEPTH           = 256,
-    parameter int         DATA_WIDTH           = 32,
-    parameter int         REQUIRE_TIME_HIGH    = 1,
-    parameter int         SWAP_INPUT_BYTES     = 0,
-    parameter int         SENSOR_WIDTH         = 320,
-    parameter int         SENSOR_HEIGHT        = 320,
+    parameter int CLK_FREQ_HZ          = 12_000_000,
+    parameter int BAUD_RATE            = 1_000_000,
+    parameter int WINDOW_MS            = 1000,
+    parameter int CYCLES_PER_BIN       = 0,
+    parameter int GRID_SIZE            = 16,
+    parameter int NUM_BINS             = 8,
+    parameter int READOUT_BINS         = 8,
+    parameter int COUNTER_BITS         = 16,
+    parameter int FIFO_DEPTH           = 256,
+    parameter int DATA_WIDTH           = 32,
+    parameter int REQUIRE_TIME_HIGH    = 1,
+    parameter int SWAP_INPUT_BYTES     = 0,
+    parameter int SENSOR_WIDTH         = 320,
+    parameter int SENSOR_HEIGHT        = 320,
     parameter int WEIGHT_BITS          = 8,
     parameter int UART_WORD_FIFO_DEPTH = 16,
     parameter int TX_FIFO_DEPTH        = 32,
@@ -103,15 +103,15 @@ module voxel_bin_top #(
     logic       tx_fifo_out_valid;
     logic       tx_fifo_out_ready;
 
-    logic cmd_echo_pending;
-    logic cmd_status_pending;
-    logic cmd_config_pending;
-    logic cmd_diag_pending;
-    logic gesture_pkt_pending;
+    logic       cmd_echo_pending;
+    logic       cmd_status_pending;
+    logic       cmd_config_pending;
+    logic       cmd_diag_pending;
+    logic       gesture_pkt_pending;
     logic [1:0] gesture_pkt_code;
     logic       gesture_pkt_conf;
     logic [3:0] gesture_pkt_evthi;
-    logic second_byte_pending;
+    logic       second_byte_pending;
     logic [7:0] second_byte_data;
     logic [7:0] status_byte;
     logic [7:0] diag_byte1;
@@ -132,22 +132,22 @@ module voxel_bin_top #(
     // Weight/threshold write interface (driven by UART load commands)
     localparam int FEATURE_COUNT     = READOUT_BINS * GRID_SIZE * GRID_SIZE;
     localparam int WEIGHT_ADDR_BITS  = $clog2(FEATURE_COUNT);
-    logic                       weight_wr_valid;
-    logic [1:0]                 weight_wr_class;
+    logic                        weight_wr_valid;
+    logic [1:0]                  weight_wr_class;
     logic [WEIGHT_ADDR_BITS-1:0] weight_wr_addr;
-    logic [WEIGHT_BITS-1:0]     weight_wr_data;
-    logic                       thresh_wr_valid;
-    logic [2:0]                 thresh_wr_addr;
-    logic [SCORE_BITS-1:0]      thresh_wr_data;
+    logic [WEIGHT_BITS-1:0]      weight_wr_data;
+    logic                        thresh_wr_valid;
+    logic [2:0]                  thresh_wr_addr;
+    logic [SCORE_BITS-1:0]       thresh_wr_data;
 
     // Staging registers for multi-byte UART load commands
-    logic [13:0]                wld_addr_staging;
-    logic [31:0]                tld_data_staging;
+    logic [13:0]                 wld_addr_staging;
+    logic [31:0]                 tld_data_staging;
 
     // Pending word register — holds an assembled EVT2 word when the word FIFO
     // was full at the time the 4th UART byte arrived.  Retried every cycle.
-    logic                       word_pending;
-    logic [31:0]                word_pending_data;
+    logic                        word_pending;
+    logic [31:0]                 word_pending_data;
 
     logic diag_seen_capture;
     logic diag_seen_feature_window;
@@ -157,9 +157,9 @@ module voxel_bin_top #(
     logic diag_seen_gesture_valid;
 
     // Gesture class order: 0=Down, 1=Left, 2=Right, 3=Up
-    logic [1:0] last_gesture;
-    logic [LED_HOLD_BITS-1:0] gesture_led_ctr;
-    logic [LED_HOLD_BITS-1:0] activity_led_ctr;
+    logic [1:0]                last_gesture;
+    logic [LED_HOLD_BITS-1:0]  gesture_led_ctr;
+    logic [LED_HOLD_BITS-1:0]  activity_led_ctr;
     logic [HEARTBEAT_BITS-1:0] heartbeat_ctr;
 
     always_comb begin

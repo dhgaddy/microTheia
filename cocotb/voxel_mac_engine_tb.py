@@ -111,7 +111,7 @@ class RamModel:
 
 async def setup(dut):
     configure_from_dut(dut)
-    cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
     dut.rst.value           = 1
     dut.start.value         = 0
     dut.feature_data.value  = 0

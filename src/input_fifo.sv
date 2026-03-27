@@ -24,10 +24,10 @@ module input_fifo #(
     logic [FIFO_DEPTH_LOG2:0]   tail_count;
 
     logic [DATA_WIDTH-1:0] out_data_r;
-    logic               out_valid_r;
+    logic                  out_valid_r;
 
     logic [DATA_WIDTH-1:0] ram_rd_data;
-    logic               rd_pending;
+    logic                  rd_pending;
 
     logic [FIFO_DEPTH_LOG2:0] total_count;
     logic push, pop;
@@ -80,8 +80,8 @@ module input_fifo #(
             logic [FIFO_DEPTH_LOG2-1:0] rd_ptr_n;
             logic [FIFO_DEPTH_LOG2:0]   tail_count_n;
             logic [DATA_WIDTH-1:0]      out_data_n;
-            logic                    out_valid_n;
-            logic                    rd_pending_n;
+            logic                       out_valid_n;
+            logic                       rd_pending_n;
 
             wr_ptr_n     = wr_ptr;
             rd_ptr_n     = rd_ptr;

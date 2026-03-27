@@ -15,14 +15,14 @@ module voxel_mac_engine #(
     input  logic start,
     output logic busy,
 
-    output logic                             rd_en,
-    output logic [$clog2(FEATURE_COUNT)-1:0] rd_addr,
+    output logic                               rd_en,
+    output logic [$clog2(FEATURE_COUNT)-1:0]   rd_addr,
 
     input  logic [COUNTER_BITS-1:0]            feature_data,
     input  logic [NUM_CLASSES*WEIGHT_BITS-1:0] weight_data_flat,
 
-    output logic [NUM_CLASSES*SCORE_BITS-1:0] scores_flat,
-    output logic                              scores_valid
+    output logic [NUM_CLASSES*SCORE_BITS-1:0]  scores_flat,
+    output logic                               scores_valid
 );
 
     localparam int ADDR_BITS   = $clog2(FEATURE_COUNT);

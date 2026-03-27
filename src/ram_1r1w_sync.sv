@@ -11,16 +11,16 @@ module ram_1r1w_sync #(
     parameter [8*128-1:0] filename_p = "",
     parameter synth_init_file_p = 1'b0
 )(
-    input [0:0] clk_i,
-    input [0:0] reset_i,
+    input  [0:0]                     clk_i,
+    input  [0:0]                     reset_i,
 
-    input [0:0] wr_valid_i,
-    input [width_p-1:0] wr_data_i,
-    input [$clog2(depth_p) - 1 : 0] wr_addr_i,
+    input  [0:0]                     wr_valid_i,
+    input  [width_p-1:0]             wr_data_i,
+    input  [$clog2(depth_p) - 1 : 0] wr_addr_i,
 
-    input [0:0] rd_valid_i,
-    input [$clog2(depth_p) - 1 : 0] rd_addr_i,
-    output [width_p-1:0] rd_data_o
+    input  [0:0]                     rd_valid_i,
+    input  [$clog2(depth_p) - 1 : 0] rd_addr_i,
+    output [width_p-1:0]             rd_data_o
 );
 
   logic [width_p-1:0] ram [depth_p-1:0];

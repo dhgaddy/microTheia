@@ -12,15 +12,15 @@ module evt2_decoder #(
     parameter bit REQUIRE_TIME_HIGH = 1'b1,
     parameter bit SWAP_INPUT_BYTES  = 1'b0
 )(
-    input  logic                        clk,
-    input  logic                        rst,
-    input  logic [31:0]                 data_in,
-    input  logic                        data_valid,
-    input  logic                        event_ready_i,
-    output logic                        data_ready,
+    input  logic                         clk,
+    input  logic                         rst,
+    input  logic [31:0]                  data_in,
+    input  logic                         data_valid,
+    input  logic                         event_ready_i,
+    output logic                         data_ready,
     output logic [$clog2(GRID_SIZE)-1:0] x_out,
     output logic [$clog2(GRID_SIZE)-1:0] y_out,
-    output logic                        event_valid
+    output logic                         event_valid
 );
 
     localparam int GRID_BITS = $clog2(GRID_SIZE);
@@ -35,6 +35,7 @@ module evt2_decoder #(
     // Reciprocal-multiply constants: floor(v/D) = (v * M) >> 12 for v < SENSOR_DIM.
     // M = floor(2^12 / D) + 1 gives exact results; clamp to GRID_SIZE-1 handles edge.
     localparam int DIV_K                 = 12;
+
     localparam int X_M                   = (1 << DIV_K) / X_BIN_DIV + 1;
     localparam int Y_M                   = (1 << DIV_K) / Y_BIN_DIV + 1;
 
@@ -49,12 +50,12 @@ module evt2_decoder #(
 
     logic have_time_high;
 
-    logic [10:0] x_clamped;
-    logic [10:0] y_clamped;
+    logic [10:0]          x_clamped;
+    logic [10:0]          y_clamped;
     logic [GRID_BITS-1:0] x_grid;
     logic [GRID_BITS-1:0] y_grid;
-    logic [10+DIV_K:0] x_prod_c, y_prod_c;
-    logic [GRID_BITS:0] x_grid_raw, y_grid_raw;
+    logic [10+DIV_K:0]    x_prod_c, y_prod_c;
+    logic [GRID_BITS:0]   x_grid_raw, y_grid_raw;
 
     always_comb begin
         if (x_raw >= SENSOR_WIDTH)
@@ -70,8 +71,9 @@ module evt2_decoder #(
         // Reciprocal-multiply: floor(v/D) = (v*M) >> DIV_K, exact for v < SENSOR_DIM.
         x_prod_c   = x_clamped * X_M;
         y_prod_c   = y_clamped * Y_M;
-        x_grid_raw = x_prod_c[GRID_BITS+DIV_K:DIV_K];
-        y_grid_raw = y_prod_c[GRID_BITS+DIV_K:DIV_K];
+
+        x_grid_raw = x_prod_c >> DIV_K;
+        y_grid_raw = y_prod_c >> DIV_K;
 
         x_grid = (x_grid_raw >= GRID_SIZE) ? GRID_SIZE-1 : x_grid_raw;
         y_grid = (y_grid_raw >= GRID_SIZE) ? GRID_SIZE-1 : y_grid_raw;

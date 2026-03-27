@@ -153,4 +153,16 @@ To check whether our design is suitable for manufacturing, run the [gf180mcu-pre
 
 ### WHAT NEEDS FIXING
 - clean up and seperate always_comb and always_ff
-- add more parameterization in testing for ram_1r1w_sync
+    - uart_debug
+    - uart_rx
+    - uart_tx
+    - voxel_bin_core
+    - voxel_bin_top
+    - voxel_binning
+    - voxel_gesture_classifier
+    - voxel_mac_enginer
+- Failing
+    - make sim DUT=evt2_decoder CONFIG=voxel_8x8_4bins
+    - make sim DUT=voxel_bin_core CONFIG=voxel_8x8_4bins
+- should [sram](https://github.com/google/globalfoundries-pdk-ip-gf180mcu_fd_ip_sram) be in a third party folder?
+

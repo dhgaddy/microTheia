@@ -117,7 +117,7 @@ async def test_read_latency_is_one_cycle(dut):
     sentinel = 0x3C & DATA_MASK
     await write_word(dut, 7, sentinel)
 
-    # Assert rd_valid; sample rd_data_o in the *same* cycle — it still holds old Q.
+    # Assert rd_valid: sample rd_data_o in the *same* cycle — it still holds old Q.
     dut.rd_valid_i.value = 1
     dut.rd_addr_i.value  = 7
     await RisingEdge(dut.clk_i)

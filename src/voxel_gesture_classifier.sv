@@ -11,16 +11,17 @@ module voxel_gesture_classifier #(
     input  logic [NUM_CLASSES*SCORE_BITS-1:0] scores_flat,
     input  logic                              scores_valid,
 
-    output logic       thresh_rd_valid,
-    output logic [2:0] thresh_rd_addr,
+    output logic                  thresh_rd_valid,
+    output logic [2:0]            thresh_rd_addr,
     input  logic [SCORE_BITS-1:0] thresh_data,
 
-    output logic [1:0]  class_gesture,
-    output logic        class_valid,
-    output logic        class_pass,
-    output logic [1:0]  gesture,
-    output logic        gesture_valid,
-    output logic        gesture_confidence
+    output logic [1:0] class_gesture,
+    output logic       class_valid,
+    output logic       class_pass,
+    
+    output logic [1:0] gesture,
+    output logic       gesture_valid,
+    output logic       gesture_confidence
 );
 
     localparam int ADDR_BITS = $clog2(NUM_CLASSES);

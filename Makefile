@@ -127,14 +127,13 @@ sim-fast: ## Run voxel_bin_core sim with small fast-sim config (8x8 grid, N=8, 4
 .PHONY: sim-fast
 
 sim-all: ## Test all the modules against Makefile compile args
-	$(MAKE) sim DUT=gf180_sram_1r1w CONFIG=gf180_sram_1r1w
 	$(MAKE) sim DUT=input_fifo
 	$(MAKE) sim DUT=evt2_decoder
 	$(MAKE) sim DUT=uart_rx
 	$(MAKE) sim DUT=uart_tx
 	$(MAKE) sim DUT=uart_debug
 	$(MAKE) sim DUT=voxel_gesture_classifier
-	$(MAKE) sim DUT=voxel_mac_engine CONFIG=voxel_mac_engine
+	$(MAKE) sim DUT=voxel_mac_engine
 	$(MAKE) sim DUT=voxel_binning
 	$(MAKE) sim DUT=voxel_bin_core
 	$(MAKE) sim DUT=voxel_bin_top

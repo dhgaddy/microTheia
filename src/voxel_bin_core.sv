@@ -44,10 +44,10 @@ module voxel_bin_core #(
 
     // Weight SRAM write port — loads weights into the per-class SRAMs at runtime.
     // Do not assert weight_wr_valid_i while the MAC engine is running (mac_busy).
-    input  logic                                          weight_wr_valid_i,
-    input  logic [1:0]                                    weight_wr_class_i,
+    input  logic                                                weight_wr_valid_i,
+    input  logic [1:0]                                          weight_wr_class_i,
     input  logic [$clog2(READOUT_BINS*GRID_SIZE*GRID_SIZE)-1:0] weight_wr_addr_i,
-    input  logic [WEIGHT_BITS-1:0]                        weight_wr_data_i,
+    input  logic [WEIGHT_BITS-1:0]                              weight_wr_data_i,
 
     // Threshold SRAM write port — addr 0-3 = class thresholds, 4-7 = diff thresholds.
     input  logic                  thresh_wr_valid_i,

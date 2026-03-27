@@ -6,11 +6,11 @@ module uart_rx #(
     parameter int CLK_FREQ_HZ = 12_000_000,
     parameter int BAUD_RATE   = 115200
 )(
-    input  logic clk,
-    input  logic rst,
-    input  logic rx,
+    input  logic       clk,
+    input  logic       rst,
+    input  logic       rx,
     output logic [7:0] data,
-    output logic valid
+    output logic       valid
 );
 
     localparam CLKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE;
