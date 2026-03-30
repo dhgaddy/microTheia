@@ -131,6 +131,23 @@ Once synthesized and having a working bitstream to flash and test, go into the [
 
 To check whether our design is suitable for manufacturing, run the [gf180mcu-precheck](https://github.com/wafer-space/gf180mcu-precheck) with the layout.
 
+## Tool Versions
+
+| Tool | Version | Source |
+|------|---------|--------|
+| Icarus Verilog | (from flake.nix) | Nix |
+| OpenROAD | (compiled locally) | Nix |
+| LibreLane | leo/gf180mcu branch | GitHub |
+| oss-cad-suite | 2024-11-21 | Dockerfile |
+| sv2v | 0.0.13 | Dockerfile |
+| numpy | 2.4.3 | Dockerfile, scripts/requirements.txt, ice40/requirements.txt |
+| open-cv-python | 4.13.0.92 | Dockerfile, scripts/requirements.txt, ice40/requirements.txt |
+| matplotlib | 3.10.8 | Dockerfile, scripts/requirements.txt |
+| cocotb | 2.0.1 | Dockerfile, scripts/requirements.txt |
+| pyserial | 3.5 | Dockerfile, ice40/requirements.txt |
+
+Run `pip install -r scripts/requirements.txt` for RTL simulation, or `pip install -r ice40/requirements.txt` for FPGA tools.
+
 ## Notes
 
 ### General
