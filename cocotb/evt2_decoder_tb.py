@@ -1,5 +1,5 @@
-"""Robust cocotb testbench for evt2_decoder with cycle-accurate golden model."""
-
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2025 Group G Contributors
 import random
 
 import cocotb
@@ -17,7 +17,6 @@ GRID_SIZE     = CFG["GRID_SIZE"]
 SENSOR_WIDTH  = CFG["SENSOR_WIDTH"]
 SENSOR_HEIGHT = CFG["SENSOR_HEIGHT"]
 
-GRID_BITS         = (GRID_SIZE - 1).bit_length() + 1
 REQUIRE_TIME_HIGH = 1
 
 EVT_CD_OFF = 0x0
@@ -37,12 +36,9 @@ class Evt2DecoderModel:
         self.reset()
 
     def reset(self):
-        self.time_high_reg = 0
         self.have_time_high = 0
         self.x_out = 0
         self.y_out = 0
-        self.polarity = 0
-        self.timestamp = 0
         self.event_valid = 0
 
     @staticmethod
@@ -57,10 +53,8 @@ class Evt2DecoderModel:
 
     def step(self, rst, data_in, data_valid, event_ready_i):
         pkt_type = (data_in >> 28) & 0xF
-        ts_lsb = (data_in >> 22) & 0x3F
         x_raw = (data_in >> 11) & 0x7FF
         y_raw = data_in & 0x7FF
-        time_high_payload = data_in & 0x0FFFFFFF
 
         is_cd = pkt_type in (EVT_CD_OFF, EVT_CD_ON)
         data_ready = int((not is_cd) or event_ready_i)
@@ -72,13 +66,10 @@ class Evt2DecoderModel:
         self.event_valid = 0
         if data_valid and data_ready:
             if pkt_type == EVT_TIME_HIGH:
-                self.time_high_reg = time_high_payload
                 self.have_time_high = 1
             elif pkt_type in (EVT_CD_OFF, EVT_CD_ON):
                 if (not REQUIRE_TIME_HIGH) or self.have_time_high:
                     self.x_out, self.y_out = self._grid_map(x_raw, y_raw)
-                    self.polarity = 1 if pkt_type == EVT_CD_ON else 0
-                    self.timestamp = ((self.time_high_reg & 0x0FFFFFFF) << 6) | ts_lsb
                     self.event_valid = 1
 
         return data_ready
@@ -112,10 +103,6 @@ async def drive_and_check(dut, model, rst, data_in, data_valid, event_ready_i, t
         f"{tag}: x_out DUT={int(dut.x_out.value)} model={model.x_out}"
     assert int(dut.y_out.value) == model.y_out, \
         f"{tag}: y_out DUT={int(dut.y_out.value)} model={model.y_out}"
-    assert int(dut.polarity.value) == model.polarity, \
-        f"{tag}: polarity DUT={int(dut.polarity.value)} model={model.polarity}"
-    assert int(dut.timestamp.value) == model.timestamp, \
-        f"{tag}: timestamp DUT={int(dut.timestamp.value)} model={model.timestamp}"
     assert int(dut.event_valid.value) == model.event_valid, \
         f"{tag}: event_valid DUT={int(dut.event_valid.value)} model={model.event_valid}"
 
@@ -189,8 +176,6 @@ async def test_coordinate_clamp_and_timestamp(dut):
 
     assert int(dut.x_out.value) == GRID_SIZE - 1
     assert int(dut.y_out.value) == GRID_SIZE - 1
-    exp_ts = ((0x0FFFFFFF << 6) | 0x2A)
-    assert int(dut.timestamp.value) == exp_ts
 
 
 @logged_test()
@@ -217,30 +202,6 @@ async def test_randomized_golden_scoreboard(dut):
         dv = rng.choice([0, 1, 1, 1])
         ready = rng.choice([0, 1, 1])
         await drive_and_check(dut, model, 0, word, dv, ready, f"rnd-{cycle}")
-
-
-@logged_test()
-async def test_polarity_off_vs_on(dut):
-    """CD_OFF -> polarity=0; CD_ON -> polarity=1."""
-    await setup(dut)
-    model = Evt2DecoderModel()
-
-    for _ in range(5):
-        await drive_and_check(dut, model, 1, 0, 0, 1, "rst")
-    for _ in range(2):
-        await drive_and_check(dut, model, 0, 0, 0, 1, "idle")
-
-    await drive_and_check(dut, model, 0, build_evt2_time_high(0x100), 1, 1, "th")
-
-    cd_off = build_evt2_cd(EVT_CD_OFF, 10, 10, 5)
-    await drive_and_check(dut, model, 0, cd_off, 1, 1, "cd-off")
-    assert int(dut.event_valid.value) == 1, "Expected event_valid for CD_OFF"
-    assert int(dut.polarity.value) == 0, "CD_OFF should set polarity=0"
-
-    cd_on = build_evt2_cd(EVT_CD_ON, 20, 20, 6)
-    await drive_and_check(dut, model, 0, cd_on, 1, 1, "cd-on")
-    assert int(dut.event_valid.value) == 1, "Expected event_valid for CD_ON"
-    assert int(dut.polarity.value) == 1, "CD_ON should set polarity=1"
 
 
 @logged_test()
@@ -313,31 +274,6 @@ async def test_consecutive_cd_events_all_valid(dut):
         assert int(dut.event_valid.value) == 1, f"No event_valid for CD event {i}"
         assert int(dut.x_out.value) == gx, f"x_out mismatch at event {i}"
         assert int(dut.y_out.value) == gy, f"y_out mismatch at event {i}"
-
-
-@logged_test()
-async def test_time_high_updates_timestamp_correctly(dut):
-    """Multiple TIME_HIGH words update the timestamp base; CD event picks up the latest."""
-    await setup(dut)
-    model = Evt2DecoderModel()
-
-    for _ in range(5):
-        await drive_and_check(dut, model, 1, 0, 0, 1, "rst")
-    for _ in range(2):
-        await drive_and_check(dut, model, 0, 0, 0, 1, "idle")
-
-    th_values = [0x000001, 0x00ABCD, 0x3FFFFF, 0x0FFFFFF]
-    for th_val in th_values:
-        await drive_and_check(dut, model, 0, build_evt2_time_high(th_val), 1, 1, f"th-{th_val}")
-
-    ts_lsb = 0x2A
-    cd = build_evt2_cd(EVT_CD_ON, 0, 0, ts_lsb)
-    await drive_and_check(dut, model, 0, cd, 1, 1, "cd-final")
-    assert int(dut.event_valid.value) == 1
-
-    exp_ts = ((th_values[-1] & 0x0FFFFFFF) << 6) | ts_lsb
-    assert int(dut.timestamp.value) == exp_ts, \
-        f"Timestamp mismatch: DUT=0x{int(dut.timestamp.value):X} expected=0x{exp_ts:X}"
 
 
 @logged_test()

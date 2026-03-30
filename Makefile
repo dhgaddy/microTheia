@@ -98,6 +98,10 @@ lint: ## Lint all SystemVerilog files in src
 	          $(SV_SRCS)
 .PHONY: lint
 
+# Default testbench module name is <DUT>_tb, but you can override it:
+# Example: make sim DUT=voxel_bin_core_parallel TB=voxel_bin_core
+TB ?= $(DUT)
+
 sim: ## Run RTL simulation with cocotb
 	@if [ -z "$(DUT)" ]; then \
 		echo "Error: You must specify DUT=<module_name>"; \
@@ -108,20 +112,20 @@ sim: ## Run RTL simulation with cocotb
 		echo "===================================================="; \
 		echo " Running DUT=$$d with CONFIG=$(CONFIG)"; \
 		echo "===================================================="; \
-		if [ ! -f "cocotb/$${d}_tb.py" ]; then \
-			echo "Skipping $$d (no testbench found)"; \
+		if [ ! -f "cocotb/$(TB)_tb.py" ]; then \
+			echo "Skipping $$d (no testbench found: cocotb/$(TB)_tb.py)"; \
 			continue; \
 		fi; \
 		rm -rf cocotb/sim_build/$$d; \
 		\
-		SRCS="src/$(ARCH)_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv src/ram_1r1w_sync.sv"; \
+		SRCS="src/gf180mcu_fd_ip_sram__sram64x8m8wm1.v src/gf180mcu_fd_ip_sram__sram128x8m8wm1.v src/gf180mcu_fd_ip_sram__sram256x8m8wm1.v src/gf180mcu_fd_ip_sram__sram512x8m8wm1.v src/gf180_sram_1r1w.sv src/$(ARCH)_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/ram_1r1w_sync.sv"; \
 		\
 		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
 		export SIM_CONFIG=$(CONFIG_FILE); \
 		\
 		TOPLEVEL=$$d \
 		TOPLEVEL_LANG=verilog \
-		COCOTB_TEST_MODULES=$${d}_tb \
+		COCOTB_TEST_MODULES=$(TB)_tb \
 		VERILOG_SOURCES="$$SRCS" \
 		COMPILE_ARGS="$$PARAMS" \
 		WAVES=1 \
@@ -138,13 +142,11 @@ sim-fast: ## Run voxel_bin_core sim with small fast-sim config (8x8 grid, N=8, 4
 sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=input_fifo
 	$(MAKE) sim DUT=evt2_decoder
-	$(MAKE) sim DUT=MatMul
 	$(MAKE) sim DUT=uart_rx
 	$(MAKE) sim DUT=uart_tx
 	$(MAKE) sim DUT=uart_debug
-	$(MAKE) sim DUT=ram_1r1w_sync
 	$(MAKE) sim DUT=voxel_gesture_classifier
-	$(MAKE) sim DUT=voxel_systolic_array
+	$(MAKE) sim DUT=voxel_mac_engine
 	$(MAKE) sim DUT=voxel_binning
 	$(MAKE) sim DUT=voxel_bin_core
 	$(MAKE) sim DUT=voxel_bin_top

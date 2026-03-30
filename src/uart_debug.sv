@@ -1,6 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024-2025 Group G Contributors
 `timescale 1ns/1ps
-
-// Sends gesture ASCII strings ("UP\r\n", "DOWN\r\n", etc.) over UART.
 
 module uart_debug #(
     parameter int CLK_FREQ_HZ = 12_000_000,

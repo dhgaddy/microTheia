@@ -1,16 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024-2025 Group G Contributors
 `timescale 1ns/1ps
-
-// UART Receiver - 8N1, synchronous active-high reset
 
 module uart_rx #(
     parameter int CLK_FREQ_HZ = 12_000_000,
     parameter int BAUD_RATE   = 115200
 )(
-    input  logic clk,
-    input  logic rst,
-    input  logic rx,
+    input  logic       clk,
+    input  logic       rst,
+    input  logic       rx,
     output logic [7:0] data,
-    output logic valid
+    output logic       valid
 );
 
     localparam CLKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE;
@@ -27,7 +27,7 @@ module uart_rx #(
     logic rx_sync, rx_d;
 
     // Double-flop synchronizer for metastability
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (rst) begin
             rx_sync <= 1'b1;
             rx_d <= 1'b1;
@@ -37,7 +37,7 @@ module uart_rx #(
         end
     end
 
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (rst) begin
             state <= IDLE;
             clk_cnt <= 8'd0;

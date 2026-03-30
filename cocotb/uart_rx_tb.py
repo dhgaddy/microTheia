@@ -1,5 +1,5 @@
-"""Robust cocotb testbench for uart_rx with cycle-accurate golden model."""
-
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2025 Group G Contributors
 import random
 
 import cocotb
@@ -174,7 +174,6 @@ async def test_randomized_golden_waveform(dut):
     model = UartRxModel(CLKS_PER_BIT)
     rng = random.Random(0x9127)
 
-    # Build a random waveform with valid frames, false starts, and idle regions.
     waveform = [1] * (CLKS_PER_BIT * 6)
     expected_bytes = []
 

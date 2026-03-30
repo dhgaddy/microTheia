@@ -1,5 +1,5 @@
-"""Robust cocotb testbench for uart_tx with cycle-accurate golden model."""
-
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2025 Group G Contributors
 import random
 
 import cocotb
@@ -104,6 +104,7 @@ async def receive_uart_byte(dut, timeout_cycles=200000):
     await ClockCycles(dut.clk, CLKS_PER_BIT)
     if int(dut.tx.value) != 1:
         return None
+    await ClockCycles(dut.clk, CLKS_PER_BIT // 2)  # consume remaining stop bit → caller returns at IDLE
     return val
 
 
@@ -170,12 +171,43 @@ async def test_ignore_valid_while_busy(dut):
 
 
 @logged_test()
+async def test_all_byte_values(dut):
+    """Transmit every byte 0x00..0xFF and verify each is received correctly."""
+    await setup(dut)
+    for val in range(256):
+        rx_task = cocotb.start_soon(receive_uart_byte(dut))
+        dut.data.value = val
+        dut.valid.value = 1
+        await RisingEdge(dut.clk)
+        dut.valid.value = 0
+        got = await rx_task
+        assert got == val, f"Byte 0x{val:02X}: expected 0x{val:02X}, got {got}"
+
+
+@logged_test()
+async def test_back_to_back_transmission(dut):
+    """Start a new transmission immediately after the previous one completes."""
+    await setup(dut)
+    payload = [0x11, 0x55, 0xAA, 0xFF]
+    received = []
+    for byte_val in payload:
+        rx_task = cocotb.start_soon(receive_uart_byte(dut))
+        dut.data.value = byte_val
+        dut.valid.value = 1
+        await RisingEdge(dut.clk)
+        dut.valid.value = 0
+        got = await rx_task
+        assert got is not None, f"Timed out receiving byte 0x{byte_val:02X}"
+        received.append(got)
+    assert received == payload, f"Back-to-back mismatch: got {received}, expected {payload}"
+
+
+@logged_test()
 async def test_randomized_cycle_scoreboard(dut):
     await setup(dut)
     model = UartTxModel(CLKS_PER_BIT)
     rng = random.Random(0x7EA11ED)
 
-    # Replay setup into model.
     for _ in range(5):
         model.step(1, 0, 0)
     for _ in range(2):
