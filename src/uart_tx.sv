@@ -26,7 +26,7 @@ module uart_tx #(
     logic [2:0] bit_idx;
     logic [7:0] tx_data;
 
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (rst) begin
             state <= IDLE;
             clk_cnt <= 8'd0;
