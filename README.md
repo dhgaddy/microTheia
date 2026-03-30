@@ -157,6 +157,9 @@ Run `pip install -r scripts/requirements.txt` for RTL simulation, or `pip instal
 | uart_tx, uart_rx | 2 | in/out | UART | Debug/output |
 | debug[N:0] | M | out | Debug | Tied to VSS when not used |
 
+## Third Party
+- https://github.com/google/globalfoundries-pdk-ip-gf180mcu_fd_ip_sram
+
 ## Precheck
 
 To check whether our design is suitable for manufacturing, run the [gf180mcu-precheck](https://github.com/wafer-space/gf180mcu-precheck) with the layout.
@@ -172,7 +175,6 @@ To check whether our design is suitable for manufacturing, run the [gf180mcu-pre
 - https://github.com/jasonwaseq/Verilog-Memory-Hardware
 - https://github.com/jasonwaseq/GenX320_STM32F746G-DISCO
 - https://github.com/google/gf180mcu-pdk/
-- https://github.com/google/globalfoundries-pdk-ip-gf180mcu_fd_ip_sram
 - [GF180MCU Tutorial - Single Video](https://www.youtube.com/watch?v=USCmZuREMTE)
 - https://github.com/mithro/gf180mcu-sram-forge
 - [Event Camera Clips](https://drive.google.com/drive/folders/1kUSThZpBVr_RSmRtKbDS8sVFCjakwOAj?usp=sharing)
