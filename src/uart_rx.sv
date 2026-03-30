@@ -27,7 +27,7 @@ module uart_rx #(
     logic rx_sync, rx_d;
 
     // Double-flop synchronizer for metastability
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (rst) begin
             rx_sync <= 1'b1;
             rx_d <= 1'b1;
@@ -37,7 +37,7 @@ module uart_rx #(
         end
     end
 
-    always @(posedge clk) begin
+    always_ff @(posedge clk) begin
         if (rst) begin
             state <= IDLE;
             clk_cnt <= 8'd0;
