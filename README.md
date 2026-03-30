@@ -29,7 +29,7 @@ Simply run `nix-shell` in the root of this repository.
 
 With this shell enabled, run the implementation:
 
-```
+```bash
 make librelane
 ```
 
@@ -37,13 +37,13 @@ make librelane
 
 After completion, you can view the design using the OpenROAD GUI:
 
-```
+```bash
 make librelane-openroad
 ```
 
 Or using KLayout:
 
-```
+```bash
 make librelane-klayout
 ```
 
@@ -51,7 +51,7 @@ make librelane-klayout
 
 To copy your latest run to the `final/` folder in the root directory of the repository, run the following command:
 
-```
+```bash
 make copy-final
 ```
 
@@ -64,7 +64,7 @@ The underlying simulator is Icarus Verilog (https://github.com/steveicarus/iveri
 
 The testbenchs are located in `cocotb`. To run the RTL simulation, run the following command:
 
-```
+```bash
 make sim DUT=module_name CONFIG=config_name
 ```
 
@@ -72,13 +72,13 @@ If DUT isn't provided it fails, if CONFIG isn't provided it will default to the 
 
 To simulate all, run
 
-```
+```bash
 make sim-all
 ```
 
 To run the GL (gate-level) simulation, run the following command:
 
-```
+```bash
 make sim-gl
 ```
 
@@ -88,7 +88,7 @@ make sim-gl
 In both cases, a waveform file will be generated under `cocotb/sim_build/chip_top.fst`.
 You can view it using a waveform viewer, for example, [GTKWave](https://gtkwave.github.io/gtkwave/) and there is [Surfer](https://gitlab.com/surfer-project/surfer) installed within the devcontainer.
 
-```
+```bash
 make sim-view
 ```
 
@@ -102,13 +102,13 @@ By default, the design is implemented using the `1x1` slot definition.
 To select a different slot size, simply set the `SLOT` environment variable.
 This can be done when invoking a make target:
 
-```
+```bash
 SLOT=0p5x0p5 make librelane
 ```
 
 Alternatively, you can export the slot size:
 
-```
+```bash
 export SLOT=0p5x0p5
 ```
 
@@ -151,26 +151,18 @@ To check whether our design is suitable for manufacturing, run the [gf180mcu-pre
 - https://docs.prophesee.ai/stable/data/encoding_formats/evt3.html
 - https://docs.google.com/spreadsheets/d/1fW5ecBsLSec4hXBMaOjMUHQGslm4y-QUILgrxqS8MpA/edit?gid=0#gid=0
 
-### WHAT NEEDS FIXING (I fixed most of these)
-- use similar syntax to ram_1r1w_sync for the usage of strings so it sees the text as a packed array and can be passed as an arg
-- add WEIGHT, WEIGHT_MEM_C0, WEIGHT_MEM_C1, WEIGHT_MEM_C2, WEIGHT_MEM_C3 as parameters
-- clean up WEIGHT_FILE_CLASS_STRIDE and FEATURE_COUNT
+### WHAT NEEDS FIXING
 - clean up and seperate always_comb and always_ff
-- add more parameterization in testing for ram_1r1w_sync????
-- take a look at the old main stuff that was working before a refactor
-- Modules that need fixes for parameterization and issue with voxel_default config
+    - uart_debug
     - uart_rx
     - uart_tx
-    - uart_debug
     - voxel_bin_core
     - voxel_bin_top
-- Modules that need fixes for parameterization and issue with voxel_8x8_4bins config
-    - evt2_decoder
-    - MatMul
-    - uart_rx
-    - uart_tx
-    - uart_debug
-    - voxel_gesture_classifier
-    - voxel_systolic_array
     - voxel_binning
-    - voxel_bin_top
+    - voxel_gesture_classifier
+    - voxel_mac_enginer
+- Failing
+    - make sim DUT=evt2_decoder CONFIG=voxel_8x8_4bins
+    - make sim DUT=voxel_bin_core CONFIG=voxel_8x8_4bins
+- should [sram](https://github.com/google/globalfoundries-pdk-ip-gf180mcu_fd_ip_sram) be in a third party folder?
+

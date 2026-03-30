@@ -1,6 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024-2025 Group G Contributors
 `timescale 1ns/1ps
-
-// Synchronous ring-buffer FIFO for EVT2.0 32-bit words.
 
 module input_fifo #(
     parameter int FIFO_DEPTH = 256,
@@ -24,10 +24,10 @@ module input_fifo #(
     logic [FIFO_DEPTH_LOG2:0]   tail_count;
 
     logic [DATA_WIDTH-1:0] out_data_r;
-    logic               out_valid_r;
+    logic                  out_valid_r;
 
     logic [DATA_WIDTH-1:0] ram_rd_data;
-    logic               rd_pending;
+    logic                  rd_pending;
 
     logic [FIFO_DEPTH_LOG2:0] total_count;
     logic push, pop;
@@ -53,10 +53,9 @@ module input_fifo #(
     assign write_to_ram = push & ~bypass_to_out;
     assign issue_ram_read = pop & (tail_count != 0);
 
-    ram_1r1w_sync #(
+    gf180_sram_1r1w #(
         .width_p(DATA_WIDTH),
-        .depth_p(depth_p),
-        .filename_p("")
+        .depth_p(depth_p)
     ) u_fifo_mem (
         .clk_i      (clk_i),
         .reset_i    (reset_i),
@@ -81,8 +80,8 @@ module input_fifo #(
             logic [FIFO_DEPTH_LOG2-1:0] rd_ptr_n;
             logic [FIFO_DEPTH_LOG2:0]   tail_count_n;
             logic [DATA_WIDTH-1:0]      out_data_n;
-            logic                    out_valid_n;
-            logic                    rd_pending_n;
+            logic                       out_valid_n;
+            logic                       rd_pending_n;
 
             wr_ptr_n     = wr_ptr;
             rd_ptr_n     = rd_ptr;

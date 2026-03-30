@@ -1,5 +1,5 @@
-"""Robust cocotb testbench for input_fifo with cycle-accurate golden model."""
-
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2025 Group G Contributors
 import random
 
 import cocotb
@@ -27,8 +27,8 @@ class InputFifoModel:
         self.reset()
 
     def reset(self):
-        self.wr_ptr = 0  # tail write pointer (RAM)
-        self.rd_ptr = 0  # tail read pointer (RAM)
+        self.wr_ptr = 0
+        self.rd_ptr = 0
         self.tail_count = 0
         self.out_data = 0
         self.out_valid = 0
@@ -47,7 +47,6 @@ class InputFifoModel:
         return ready_o, valid_o, data_o & ((1 << DATA_WIDTH) - 1)
 
     def step(self, reset_i, valid_i, data_i, ready_i):
-        # Combinational values from pre-edge state.
         ready_o_pre, valid_o_pre, _ = self.outputs()
         wr_en = int(valid_i and ready_o_pre)
         rd_en = int(valid_o_pre and ready_i)
@@ -165,7 +164,6 @@ async def test_basic_ordering(dut):
         model.step(0, 0, 0, 0)
 
     payload = [0x11, 0x22, 0x33, 0x44]
-
     for i, p in enumerate(payload):
         await drive_and_check(dut, model, 0, 1, p, 0, f"wr-{i}")
 
@@ -191,17 +189,14 @@ async def test_full_and_overflow_drop(dut):
     for _ in range(2):
         model.step(0, 0, 0, 0)
 
-    # Fill FIFO to capacity.
     for i in range(FIFO_DEPTH):
         await drive_and_check(dut, model, 0, 1, i, 0, f"fill-{i}")
 
     assert int(dut.ready_o.value) == 0, "ready_o should deassert when full"
 
-    # Attempt overflow writes while full; queue content should remain unchanged.
     for i in range(8):
         await drive_and_check(dut, model, 0, 1, 0xBAD00000 + i, 0, f"ovf-{i}")
 
-    # Drain and check first values are original fill data.
     drained = []
     for _ in range(FIFO_DEPTH * 4):
         if int(dut.valid_o.value):
@@ -309,13 +304,11 @@ async def test_fill_drain_cycle(dut):
                 break
         return drained
 
-    # First fill-drain cycle.
     await fill(0xA000)
     first_drain = await drain()
     assert first_drain == fill_once(0xA000), "First drain content mismatch"
     assert int(dut.valid_o.value) == 0, "FIFO not empty after full drain"
 
-    # Second fill-drain cycle.
     await fill(0xB000)
     second_drain = await drain()
     assert second_drain == fill_once(0xB000), "Second drain content mismatch"

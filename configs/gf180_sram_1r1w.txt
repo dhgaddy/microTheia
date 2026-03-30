@@ -1,0 +1,6 @@
+# gf180_sram_1r1w simulation config.
+# Single 8-bit byte-lane, 256-deep (one sram256x8 macro bank).
+# Tests basic 1R1W synchronous operation; tiling logic verified by RTL params.
+
+width_p = 8
+depth_p = 256

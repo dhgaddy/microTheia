@@ -1,11 +1,11 @@
-"""Robust cocotb testbench for voxel_bin_top UART protocol and packetization."""
-
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2025 Group G Contributors
 import random
 
 import cocotb
 from util.test_logging import logged_test
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge
+from cocotb.triggers import ClockCycles, NextTimeStep, ReadOnly, RisingEdge
 import os
 from util.config_parser import load_config
 
@@ -29,17 +29,10 @@ SENSOR_HEIGHT        = CFG["SENSOR_HEIGHT"]
 WEIGHT_BITS          = CFG["WEIGHT_BITS"]
 WEIGHT_SCALE         = CFG["WEIGHT_SCALE"]
 N                    = CFG["N"]
-PASS_MARGIN          = CFG["PASS_MARGIN"]
-PERSISTENCE_COUNT    = CFG["PERSISTENCE_COUNT"]
-CONF_BITS            = CFG["CONF_BITS"]
-CONF_SHIFT           = CFG["CONF_SHIFT"]
 UART_WORD_FIFO_DEPTH = CFG["UART_WORD_FIFO_DEPTH"]
 TX_FIFO_DEPTH        = CFG["TX_FIFO_DEPTH"]
 POR_CYCLES           = CFG["POR_CYCLES"]
 SOFT_RESET_CYCLES    = CFG["SOFT_RESET_CYCLES"]
-
-CLK_FREQ_HZ = 12_000_000
-BAUD_RATE = 1_000_000
 
 SENSOR_DIM = max(SENSOR_WIDTH, SENSOR_HEIGHT)
 
@@ -53,7 +46,28 @@ BIN_DURATION_MS = WINDOW_MS // READOUT_BINS
 CYCLES_PER_BIN_SAFE = (CLK_FREQ_HZ // 1000) * BIN_DURATION_MS
 BIN_DIV = SENSOR_DIM // GRID_SIZE
 
+NUM_CLASSES   = CFG.get("NUM_CLASSES", 4)
+FEATURE_COUNT = READOUT_BINS * GRID_SIZE * GRID_SIZE
+
 ST_ACCUM = 0
+
+
+async def load_weights_direct(dut, weight_val=1):
+    """Deposit uniform weights into class-0 weight SRAM (1 write/clock).
+
+    Bypasses the UART load protocol by depositing directly on the weight
+    write port between clock edges.  Thresholds stay at 0 (SRAM default);
+    the classifier fires when score > 0.
+    """
+    for addr in range(FEATURE_COUNT):
+        await RisingEdge(dut.clk)
+        await NextTimeStep()
+        dut.weight_wr_valid.value = 1
+        dut.weight_wr_class.value = 0
+        dut.weight_wr_addr.value  = addr
+        dut.weight_wr_data.value  = weight_val
+    # Let the last write take effect; RTL NBA clears weight_wr_valid.
+    await RisingEdge(dut.clk)
 
 
 def build_evt2_time_high(payload):
@@ -146,7 +160,6 @@ async def drain_tx_bytes(dut, idle_cycles=CLKS_PER_BIT * 12):
 
 
 async def await_tx_idle(dut, stable_cycles=CLKS_PER_BIT * 3, timeout_cycles=500000):
-    # Wait until TX producer/consumer path has no pending activity for a stable window.
     quiet = 0
     for _ in range(timeout_cycles):
         await RisingEdge(dut.clk)
@@ -193,7 +206,8 @@ async def issue_soft_reset(dut, timeout_cycles=CLKS_PER_BIT * 400):
 
 async def send_evt2_word_uart(dut, word):
     b0 = (word >> 24) & 0xFF
-    assert b0 not in (0xFC, 0xFD, 0xFE, 0xFF), f"Word starts with command byte 0x{b0:02X}"
+    assert b0 not in (0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF), \
+        f"Word starts with command byte 0x{b0:02X}"
     for shift in (24, 16, 8, 0):
         await uart_drive_byte(dut, (word >> shift) & 0xFF)
 
@@ -243,20 +257,17 @@ def region_points(name):
 async def test_uart_commands_and_word_assembly(dut):
     await setup(dut)
 
-    # Echo command.
-    # await_rx_byte must start concurrently with uart_drive_byte: rx_byte_valid is a
-    # 1-cycle pulse that fires during the STOP-bit sampling phase (~72 clks before
-    # uart_drive_byte returns), so a sequential call after drive always misses it.
+    # rx_byte_valid is a 1-cycle pulse that fires before uart_drive_byte returns,
+    # so await_rx_byte must start concurrently.
     await await_tx_idle(dut)
     echo_task  = cocotb.start_soon(await_tx_bytes(dut, 1))
     rx_task    = cocotb.start_soon(await_rx_byte(dut, timeout_cycles=CLKS_PER_BIT * 200))
     await uart_drive_byte(dut, 0xFF)
     rx = await rx_task
-    assert rx == 0xFF, f"Echo command decode mismatch: 0x{(rx if rx is not None else -1):02X}"
+    assert rx == 0xFF, f"Echo decode mismatch: 0x{(rx if rx is not None else -1):02X}"
     b = (await echo_task)[0]
     assert b == 0x55, f"Echo response mismatch: {b}"
 
-    # Config command.
     await await_tx_idle(dut)
     cfg_task = cocotb.start_soon(await_tx_bytes(dut, 2))
     rx_task  = cocotb.start_soon(await_rx_byte(dut, timeout_cycles=CLKS_PER_BIT * 200))
@@ -264,9 +275,11 @@ async def test_uart_commands_and_word_assembly(dut):
     rx = await rx_task
     assert rx == 0xFD, f"Config command decode mismatch: 0x{(rx if rx is not None else -1):02X}"
     c0, c1 = await cfg_task
-    assert c0 == 0x08 and c1 == 0x08, f"Config response mismatch: {[c0, c1]}"
+    exp_c0 = NUM_BINS & 0xFF
+    exp_c1 = READOUT_BINS & 0xFF
+    assert c0 == exp_c0 and c1 == exp_c1, \
+        f"Config response mismatch: got [{c0:#04x}, {c1:#04x}], expected [{exp_c0:#04x}, {exp_c1:#04x}]"
 
-    # Status command.
     await await_tx_idle(dut)
     status_task = cocotb.start_soon(await_tx_bytes(dut, 1))
     rx_task     = cocotb.start_soon(await_rx_byte(dut, timeout_cycles=CLKS_PER_BIT * 200))
@@ -277,10 +290,8 @@ async def test_uart_commands_and_word_assembly(dut):
     assert (s & 0xF0) == 0xB0, f"Status high nibble mismatch: 0x{s:02X}"
     assert (s & 0x01) == 0, f"Status bit0 should be 0: 0x{s:02X}"
 
-    # Soft reset command should assert internal rst pulse and fully recover.
     await issue_soft_reset(dut)
 
-    # Word assembly path: send one EVT2 word and verify it reaches core word stream.
     word = build_evt2_time_high(0x123456)
     collector = cocotb.start_soon(collect_core_words(dut, cycles=80000))
     await send_evt2_word_uart(dut, word)
@@ -292,6 +303,7 @@ async def test_uart_commands_and_word_assembly(dut):
 async def test_gesture_uart_packet_stream_matches_core(dut):
     await setup(dut)
     await issue_soft_reset(dut)
+    await load_weights_direct(dut)
 
     produced_bytes = []
     dequeued_bytes = []
@@ -401,6 +413,7 @@ async def test_gesture_packet_byte_content(dut):
     Packet format (RTL): byte0 = 0xA0|class, byte1 = {conf[3:0], evtcnt[7:4]}.
     """
     await setup(dut)
+    await load_weights_direct(dut)
 
     # Capture (gesture, confidence, event_count) when core fires gesture_valid,
     # and concurrently capture TX bytes as they enter the TX FIFO.

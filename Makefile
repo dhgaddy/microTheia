@@ -105,7 +105,7 @@ sim: ## Run RTL simulation with cocotb
 		fi; \
 		rm -rf cocotb/sim_build/$$d; \
 		\
-		SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv src/ram_1r1w_sync.sv"; \
+		SRCS="src/gf180mcu_fd_ip_sram__sram64x8m8wm1.v src/gf180mcu_fd_ip_sram__sram128x8m8wm1.v src/gf180mcu_fd_ip_sram__sram256x8m8wm1.v src/gf180mcu_fd_ip_sram__sram512x8m8wm1.v src/gf180_sram_1r1w.sv src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/ram_1r1w_sync.sv"; \
 		\
 		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
 		export SIM_CONFIG=$(CONFIG_FILE); \
@@ -122,37 +122,6 @@ sim: ## Run RTL simulation with cocotb
 	done
 .PHONY: sim
 
-# sim: ## Run RTL simulation with cocotb
-# 	@if [ -z "$(DUT)" ]; then \
-# 		echo "Error: You must specify DUT=<module_name>"; \
-# 		echo "Example: make sim DUT=voxel_bin_top"; \
-# 		exit 1; \
-# 	fi; \
-# 	for d in $(SIM_DUTS); do \
-# 		echo "===================================================="; \
-# 		echo " Running DUT=$$d with CONFIG=$(CONFIG)"; \
-# 		echo "===================================================="; \
-# 		if [ ! -f "cocotb/$${d}_tb.py" ]; then \
-# 			echo "Skipping $$d (no testbench found)"; \
-# 			continue; \
-# 		fi; \
-# 		rm -rf sim_build; \
-# 		\
-# 		SRCS="src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/MatMul.sv src/ram_1r1w_sync.sv"; \
-# 		\
-# 		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
-# 		export SIM_CONFIG=$(CONFIG_FILE); \
-# 		\
-# 		TOPLEVEL=$$d \
-# 		TOPLEVEL_LANG=verilog \
-# 		COCOTB_TEST_MODULES=$${d}_tb \
-# 		VERILOG_SOURCES="$$SRCS" \
-# 		COMPILE_ARGS=$$PARAMS \
-# 		PYTHONPATH=cocotb \
-# 		make -f $$(cocotb-config --makefiles)/Makefile.sim; \
-# 	done
-# .PHONY: sim
-
 sim-fast: ## Run voxel_bin_core sim with small fast-sim config (8x8 grid, N=8, 4 bins)
 	$(MAKE) sim DUT=voxel_bin_core CONFIG=voxel_sim_fast
 .PHONY: sim-fast
@@ -160,18 +129,15 @@ sim-fast: ## Run voxel_bin_core sim with small fast-sim config (8x8 grid, N=8, 4
 sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=input_fifo
 	$(MAKE) sim DUT=evt2_decoder
-	$(MAKE) sim DUT=MatMul
 	$(MAKE) sim DUT=uart_rx
 	$(MAKE) sim DUT=uart_tx
 	$(MAKE) sim DUT=uart_debug
-	$(MAKE) sim DUT=ram_1r1w_sync
 	$(MAKE) sim DUT=voxel_gesture_classifier
-	$(MAKE) sim DUT=voxel_systolic_array
+	$(MAKE) sim DUT=voxel_mac_engine
 	$(MAKE) sim DUT=voxel_binning
 	$(MAKE) sim DUT=voxel_bin_core
 	$(MAKE) sim DUT=voxel_bin_top
 .PHONY: sim-all
-# matmul
 
 sim-gl: ## Run gate-level simulation with cocotb (after copy-final)
 	cd cocotb; GL=1 PDK_ROOT=${PDK_ROOT} PDK=${PDK} SLOT=${SLOT} python3 chip_top_tb.py
