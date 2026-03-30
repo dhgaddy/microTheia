@@ -1,5 +1,5 @@
-"""Robust cocotb testbench for uart_debug using a message-level golden model."""
-
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024-2025 Group G Contributors
 import random
 
 import cocotb

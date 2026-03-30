@@ -1,20 +1,20 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024-2025 Group G Contributors
 `timescale 1ns/1ps
-
-// UART Transmitter - 8N1, synchronous active-high reset
 
 module uart_tx #(
     parameter int CLK_FREQ_HZ = 12_000_000,
     parameter int BAUD_RATE   = 115200
 )(
-    input  logic clk,
-    input  logic rst,
+    input  logic       clk,
+    input  logic       rst,
     input  logic [7:0] data,
-    input  logic valid,
-    output logic tx,
-    output logic busy
+    input  logic       valid,
+    output logic       tx,
+    output logic       busy
 );
 
-    localparam CLKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE;  // 12MHz / 115200
+    localparam CLKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE;
 
     localparam IDLE  = 2'd0;
     localparam START = 2'd1;
