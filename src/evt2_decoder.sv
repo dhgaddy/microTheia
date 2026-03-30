@@ -75,6 +75,10 @@ module evt2_decoder #(
         x_grid_raw = x_prod_c >> DIV_K;
         y_grid_raw = y_prod_c >> DIV_K;
 
+        // Only way to work for 8x8_4bins
+        // x_grid_raw = x_clamped / X_BIN_DIV;
+        // y_grid_raw = y_clamped / Y_BIN_DIV;
+
         x_grid = (x_grid_raw >= GRID_SIZE) ? GRID_SIZE-1 : x_grid_raw;
         y_grid = (y_grid_raw >= GRID_SIZE) ? GRID_SIZE-1 : y_grid_raw;
     end
