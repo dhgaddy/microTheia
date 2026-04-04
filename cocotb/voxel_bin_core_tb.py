@@ -22,14 +22,17 @@ NUM_BINS     = CFG["NUM_BINS"]
 READOUT_BINS = CFG["READOUT_BINS"]
 WEIGHT_BITS  = CFG["WEIGHT_BITS"]
 WEIGHT_SCALE = CFG["WEIGHT_SCALE"]
-SENSOR_DIM   = CFG["SENSOR_WIDTH"]
+SWAP_INPUT_BYTES = CFG.get("SWAP_INPUT_BYTES", 0)
+SENSOR_WIDTH = CFG["SENSOR_WIDTH"]
+SENSOR_HEIGHT = CFG.get("SENSOR_HEIGHT", SENSOR_WIDTH)
 COUNTER_BITS = CFG.get("COUNTER_BITS", 4)
 NUM_CLASSES  = CFG.get("NUM_CLASSES", 4)
 
 
 BIN_DURATION_MS = WINDOW_MS // READOUT_BINS
 CYCLES_PER_BIN_SAFE = (CLK_FREQ_HZ // 1000) * BIN_DURATION_MS
-BIN_DIV = SENSOR_DIM // GRID_SIZE
+X_BIN_DIV = SENSOR_WIDTH // GRID_SIZE
+Y_BIN_DIV = SENSOR_HEIGHT // GRID_SIZE
 FEATURE_COUNT = GRID_SIZE * GRID_SIZE * READOUT_BINS
 
 EVT_CD_OFF = 0x0
@@ -48,9 +51,32 @@ def build_evt2_cd(pkt_type, x_sensor, y_sensor, ts_lsb):
         ((x_sensor & 0x7FF) << 11) | (y_sensor & 0x7FF)
 
 
-def sensor_from_grid(g):
+def sensor_x_from_grid(g):
     g = max(0, min(GRID_SIZE - 1, int(g)))
-    return min(SENSOR_DIM - 1, (g * BIN_DIV) + (BIN_DIV // 2))
+    return min(SENSOR_WIDTH - 1, (g * X_BIN_DIV) + (X_BIN_DIV // 2))
+
+
+def sensor_y_from_grid(g):
+    g = max(0, min(GRID_SIZE - 1, int(g)))
+    return min(SENSOR_HEIGHT - 1, (g * Y_BIN_DIV) + (Y_BIN_DIV // 2))
+
+
+def _decode_evt2_word_fields(word):
+    if SWAP_INPUT_BYTES:
+        word = (
+            ((word & 0x000000FF) << 24) |
+            ((word & 0x0000FF00) << 8) |
+            ((word & 0x00FF0000) >> 8) |
+            ((word & 0xFF000000) >> 24)
+        )
+
+    return {
+        "word": word,
+        "pkt": (word >> 28) & 0xF,
+        "ts_lsb": (word >> 22) & 0x3F,
+        "x_raw": (word >> 11) & 0x7FF,
+        "y_raw": word & 0x7FF,
+    }
 
 
 class Evt2DecoderModel:
@@ -58,9 +84,10 @@ class Evt2DecoderModel:
         self.have_time_high = False
 
     def on_word(self, word):
-        pkt = (word >> 28) & 0xF
-        x_raw = (word >> 11) & 0x7FF
-        y_raw = word & 0x7FF
+        fields = _decode_evt2_word_fields(word)
+        pkt = fields["pkt"]
+        x_raw = fields["x_raw"]
+        y_raw = fields["y_raw"]
 
         if pkt == EVT_TIME_HIGH:
             self.have_time_high = True
@@ -72,10 +99,10 @@ class Evt2DecoderModel:
         if not self.have_time_high:
             return None
 
-        x_clamped = min(x_raw, SENSOR_DIM - 1)
-        y_clamped = min(y_raw, SENSOR_DIM - 1)
-        x_grid = min(x_clamped // BIN_DIV, GRID_SIZE - 1)
-        y_grid = min(y_clamped // BIN_DIV, GRID_SIZE - 1)
+        x_clamped = min(x_raw, SENSOR_WIDTH - 1)
+        y_clamped = min(y_raw, SENSOR_HEIGHT - 1)
+        x_grid = min(x_clamped // X_BIN_DIV, GRID_SIZE - 1)
+        y_grid = min(y_clamped // Y_BIN_DIV, GRID_SIZE - 1)
         return (x_grid, y_grid)
 
 
@@ -411,8 +438,8 @@ async def drive_bin_traffic(h, rng, region, events=28):
             await h.send_word(build_evt2_time_high(rng.randint(0, 0x0FFFFFFF)))
 
         gx, gy = rng.choice(pts)
-        x_s = sensor_from_grid(gx)
-        y_s = sensor_from_grid(gy)
+        x_s = sensor_x_from_grid(gx)
+        y_s = sensor_y_from_grid(gy)
         pkt = EVT_CD_ON if (i & 1) else EVT_CD_OFF
         await h.send_word(build_evt2_cd(pkt, x_s, y_s, i & 0x3F))
 
@@ -493,7 +520,7 @@ async def test_reset_mid_pipeline_recovers_cleanly(dut):
     for _ in range(15):
         gx, gy = rng.choice(pts)
         await h.send_word(
-            build_evt2_cd(EVT_CD_ON, sensor_from_grid(gx), sensor_from_grid(gy), 1)
+            build_evt2_cd(EVT_CD_ON, sensor_x_from_grid(gx), sensor_y_from_grid(gy), 1)
         )
     await h.force_bin_rollover()
 
@@ -535,7 +562,7 @@ async def test_debug_event_count_tracks_accepted_words(dut):
             pts = region_points("right")
             gx, gy = pts[i % len(pts)]
             await h.send_word(
-                build_evt2_cd(EVT_CD_ON, sensor_from_grid(gx), sensor_from_grid(gy), i & 0x3F)
+                build_evt2_cd(EVT_CD_ON, sensor_x_from_grid(gx), sensor_y_from_grid(gy), i & 0x3F)
             )
 
     await h.wait_quiet(quiet_cycles=20)
@@ -558,7 +585,7 @@ async def test_fifo_backpressure_no_lost_events(dut):
     for i in range(60):
         gx, gy = rng.choice(pts)
         await h.send_word(
-            build_evt2_cd(EVT_CD_ON, sensor_from_grid(gx), sensor_from_grid(gy), i & 0x3F)
+            build_evt2_cd(EVT_CD_ON, sensor_x_from_grid(gx), sensor_y_from_grid(gy), i & 0x3F)
         )
         # Occasionally insert a TIME_HIGH mid-burst.
         if i % 15 == 0:
@@ -617,7 +644,7 @@ async def test_decoder_events_match_model_exactly(dut):
             pkt = EVT_CD_ON if rng.randint(0, 1) else EVT_CD_OFF
             ts_lsb = rng.randint(0, 63)
             await h.send_word(
-                build_evt2_cd(pkt, sensor_from_grid(gx), sensor_from_grid(gy), ts_lsb)
+                build_evt2_cd(pkt, sensor_x_from_grid(gx), sensor_y_from_grid(gy), ts_lsb)
             )
 
     # Force one rollover so the pipeline drains any pending decoded events.
@@ -731,7 +758,12 @@ async def test_wrong_gesture_trajectory_no_false_positive(dut):
             gx = rng.randint(0, GRID_SIZE - 1)
             gy = rng.randint(0, GRID_SIZE - 1)
             pkt = EVT_CD_ON if rng.randint(0, 1) else EVT_CD_OFF
-            await h.send_word(build_evt2_cd(pkt, sensor_from_grid(gx), sensor_from_grid(gy), rng.randint(0, 63)))
+            await h.send_word(build_evt2_cd(
+                pkt,
+                sensor_x_from_grid(gx),
+                sensor_y_from_grid(gy),
+                rng.randint(0, 63),
+            ))
         await h.force_bin_rollover()
 
     await h.wait_quiet()
@@ -754,10 +786,10 @@ async def test_wrong_gesture_trajectory_no_false_positive(dut):
 # list of 4 absolute or repo-relative paths, e.g.:
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_BIN_FILES = [
-    _REPO_ROOT / "EVT2_gesture_set" / "full_temporal_resolution" / "gdb_sun" / "wave_down" / "wave_down_bc_sun2_trim.bin",
-    _REPO_ROOT / "EVT2_gesture_set" / "full_temporal_resolution" / "gdb_sun" / "wave_left" / "wave_left_ba_sun2_trim.bin",
-    _REPO_ROOT / "EVT2_gesture_set" / "full_temporal_resolution" / "gdb_sun" / "wave_right" / "wave_right_ba_sun2_trim.bin",
-    _REPO_ROOT / "EVT2_gesture_set" / "full_temporal_resolution" / "gdb_sun" / "wave_up" / "wave_up_bc_sun2_trim.bin"
+    _REPO_ROOT / "EVT2_gesture_set" / "wave_down_sun_test1.bin",
+    _REPO_ROOT / "EVT2_gesture_set" / "wave_left_sun_test1.bin",
+    _REPO_ROOT / "EVT2_gesture_set" / "wave_right_sun_test1.bin",
+    _REPO_ROOT / "EVT2_gesture_set" / "wave_up_sun_test1.bin",
 ]
 
 def _resolve_bin_files():
@@ -814,12 +846,13 @@ async def _stream_bin_file_with_timing(h, bin_path):
     next_bin_boundary_us = None  # set on first timestamp seen
 
     for word in words:
-        pkt = (word >> 28) & 0xF
+        fields = _decode_evt2_word_fields(word)
+        pkt = fields["pkt"]
 
         if pkt == EVT_TIME_HIGH:
-            time_high = word & 0x0FFFFFFF
+            time_high = fields["word"] & 0x0FFFFFFF
         elif pkt in (EVT_CD_OFF, EVT_CD_ON):
-            ts_lsb = (word >> 22) & 0x3F
+            ts_lsb = fields["ts_lsb"]
             ts_us = (time_high << 6) | ts_lsb
 
             if next_bin_boundary_us is None:
