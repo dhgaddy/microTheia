@@ -3,9 +3,10 @@ MAKEFILE_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 RUN_TAG = $(shell ls librelane/runs/ | tail -n 1)
 TOP = voxel_bin_top
 
-PDK_ROOT ?= $(MAKEFILE_DIR)/gf180mcu
+PDK_ROOT ?= $(MAKEFILE_DIR)/dependencies/pdks
 PDK ?= gf180mcuD
 PDK_TAG ?= 1.6.6
+AVALON_REPO ?= https://github.com/AvalonSemiconductors/gf180mcu_as_sc_mcu7t3v3.git
 
 AVAILABLE_SLOTS = 1x1 0p5x1 1x0p5 0p5x0p5
 DEFAULT_SLOT = 1x1
@@ -44,10 +45,45 @@ ICE40_MAKEFILE := ice40/ice40.mk
 all: librelane ## Build the project (runs LibreLane)
 .PHONY: all
 
-clone-pdk: ## Clone the GF180MCU PDK repository
-	rm -rf $(MAKEFILE_DIR)/gf180mcu
-	git clone https://github.com/wafer-space/gf180mcu.git $(MAKEFILE_DIR)/gf180mcu --depth 1 --branch ${PDK_TAG}
+clone-pdk: ## Clone the GF180MCU base PDK into dependencies/pdks/gf180mcuD/
+	mkdir -p $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD
+	git clone https://github.com/wafer-space/gf180mcu.git $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD --depth 1 --branch ${PDK_TAG} --no-local 2>/dev/null || \
+		(cd $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD && git fetch --depth 1 origin tag ${PDK_TAG} && git checkout ${PDK_TAG})
 .PHONY: clone-pdk
+
+OCD_SRAM_REPO ?= https://github.com/RTimothyEdwards/gf180mcu_ocd_ip_sram.git
+
+clone-ocd-sram: ## Clone 3.3V OCD SRAM macros and install into dependencies/pdks/gf180mcuD/libs.ref/gf180mcu_ocd_ip_sram/
+	@if [ ! -d $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.ref ]; then \
+		echo "ERROR: Run 'make clone-pdk' first."; exit 1; \
+	fi
+	$(eval OCD_TMP := $(shell mktemp -d))
+	git clone $(OCD_SRAM_REPO) $(OCD_TMP) --depth 1
+	$(eval OCD_DST := $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.ref/gf180mcu_ocd_ip_sram)
+	mkdir -p $(OCD_DST)/gds $(OCD_DST)/lef $(OCD_DST)/lib $(OCD_DST)/verilog $(OCD_DST)/spice
+	for cell in sram256x8m8wm1 sram512x8m8wm1 sram1024x8m8wm1; do \
+		src=$(OCD_TMP)/cells/gf180mcu_ocd_ip_sram__$$cell; \
+		cp $$src/gf180mcu_ocd_ip_sram__$$cell.gds      $(OCD_DST)/gds/; \
+		cp $$src/gf180mcu_ocd_ip_sram__$$cell.lef      $(OCD_DST)/lef/; \
+		cp $$src/gf180mcu_ocd_ip_sram__$$cell.blackbox.v $(OCD_DST)/verilog/; \
+		cp $$src/gf180mcu_ocd_ip_sram__$$cell.spice    $(OCD_DST)/spice/; \
+		cp $$src/gf180mcu_ocd_ip_sram__$$cell__*.lib   $(OCD_DST)/lib/; \
+	done
+	rm -rf $(OCD_TMP)
+	@echo "OCD 3.3V SRAMs installed at $(OCD_DST)"
+.PHONY: clone-ocd-sram
+
+clone-avalon-pdk: ## Merge Avalon 3.3V std cell library into dependencies/pdks/gf180mcuD/
+	@if [ ! -d $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.ref ]; then \
+		echo "ERROR: Run 'make clone-pdk' first to fetch the base GF180MCU PDK."; exit 1; \
+	fi
+	$(eval AVALON_TMP := $(shell mktemp -d))
+	git clone $(AVALON_REPO) $(AVALON_TMP) --depth 1
+	cp -r $(AVALON_TMP)/pdk/libs.ref/. $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.ref/
+	cp -r $(AVALON_TMP)/pdk/libs.tech/. $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.tech/
+	rm -rf $(AVALON_TMP)
+	@echo "Avalon 3.3V library merged into dependencies/pdks/gf180mcuD/"
+.PHONY: clone-avalon-pdk
 
 librelane: ## Run LibreLane flow (synthesis, PnR, verification)
 	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --manual-pdk
@@ -105,7 +141,7 @@ sim: ## Run RTL simulation with cocotb
 		fi; \
 		rm -rf cocotb/sim_build/$$d; \
 		\
-		SRCS="src/gf180mcu_fd_ip_sram__sram64x8m8wm1.v src/gf180mcu_fd_ip_sram__sram128x8m8wm1.v src/gf180mcu_fd_ip_sram__sram256x8m8wm1.v src/gf180mcu_fd_ip_sram__sram512x8m8wm1.v src/gf180_sram_1r1w.sv src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/ram_1r1w_sync.sv"; \
+		SRCS="src/gf180_sram_1r1w.sv src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/ram_1r1w_sync.sv"; \
 		\
 		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
 		export SIM_CONFIG=$(CONFIG_FILE); \
@@ -127,6 +163,7 @@ sim-fast: ## Run voxel_bin_core sim with small fast-sim config (8x8 grid, N=8, 4
 .PHONY: sim-fast
 
 sim-all: ## Test all the modules against Makefile compile args
+	$(MAKE) sim DUT=gf180_sram_1r1w CONFIG=gf180_sram_1r1w
 	$(MAKE) sim DUT=input_fifo
 	$(MAKE) sim DUT=evt2_decoder
 	$(MAKE) sim DUT=uart_rx
