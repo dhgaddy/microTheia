@@ -6,9 +6,9 @@
 //
 // Tiling:
 //   Width : BYTES = ceil(width_p/8) byte-lane macros per bank.
-//   Depth : Smallest available macro that fits depth_p in one bank; for depth_p
-//           beyond that, up to 4 banks of sram512x8 are cascaded (supports up to
-//           depth_p = 2048 — all instances in this project).
+//   Depth : Smallest OCD 3.3V macro that fits depth_p in one bank (256, 512, or
+//           1024); for depth_p beyond that, up to 4 banks are cascaded (supports
+//           depth_p up to 4096 — largest use in this project is 2048, 2 banks).
 //
 // Read latency  : 1 cycle (synchronous — Q registered on CLK rising edge).
 // Write latency : 0 cycles (write takes effect on CLK rising edge).
@@ -52,12 +52,11 @@ module gf180_sram_1r1w #(
     // ------------------------------------------------------------------
     localparam int BYTES      = (width_p + 7) / 8;
 
-    localparam int MACRO_DEPTH = (depth_p <= 64)  ? 64  :
-                                  (depth_p <= 128) ? 128 :
-                                  (depth_p <= 256) ? 256 : 512;
-    localparam int MACRO_ABITS = (MACRO_DEPTH == 64)  ? 6 :
-                                  (MACRO_DEPTH == 128) ? 7 :
-                                  (MACRO_DEPTH == 256) ? 8 : 9;
+    // OCD 3.3V SRAM set: 256×8, 512×8, 1024×8 (no 64 or 128 variants).
+    localparam int MACRO_DEPTH = (depth_p <= 256) ? 256  :
+                                  (depth_p <= 512) ? 512  : 1024;
+    localparam int MACRO_ABITS = (MACRO_DEPTH == 256) ? 8 :
+                                  (MACRO_DEPTH == 512) ? 9 : 10;
     localparam int NUM_BANKS  = (depth_p + MACRO_DEPTH - 1) / MACRO_DEPTH;
     localparam int ADDR_BITS  = $clog2(depth_p > 1 ? depth_p : 2);
 
@@ -163,49 +162,37 @@ module gf180_sram_1r1w #(
                 // GWEN=0 = write; GWEN=1 = read.  Write wins if both target same bank.
                 assign gwen_w = ~(wr_valid_i & (wr_bank == 2'(b)));
 
-                if (MACRO_DEPTH == 64) begin : sel
-                    gf180mcu_fd_ip_sram__sram64x8m8wm1 u_sram (
+                if (MACRO_DEPTH == 256) begin : sel
+                    gf180mcu_ocd_ip_sram__sram256x8m8wm1 u_sram (
                         .CLK (clk_i),
                         .CEN (cen_w),
                         .GWEN(gwen_w),
                         .WEN (8'h00),           // all bits writable
-                        .A   (addr_b[5:0]),
-                        .D   (wr_data_pad[byte_i*8 +: 8]),
-                        .Q   (q_all[b][byte_i]),
-                        .VDD (sram_vdd),
-                        .VSS (sram_vss)
-                    );
-                end else if (MACRO_DEPTH == 128) begin : sel
-                    gf180mcu_fd_ip_sram__sram128x8m8wm1 u_sram (
-                        .CLK (clk_i),
-                        .CEN (cen_w),
-                        .GWEN(gwen_w),
-                        .WEN (8'h00),
-                        .A   (addr_b[6:0]),
-                        .D   (wr_data_pad[byte_i*8 +: 8]),
-                        .Q   (q_all[b][byte_i]),
-                        .VDD (sram_vdd),
-                        .VSS (sram_vss)
-                    );
-                end else if (MACRO_DEPTH == 256) begin : sel
-                    gf180mcu_fd_ip_sram__sram256x8m8wm1 u_sram (
-                        .CLK (clk_i),
-                        .CEN (cen_w),
-                        .GWEN(gwen_w),
-                        .WEN (8'h00),
                         .A   (addr_b[7:0]),
                         .D   (wr_data_pad[byte_i*8 +: 8]),
                         .Q   (q_all[b][byte_i]),
                         .VDD (sram_vdd),
                         .VSS (sram_vss)
                     );
-                end else begin : sel  // MACRO_DEPTH == 512
-                    gf180mcu_fd_ip_sram__sram512x8m8wm1 u_sram (
+                end else if (MACRO_DEPTH == 512) begin : sel
+                    gf180mcu_ocd_ip_sram__sram512x8m8wm1 u_sram (
                         .CLK (clk_i),
                         .CEN (cen_w),
                         .GWEN(gwen_w),
                         .WEN (8'h00),
                         .A   (addr_b[8:0]),
+                        .D   (wr_data_pad[byte_i*8 +: 8]),
+                        .Q   (q_all[b][byte_i]),
+                        .VDD (sram_vdd),
+                        .VSS (sram_vss)
+                    );
+                end else begin : sel  // MACRO_DEPTH == 1024
+                    gf180mcu_ocd_ip_sram__sram1024x8m8wm1 u_sram (
+                        .CLK (clk_i),
+                        .CEN (cen_w),
+                        .GWEN(gwen_w),
+                        .WEN (8'h00),
+                        .A   (addr_b[9:0]),
                         .D   (wr_data_pad[byte_i*8 +: 8]),
                         .Q   (q_all[b][byte_i]),
                         .VDD (sram_vdd),
