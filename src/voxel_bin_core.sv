@@ -32,6 +32,9 @@ module voxel_bin_core #(
     input  logic       clk,
     input  logic       rst,
 
+    // Mode control
+    input  logic [1:0] active_mode_i, // 00=PROGRAM, 01=CLASSIFY, 10=DEBUG
+
     // Event stream in
     input  logic [31:0] evt_word,
     input  logic        evt_word_valid,
@@ -66,9 +69,31 @@ module voxel_bin_core #(
     output logic       debug_score_busy
 );
 
+    // Mode constants
+    typedef enum logic [1:0] {
+        MODE_PROGRAM  = 2'b00,
+        MODE_CLASSIFY = 2'b01,
+        MODE_DEBUG    = 2'b10
+    } state_t;
+
+    // Classification constants
     localparam int FEATURE_COUNT    = READOUT_BINS * GRID_SIZE * GRID_SIZE;
     localparam int FEATURE_BITS     = $clog2(FEATURE_COUNT);
     localparam int WEIGHT_ADDR_BITS = $clog2(FEATURE_COUNT);
+
+    // Mode-derived enable signals
+    logic mode_program;
+    logic mode_classify;
+ 
+    assign mode_program  = (active_mode_i == MODE_PROGRAM);
+    assign mode_classify = (active_mode_i == MODE_CLASSIFY);
+ 
+    // Gated SRAM write valids that only pass through in PROGRAM mode
+    logic weight_wr_valid_gated;
+    logic thresh_wr_valid_gated;
+ 
+    assign weight_wr_valid_gated = weight_wr_valid_i && mode_program;
+    assign thresh_wr_valid_gated = thresh_wr_valid_i && mode_program;
 
     // Internal wires
     logic        fifo_out_valid;
@@ -246,7 +271,7 @@ module voxel_bin_core #(
     );
 
     // ------------------------------------------------------------------
-    // Weight SRAMs × NUM_CLASSES (writable at runtime via weight_wr_* ports)
+    // Weight SRAMs x NUM_CLASSES (writable at runtime via weight_wr_* ports)
     // ------------------------------------------------------------------
     genvar g;
     generate
@@ -257,7 +282,7 @@ module voxel_bin_core #(
             ) u_weight_ram (
                 .clk_i      (clk),
                 .reset_i    (rst),
-                .wr_valid_i (weight_wr_valid_i && (weight_wr_class_i == 2'(g))),
+                .wr_valid_i (weight_wr_valid_gated && (weight_wr_class_i == 2'(g))),
                 .wr_data_i  (weight_wr_data_i),
                 .wr_addr_i  (weight_wr_addr_i),
                 .rd_valid_i (weight_rd_valid),
@@ -276,7 +301,7 @@ module voxel_bin_core #(
     ) u_thresh_ram (
         .clk_i      (clk),
         .reset_i    (rst),
-        .wr_valid_i (thresh_wr_valid_i),
+        .wr_valid_i (thresh_wr_valid_gated),
         .wr_data_i  (thresh_wr_data_i),
         .wr_addr_i  (thresh_wr_addr_i),
         .rd_valid_i (thresh_rd_valid),
