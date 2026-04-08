@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) 2024-2025 Group G Contributors
-from collections import deque
+# Copyright (c) 2026 Group G Contributors
+from collections import Counter, deque
 from pathlib import Path
 import random
 import struct
@@ -23,6 +23,9 @@ READOUT_BINS = CFG["READOUT_BINS"]
 WEIGHT_BITS  = CFG["WEIGHT_BITS"]
 WEIGHT_SCALE = CFG["WEIGHT_SCALE"]
 SWAP_INPUT_BYTES = CFG.get("SWAP_INPUT_BYTES", 0)
+MAP_SWAP_XY = CFG.get("MAP_SWAP_XY", 0)
+MAP_FLIP_X = CFG.get("MAP_FLIP_X", 0)
+MAP_FLIP_Y = CFG.get("MAP_FLIP_Y", 0)
 SENSOR_WIDTH = CFG["SENSOR_WIDTH"]
 SENSOR_HEIGHT = CFG.get("SENSOR_HEIGHT", SENSOR_WIDTH)
 COUNTER_BITS = CFG.get("COUNTER_BITS", 4)
@@ -34,6 +37,17 @@ CYCLES_PER_BIN_SAFE = (CLK_FREQ_HZ // 1000) * BIN_DURATION_MS
 X_BIN_DIV = SENSOR_WIDTH // GRID_SIZE
 Y_BIN_DIV = SENSOR_HEIGHT // GRID_SIZE
 FEATURE_COUNT = GRID_SIZE * GRID_SIZE * READOUT_BINS
+CELLS_PER_BIN = GRID_SIZE * GRID_SIZE
+ASSERT_EXPECTED_LABEL = int(os.environ.get("ASSERT_EXPECTED_LABEL", "1"))
+EXPECTED_LABEL_MIN_RATIO = float(os.environ.get("EXPECTED_LABEL_MIN_RATIO", "0.60"))
+
+GESTURE_NAMES = {0: "Down", 1: "Left", 2: "Right", 3: "Up"}
+EXPECTED_BIN_FILE_CLASS = {
+    0: 0,  # wave_down_*
+    1: 1,  # wave_left_*
+    2: 2,  # wave_right_*
+    3: 3,  # wave_up_*
+}
 
 EVT_CD_OFF = 0x0
 EVT_CD_ON = 0x1
@@ -101,8 +115,18 @@ class Evt2DecoderModel:
 
         x_clamped = min(x_raw, SENSOR_WIDTH - 1)
         y_clamped = min(y_raw, SENSOR_HEIGHT - 1)
-        x_grid = min(x_clamped // X_BIN_DIV, GRID_SIZE - 1)
-        y_grid = min(y_clamped // Y_BIN_DIV, GRID_SIZE - 1)
+
+        x_swapped = y_clamped if MAP_SWAP_XY else x_clamped
+        y_swapped = x_clamped if MAP_SWAP_XY else y_clamped
+        x_oriented = min(x_swapped, SENSOR_WIDTH - 1)
+        y_oriented = min(y_swapped, SENSOR_HEIGHT - 1)
+        if MAP_FLIP_X:
+            x_oriented = (SENSOR_WIDTH - 1) - x_oriented
+        if MAP_FLIP_Y:
+            y_oriented = (SENSOR_HEIGHT - 1) - y_oriented
+
+        x_grid = min(x_oriented // X_BIN_DIV, GRID_SIZE - 1)
+        y_grid = min(y_oriented // Y_BIN_DIV, GRID_SIZE - 1)
         return (x_grid, y_grid)
 
 
@@ -248,6 +272,9 @@ class CoreHarness:
         # Optional independent score verification.
         self.score_model = score_model
         self.pending_score_checks = deque()  # (exp_class, exp_pass) from ScoreModel
+        self.window_features = []            # list[list[int]] per completed window
+        self.window_scores = []              # list[list[int]] per completed window
+        self.window_pred = []                # list[(best_class, pass, margin)] per window
 
     async def setup(self):
         cocotb.start_soon(Clock(self.dut.clk, 10, units="ns").start())
@@ -284,6 +311,7 @@ class CoreHarness:
             if int(self.dut.u_voxel_binning.readout_last.value):
                 assert len(self.current_window) == FEATURE_COUNT, \
                     f"Feature window length {len(self.current_window)} != {FEATURE_COUNT}"
+                self.window_features.append(list(self.current_window))
                 if self.score_model is not None:
                     exp_cls, exp_pass, margin = self.score_model.classify(self.current_window)
                     self.pending_score_checks.append((exp_cls, exp_pass))
@@ -293,13 +321,14 @@ class CoreHarness:
                         f = int(feat)
                         for c in range(NUM_CLASSES):
                             scores[c] += f * self.score_model.weights[c][fi]
+                    self.window_scores.append(scores)
+                    self.window_pred.append((exp_cls, exp_pass, margin))
                     nz = sum(1 for v in self.current_window if v > 0)
                     total = sum(int(v) for v in self.current_window)
-                    names = {0: "Down", 1: "Left", 2: "Right", 3: "Up"}
                     cocotb.log.info(
                         f"[window {self.completed_windows}] model scores: "
                         f"D={scores[0]} L={scores[1]} R={scores[2]} U={scores[3]}  "
-                        f"winner={names[exp_cls]} margin={margin}  "
+                        f"winner={GESTURE_NAMES[exp_cls]} margin={margin}  "
                         f"nonzero_features={nz}/{FEATURE_COUNT} total_count={total}"
                     )
                 self.current_window = []
@@ -404,6 +433,67 @@ class CoreHarness:
                 prev_g = now_g
                 prev_w = now_w
         raise AssertionError("Timeout waiting for pipeline quiet")
+
+
+def _majority_with_ratio(class_ids):
+    if not class_ids:
+        return None, 0.0, {}
+    hist = Counter(class_ids)
+    maj, cnt = max(hist.items(), key=lambda kv: kv[1])
+    return maj, (cnt / len(class_ids)), dict(hist)
+
+
+def _transform_feature_window(window, mode):
+    """Remap feature-vector cells to emulate coordinate convention changes.
+
+    Feature layout is [bin][y][x], where addr = bin*CELLS + y*GRID_SIZE + x.
+    """
+    out = [0] * len(window)
+    for b in range(READOUT_BINS):
+        base = b * CELLS_PER_BIN
+        for y in range(GRID_SIZE):
+            for x in range(GRID_SIZE):
+                sx, sy = x, y
+                if mode in ("swap_xy", "swap_xy_flip_x", "swap_xy_flip_y", "swap_xy_flip_xy"):
+                    sx, sy = sy, sx
+                if mode in ("flip_x", "flip_xy", "swap_xy_flip_x", "swap_xy_flip_xy"):
+                    sx = GRID_SIZE - 1 - sx
+                if mode in ("flip_y", "flip_xy", "swap_xy_flip_y", "swap_xy_flip_xy"):
+                    sy = GRID_SIZE - 1 - sy
+                src = base + y * GRID_SIZE + x
+                dst = base + sy * GRID_SIZE + sx
+                out[dst] = window[src]
+    return out
+
+
+def _score_features(weights, features):
+    scores = [0] * NUM_CLASSES
+    for i, feat in enumerate(features):
+        f = int(feat)
+        for c in range(NUM_CLASSES):
+            scores[c] += f * weights[c][i]
+    return scores
+
+
+def _pick_best_threshold(pos_scores, neg_scores):
+    """Choose threshold maximizing balanced accuracy for score > threshold."""
+    candidates = sorted(set(pos_scores + neg_scores))
+    if not candidates:
+        return 0, 0.0
+    # Include values just below the first candidate and at exact candidates.
+    test_vals = [max(0, candidates[0] - 1)] + candidates
+    best_thr = 0
+    best_bal = -1.0
+    p = max(1, len(pos_scores))
+    n = max(1, len(neg_scores))
+    for thr in test_vals:
+        tpr = sum(s > thr for s in pos_scores) / p
+        tnr = sum(s <= thr for s in neg_scores) / n
+        bal = 0.5 * (tpr + tnr)
+        if bal > best_bal:
+            best_bal = bal
+            best_thr = thr
+    return best_thr, best_bal
 
 
 def region_points(name):
@@ -730,6 +820,9 @@ async def _flush_stale_bins(h, weights=None):
     h.expected_gestures.clear()
     h.pending_score_checks.clear()
     h.accepted_words = 0
+    h.window_features.clear()
+    h.window_scores.clear()
+    h.window_pred.clear()
 
 
 @logged_test()
@@ -867,7 +960,35 @@ async def _stream_bin_file_with_timing(h, bin_path):
         await h.send_word(word)
 
 
-async def _run_bin_file_test(dut, bin_path, label):
+async def _stream_bin_file_clock_driven(h, bin_path):
+    """Replay EVT2 words with clock-time spacing from EVT2 timestamps.
+
+    Unlike timestamp-forced mode, this path does not force bin rollover from timestamps.
+    Bin advancement comes only from the DUT's timer behavior and any explicit final flush.
+    """
+    words = _read_evt2_bin(bin_path)
+    cycles_per_us = max(1, CLK_FREQ_HZ // 1_000_000)
+
+    time_high = 0
+    prev_ts_us = None
+    for word in words:
+        fields = _decode_evt2_word_fields(word)
+        pkt = fields["pkt"]
+        if pkt == EVT_TIME_HIGH:
+            time_high = fields["word"] & 0x0FFFFFFF
+        elif pkt in (EVT_CD_OFF, EVT_CD_ON):
+            ts_us = (time_high << 6) | fields["ts_lsb"]
+            if prev_ts_us is not None and ts_us >= prev_ts_us:
+                delta_us = ts_us - prev_ts_us
+                if delta_us:
+                    await h.tick(delta_us * cycles_per_us)
+            prev_ts_us = ts_us
+        await h.send_word(word)
+
+
+async def _run_bin_file_test(
+    dut, bin_path, label, expected_class=None, replay_mode="timestamp_forced", enforce_label=None
+):
     """Core logic shared by all four bin-file tests.
 
     Streams the entire .bin file into the DUT with timestamp-driven bin
@@ -888,8 +1009,13 @@ async def _run_bin_file_test(dut, bin_path, label):
     await h.setup()
     await _flush_stale_bins(h, weights=weights)
 
-    cocotb.log.info(f"[{label}] Streaming {bin_path} ...")
-    await _stream_bin_file_with_timing(h, bin_path)
+    cocotb.log.info(f"[{label}] Streaming {bin_path} (mode={replay_mode}) ...")
+    if replay_mode == "timestamp_forced":
+        await _stream_bin_file_with_timing(h, bin_path)
+    elif replay_mode == "clock_driven":
+        await _stream_bin_file_clock_driven(h, bin_path)
+    else:
+        raise ValueError(f"Unknown replay_mode={replay_mode}")
 
     # Flush the final partial bin so the last events are scored.
     for _ in range(READOUT_BINS):
@@ -902,16 +1028,45 @@ async def _run_bin_file_test(dut, bin_path, label):
         f"Accepted words: {h.accepted_words}"
     )
 
-    gesture_names = {0: "Down", 1: "Left", 2: "Right", 3: "Up"}
     if h.observed_gestures:
         cocotb.log.info(f"[{label}] DUT gesture outputs ({len(h.observed_gestures)} total):")
         for g_class, g_conf in h.observed_gestures:
             cocotb.log.info(
-                f"  gesture={gesture_names.get(g_class, str(g_class))} "
+                f"  gesture={GESTURE_NAMES.get(g_class, str(g_class))} "
                 f"(class={g_class}, confidence={g_conf})"
             )
     else:
         cocotb.log.info(f"[{label}] DUT produced no gesture_valid pulses.")
+
+    pred_classes = [g for g, _ in h.observed_gestures]
+    maj_cls, maj_ratio, hist = _majority_with_ratio(pred_classes)
+    if pred_classes:
+        hist_txt = " ".join(
+            f"{GESTURE_NAMES.get(c, str(c))}:{n}" for c, n in sorted(hist.items())
+        )
+        cocotb.log.info(
+            f"[{label}] dominant={GESTURE_NAMES.get(maj_cls, str(maj_cls))} "
+            f"ratio={maj_ratio:.3f} class_hist=({hist_txt})"
+        )
+
+    if enforce_label is None:
+        enforce_label = bool(ASSERT_EXPECTED_LABEL)
+    if expected_class is not None:
+        match = sum(1 for c in pred_classes if c == expected_class)
+        ratio = (match / len(pred_classes)) if pred_classes else 0.0
+        cocotb.log.info(
+            f"[{label}] expected={GESTURE_NAMES[expected_class]} "
+            f"match={match}/{len(pred_classes)} ratio={ratio:.3f}"
+        )
+        if enforce_label:
+            assert pred_classes, f"[{label}] No gesture outputs; cannot validate label accuracy"
+            assert maj_cls == expected_class, (
+                f"[{label}] dominant class {GESTURE_NAMES.get(maj_cls)} != expected "
+                f"{GESTURE_NAMES[expected_class]} (hist={hist})"
+            )
+            assert ratio >= EXPECTED_LABEL_MIN_RATIO, (
+                f"[{label}] expected-class ratio {ratio:.3f} < min {EXPECTED_LABEL_MIN_RATIO:.3f}"
+            )
 
     assert h.completed_windows > 0, f"[{label}] No feature windows completed"
     assert not h.pending_score_checks, \
@@ -920,6 +1075,7 @@ async def _run_bin_file_test(dut, bin_path, label):
         f"[{label}] DUT/model gesture mismatch\n"
         f"DUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
     )
+    return h
 
 
 @logged_test()
@@ -928,7 +1084,9 @@ async def test_bin_file_gesture_0(dut):
     bin_files = _resolve_bin_files()
     path = bin_files[0]
     label = Path(path).stem
-    await _run_bin_file_test(dut, path, label)
+    await _run_bin_file_test(
+        dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[0]
+    )
 
 
 @logged_test()
@@ -937,7 +1095,9 @@ async def test_bin_file_gesture_1(dut):
     bin_files = _resolve_bin_files()
     path = bin_files[1]
     label = Path(path).stem
-    await _run_bin_file_test(dut, path, label)
+    await _run_bin_file_test(
+        dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[1]
+    )
 
 
 @logged_test()
@@ -946,7 +1106,9 @@ async def test_bin_file_gesture_2(dut):
     bin_files = _resolve_bin_files()
     path = bin_files[2]
     label = Path(path).stem
-    await _run_bin_file_test(dut, path, label)
+    await _run_bin_file_test(
+        dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[2]
+    )
 
 
 @logged_test()
@@ -955,5 +1117,190 @@ async def test_bin_file_gesture_3(dut):
     bin_files = _resolve_bin_files()
     path = bin_files[3]
     label = Path(path).stem
-    await _run_bin_file_test(dut, path, label)
+    await _run_bin_file_test(
+        dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[3]
+    )
+
+
+@logged_test()
+async def test_bin_file_timing_replay_ab(dut):
+    """A/B timing investigation: timestamp-forced vs clock-driven replay.
+
+    This is a diagnostics-oriented test. It logs output differences and requires both
+    modes to produce valid windows and model/DUT agreement.
+    """
+    bin_files = _resolve_bin_files()
+    for i, path in enumerate(bin_files):
+        label = Path(path).stem
+        expected = EXPECTED_BIN_FILE_CLASS[i]
+        h_forced = await _run_bin_file_test(
+            dut,
+            path,
+            f"{label}-forced",
+            expected_class=expected,
+            replay_mode="timestamp_forced",
+            enforce_label=False,
+        )
+        h_clock = await _run_bin_file_test(
+            dut,
+            path,
+            f"{label}-clock",
+            expected_class=expected,
+            replay_mode="clock_driven",
+            enforce_label=False,
+        )
+
+        forced_classes = [g for g, _ in h_forced.observed_gestures]
+        clock_classes = [g for g, _ in h_clock.observed_gestures]
+        min_len = min(len(forced_classes), len(clock_classes))
+        if min_len:
+            seq_diff = sum(
+                1 for a, b in zip(forced_classes[:min_len], clock_classes[:min_len]) if a != b
+            )
+            cocotb.log.info(
+                f"[{label}] A/B: forced_windows={h_forced.completed_windows} "
+                f"clock_windows={h_clock.completed_windows} seq_diff={seq_diff}/{min_len}"
+            )
+        else:
+            cocotb.log.info(
+                f"[{label}] A/B: insufficient overlapping gesture outputs for sequence diff"
+            )
+
+        assert h_forced.completed_windows > 0 and h_clock.completed_windows > 0, (
+            f"[{label}] Expected both replay modes to produce completed windows"
+        )
+
+
+@logged_test()
+async def test_windowing_strategy_matches_sliding_model(dut):
+    """Verify consecutive windows are sliding by one bin after warm-up."""
+    rng = random.Random(0x51D10)
+    weights = load_weights_from_mem()
+    h = CoreHarness(dut, score_model=ScoreModel(weights))
+    await h.setup()
+    await _flush_stale_bins(h, weights=weights)
+    await h.send_word(build_evt2_time_high(0x45678))
+
+    # Generate more than READOUT_BINS rollovers to observe overlapping windows.
+    script = ["left", "right", "top", "bottom"] * 4
+    for region in script[: READOUT_BINS + 3]:
+        await drive_bin_traffic(h, rng, region, events=28)
+        await h.force_bin_rollover()
+    await h.wait_quiet()
+
+    assert len(h.window_features) >= 3, "Need >=3 windows to validate sliding behavior"
+    for wi in range(len(h.window_features) - 1):
+        w0 = h.window_features[wi]
+        w1 = h.window_features[wi + 1]
+        assert w0[CELLS_PER_BIN:] == w1[:-CELLS_PER_BIN], (
+            f"Window {wi}->{wi+1} is not a 1-bin slide; expected overlap mismatch"
+        )
+
+
+@logged_test()
+async def test_threshold_calibration_report(dut):
+    """Compute threshold calibration suggestions from bin-file score distributions."""
+    bin_files = _resolve_bin_files()
+    per_class_score_pos = [[] for _ in range(NUM_CLASSES)]
+    per_class_score_neg = [[] for _ in range(NUM_CLASSES)]
+    per_class_margin_pos = [[] for _ in range(NUM_CLASSES)]
+    per_class_margin_neg = [[] for _ in range(NUM_CLASSES)]
+
+    for i, path in enumerate(bin_files):
+        label = Path(path).stem
+        h = await _run_bin_file_test(
+            dut,
+            path,
+            f"{label}-calib",
+            expected_class=EXPECTED_BIN_FILE_CLASS[i],
+            replay_mode="timestamp_forced",
+            enforce_label=False,
+        )
+        true_cls = EXPECTED_BIN_FILE_CLASS[i]
+        for scores in h.window_scores:
+            for c in range(NUM_CLASSES):
+                if c == true_cls:
+                    per_class_score_pos[c].append(scores[c])
+                else:
+                    per_class_score_neg[c].append(scores[c])
+            best = max(range(NUM_CLASSES), key=lambda c: scores[c])
+            second = max(s for j, s in enumerate(scores) if j != best)
+            margin = scores[best] - second
+            if best == true_cls:
+                per_class_margin_pos[best].append(margin)
+            else:
+                per_class_margin_neg[best].append(margin)
+
+    class_thresh = [0] * NUM_CLASSES
+    diff_thresh = [0] * NUM_CLASSES
+    for c in range(NUM_CLASSES):
+        class_thresh[c], class_bal = _pick_best_threshold(
+            per_class_score_pos[c], per_class_score_neg[c]
+        )
+        diff_thresh[c], diff_bal = _pick_best_threshold(
+            per_class_margin_pos[c], per_class_margin_neg[c]
+        )
+        cocotb.log.info(
+            f"[calib class={GESTURE_NAMES[c]}] "
+            f"class_thr={class_thresh[c]} (bal_acc={class_bal:.3f}) "
+            f"diff_thr={diff_thresh[c]} (bal_acc={diff_bal:.3f})"
+        )
+
+    mem_words = class_thresh + diff_thresh
+    hex_words = [f"{v:09X}" for v in mem_words]
+    cocotb.log.info("Suggested thresholds.mem contents:")
+    for w in hex_words:
+        cocotb.log.info(f"  {w}")
+
+    assert any(v > 0 for v in class_thresh), "Calibration expected non-zero class thresholds"
+
+
+@logged_test()
+async def test_coordinate_orientation_sweep(dut):
+    """Check whether identity orientation is outperformed by swaps/flips."""
+    weights = load_weights_from_mem()
+    score_model = ScoreModel(weights)
+    bin_files = _resolve_bin_files()
+    modes = [
+        "identity",
+        "swap_xy",
+        "flip_x",
+        "flip_y",
+        "flip_xy",
+        "swap_xy_flip_x",
+        "swap_xy_flip_y",
+        "swap_xy_flip_xy",
+    ]
+    mode_hits = {m: 0 for m in modes}
+    total_windows = 0
+
+    for i, path in enumerate(bin_files):
+        label = Path(path).stem
+        expected = EXPECTED_BIN_FILE_CLASS[i]
+        h = await _run_bin_file_test(
+            dut,
+            path,
+            f"{label}-orient",
+            expected_class=expected,
+            replay_mode="timestamp_forced",
+            enforce_label=False,
+        )
+        for feat in h.window_features:
+            total_windows += 1
+            for mode in modes:
+                f_mode = feat if mode == "identity" else _transform_feature_window(feat, mode)
+                scores = _score_features(score_model.weights, f_mode)
+                pred = max(range(NUM_CLASSES), key=lambda c: scores[c])
+                if pred == expected:
+                    mode_hits[mode] += 1
+
+    assert total_windows > 0, "Expected orientation sweep to evaluate at least one window"
+    for mode in modes:
+        cocotb.log.info(
+            f"[orientation] mode={mode} hits={mode_hits[mode]}/{total_windows} "
+            f"acc={mode_hits[mode] / total_windows:.3f}"
+        )
+
+    best_mode = max(modes, key=lambda m: mode_hits[m])
+    cocotb.log.info(f"[orientation] best_mode={best_mode}")
 
