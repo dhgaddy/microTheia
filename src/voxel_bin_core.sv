@@ -33,7 +33,7 @@ module voxel_bin_core #(
     input  logic       rst,
 
     // Mode control
-    input  logic [1:0] active_mode_i, // 00=PROGRAM, 01=CLASSIFY, 10=DEBUG
+    input  logic [1:0] active_mode_i, // 00=BOOT?, 01=PROGRAM, 10=CLASSIFY, 11=DEBUG
 
     // Event stream in
     input  logic [31:0] evt_word,
@@ -71,9 +71,10 @@ module voxel_bin_core #(
 
     // Mode constants
     typedef enum logic [1:0] {
-        MODE_PROGRAM  = 2'b00,
-        MODE_CLASSIFY = 2'b01,
-        MODE_DEBUG    = 2'b10
+        MODE_BOOT     = 2'b00
+        MODE_PROGRAM  = 2'b01,
+        MODE_CLASSIFY = 2'b10,
+        MODE_DEBUG    = 2'b11
     } state_t;
 
     // Classification constants
