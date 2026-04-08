@@ -10,7 +10,10 @@ module evt2_decoder #(
     parameter int SENSOR_HEIGHT     = 320,
     parameter int GRID_SIZE         = 16,
     parameter bit REQUIRE_TIME_HIGH = 1'b1,
-    parameter bit SWAP_INPUT_BYTES  = 1'b0
+    parameter bit SWAP_INPUT_BYTES  = 1'b0,
+    parameter bit MAP_SWAP_XY       = 1'b0,
+    parameter bit MAP_FLIP_X        = 1'b0,
+    parameter bit MAP_FLIP_Y        = 1'b0
 )(
     input  logic                         clk,
     input  logic                         rst,
@@ -52,6 +55,10 @@ module evt2_decoder #(
 
     logic [10:0]          x_clamped;
     logic [10:0]          y_clamped;
+    logic [10:0]          x_oriented;
+    logic [10:0]          y_oriented;
+    logic [10:0]          x_swapped_raw;
+    logic [10:0]          y_swapped_raw;
     logic [GRID_BITS-1:0] x_grid;
     logic [GRID_BITS-1:0] y_grid;
     logic [10+DIV_K:0]    x_prod_c, y_prod_c;
@@ -68,9 +75,29 @@ module evt2_decoder #(
         else
             y_clamped = y_raw;
 
+        // Optional coordinate remap to align sensor orientation with trained model.
+        x_swapped_raw = MAP_SWAP_XY ? y_clamped : x_clamped;
+        y_swapped_raw = MAP_SWAP_XY ? x_clamped : y_clamped;
+
+        // Re-clamp after optional swap in case SENSOR_WIDTH != SENSOR_HEIGHT.
+        if (x_swapped_raw >= SENSOR_WIDTH)
+            x_oriented = SENSOR_W_M1[10:0];
+        else
+            x_oriented = x_swapped_raw;
+
+        if (y_swapped_raw >= SENSOR_HEIGHT)
+            y_oriented = SENSOR_H_M1[10:0];
+        else
+            y_oriented = y_swapped_raw;
+
+        if (MAP_FLIP_X)
+            x_oriented = SENSOR_W_M1[10:0] - x_oriented;
+        if (MAP_FLIP_Y)
+            y_oriented = SENSOR_H_M1[10:0] - y_oriented;
+
         // Reciprocal-multiply: floor(v/D) = (v*M) >> DIV_K, exact for v < SENSOR_DIM.
-        x_prod_c   = x_clamped * X_M;
-        y_prod_c   = y_clamped * Y_M;
+        x_prod_c   = x_oriented * X_M;
+        y_prod_c   = y_oriented * Y_M;
 
         x_grid_raw = x_prod_c >> DIV_K;
         y_grid_raw = y_prod_c >> DIV_K;

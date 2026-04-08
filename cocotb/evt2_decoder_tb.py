@@ -16,6 +16,9 @@ CFG = load_config(MODULE)
 GRID_SIZE     = CFG["GRID_SIZE"]
 SENSOR_WIDTH  = CFG["SENSOR_WIDTH"]
 SENSOR_HEIGHT = CFG["SENSOR_HEIGHT"]
+MAP_SWAP_XY = CFG.get("MAP_SWAP_XY", 0)
+MAP_FLIP_X = CFG.get("MAP_FLIP_X", 0)
+MAP_FLIP_Y = CFG.get("MAP_FLIP_Y", 0)
 
 REQUIRE_TIME_HIGH = 1
 
@@ -45,8 +48,18 @@ class Evt2DecoderModel:
     def _grid_map(x_raw, y_raw):
         x_clamped = x_raw if x_raw < SENSOR_WIDTH else SENSOR_WIDTH - 1
         y_clamped = y_raw if y_raw < SENSOR_HEIGHT else SENSOR_HEIGHT - 1
-        x_grid = x_clamped // (SENSOR_WIDTH // GRID_SIZE)
-        y_grid = y_clamped // (SENSOR_HEIGHT // GRID_SIZE)
+
+        x_swapped = y_clamped if MAP_SWAP_XY else x_clamped
+        y_swapped = x_clamped if MAP_SWAP_XY else y_clamped
+        x_oriented = x_swapped if x_swapped < SENSOR_WIDTH else SENSOR_WIDTH - 1
+        y_oriented = y_swapped if y_swapped < SENSOR_HEIGHT else SENSOR_HEIGHT - 1
+        if MAP_FLIP_X:
+            x_oriented = (SENSOR_WIDTH - 1) - x_oriented
+        if MAP_FLIP_Y:
+            y_oriented = (SENSOR_HEIGHT - 1) - y_oriented
+
+        x_grid = x_oriented // (SENSOR_WIDTH // GRID_SIZE)
+        y_grid = y_oriented // (SENSOR_HEIGHT // GRID_SIZE)
         x_grid = min(x_grid, GRID_SIZE - 1)
         y_grid = min(y_grid, GRID_SIZE - 1)
         return x_grid, y_grid

@@ -21,7 +21,6 @@ SWAP_INPUT_BYTES    = 0
 MAP_SWAP_XY         = 1
 MAP_FLIP_X          = 0
 MAP_FLIP_Y          = 1
-
 # voxel_systolic_array
 N                   = 16
 DATA_BIT_SIZE       = 16
