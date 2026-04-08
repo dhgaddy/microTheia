@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) 2024-2025 Group G Contributors
+// Copyright (c) 2026 Group G Contributors
 `timescale 1ns/1ps
 
 // Weights and thresholds are stored in writable GF180MCU SRAMs.
@@ -19,6 +19,9 @@ module voxel_bin_core #(
     parameter int DATA_WIDTH        = 32,
     parameter int REQUIRE_TIME_HIGH = 1,
     parameter int SWAP_INPUT_BYTES  = 0,
+    parameter int MAP_SWAP_XY       = 0,
+    parameter int MAP_FLIP_X        = 0,
+    parameter int MAP_FLIP_Y        = 0,
     parameter int SENSOR_WIDTH      = 320,
     parameter int SENSOR_HEIGHT     = 320,
     parameter int WEIGHT_BITS       = 8,
@@ -189,7 +192,10 @@ module voxel_bin_core #(
         .SENSOR_HEIGHT    (SENSOR_HEIGHT),
         .GRID_SIZE        (GRID_SIZE),
         .REQUIRE_TIME_HIGH(REQUIRE_TIME_HIGH),
-        .SWAP_INPUT_BYTES (SWAP_INPUT_BYTES)
+        .SWAP_INPUT_BYTES (SWAP_INPUT_BYTES),
+        .MAP_SWAP_XY      (MAP_SWAP_XY),
+        .MAP_FLIP_X       (MAP_FLIP_X),
+        .MAP_FLIP_Y       (MAP_FLIP_Y)
     ) u_evt2_decoder (
         .clk          (clk),
         .rst          (rst),
