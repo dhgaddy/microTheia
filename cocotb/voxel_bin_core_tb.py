@@ -878,12 +878,30 @@ async def test_wrong_gesture_trajectory_no_false_positive(dut):
 # Override by setting the GESTURE_BIN_FILES env variable to a colon-separated
 # list of 4 absolute or repo-relative paths, e.g.:
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_DEFAULT_BIN_FILES = [
-    _REPO_ROOT / "EVT2_gesture_set" / "wave_down_sun_test1.bin",
-    _REPO_ROOT / "EVT2_gesture_set" / "wave_left_sun_test1.bin",
-    _REPO_ROOT / "EVT2_gesture_set" / "wave_right_sun_test1.bin",
-    _REPO_ROOT / "EVT2_gesture_set" / "wave_up_sun_test1.bin",
-]
+def _default_bin_paths():
+    """Return default gesture clip paths.
+
+    Prefer the current test-set location, but keep a fallback to the legacy root
+    location so older checkouts continue to run.
+    """
+    test_set = _REPO_ROOT / "EVT2_gesture_set" / "test_set"
+    if test_set.exists():
+        return [
+            test_set / "wave_down_sun_test1.bin",
+            test_set / "wave_left_sun_test1.bin",
+            test_set / "wave_right_sun_test1.bin",
+            test_set / "wave_up_sun_test1.bin",
+        ]
+    legacy_root = _REPO_ROOT / "EVT2_gesture_set"
+    return [
+        legacy_root / "wave_down_sun_test1.bin",
+        legacy_root / "wave_left_sun_test1.bin",
+        legacy_root / "wave_right_sun_test1.bin",
+        legacy_root / "wave_up_sun_test1.bin",
+    ]
+
+
+_DEFAULT_BIN_FILES = _default_bin_paths()
 
 def _resolve_bin_files():
     """Return the 4 .bin file paths to use for the streaming tests.
