@@ -74,7 +74,7 @@ module voxel_bin_core #(
 
     // Mode constants
     typedef enum logic [1:0] {
-        MODE_BOOT     = 2'b00
+        MODE_BOOT     = 2'b00,
         MODE_PROGRAM  = 2'b01,
         MODE_CLASSIFY = 2'b10,
         MODE_DEBUG    = 2'b11
