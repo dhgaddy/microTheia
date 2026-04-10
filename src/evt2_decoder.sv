@@ -23,7 +23,7 @@ module evt2_decoder #(
     output logic                         data_ready,
     output logic [$clog2(GRID_SIZE)-1:0] x_out,
     output logic [$clog2(GRID_SIZE)-1:0] y_out,
-    output logic                         event_valid
+    output logic                         event_valid,
     output logic [11:0]                  decoder_dbg
 );
 
@@ -145,6 +145,6 @@ module evt2_decoder #(
             end
         end
     end
-    
+
     assign decoder_dbg = {event_ready_i, data_valid, y_out, x_out, event_valid, data_ready};
 endmodule

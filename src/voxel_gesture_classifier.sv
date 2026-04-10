@@ -23,7 +23,7 @@ module voxel_gesture_classifier #(
     output logic       gesture_valid,
     output logic       gesture_confidence,
     //debug bus output
-    output logic [10:0] class_dbg;
+    output logic [10:0] class_dbg
 );
 
     localparam int ADDR_BITS = $clog2(NUM_CLASSES);
