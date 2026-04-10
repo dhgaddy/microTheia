@@ -37,7 +37,8 @@ module voxel_binning #(
     output logic                              readout_valid,
     output logic [COUNTER_BITS-1:0]           readout_data,
     output logic [$clog2(RO_INDEX_WIDTH)-1:0] readout_index,
-    output logic                              readout_last
+    output logic                              readout_last,
+    output logic [30:0]                       vox_bin_dbg
 );
 
     localparam int CELLS_PER_BIN       = GRID_SIZE * GRID_SIZE;
@@ -337,5 +338,12 @@ module voxel_binning #(
             endcase
         end
     end
+
+    assign vox_bin_dbg[0] = event_ready_i;
+    assign vox_bin_dbg[1] = readout_start;
+    assign vox_bin_dbg[2] = readout_valid;
+    assign vox_bin_dbg[3] = readout_last;
+    assign vox_bin_dbg[14:4] =  readout_index;
+    assign vox_bin_dbg[30:15] = readout_data;
 
 endmodule
