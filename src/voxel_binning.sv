@@ -339,7 +339,7 @@ module voxel_binning #(
         end
     end
 
-    assign vox_bin_dbg[0] = event_ready_i;
+    assign vox_bin_dbg[0] = event_ready;
     assign vox_bin_dbg[1] = readout_start;
     assign vox_bin_dbg[2] = readout_valid;
     assign vox_bin_dbg[3] = readout_last;
