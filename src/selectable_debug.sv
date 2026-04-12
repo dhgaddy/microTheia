@@ -1,0 +1,224 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Group G Contributors
+`timescale 1ns/1ps
+
+
+//bus widths are NOT parameterized
+//all connections are for SPECIFIC pins
+module selectable_debug #()(
+    output [31:0] debug_bus,
+    input [10:0] class_dbg,
+    input [14:0] mac_dbg,
+    input [30:0] vox_bin_dbg,
+    input [11:0] decoder_dbg,
+    input [31:0] decoder_output,
+    input [3:0] in_fifo_dbg,
+    input [15:0] vox_core_debug,
+    input [31:0] score_A, score_B, score_C, score_D, fifo_in, fifo_out,
+    //input [31:0] control_dbg,
+    input [3:0] debug_select
+);
+
+//select debug page to connect to 32 bit debug interface
+//receives debug select signal over SPI
+
+/*
+PAGE 0 (debug_select = 4'b0000): voxel_gesture_classifier and voxel_mac_engine debug
+bit index       description
+0               threshold_rd_valid   //start voxel_gesture_classifier
+1               threshold_rd_addr[0]
+2               threshold_rd_addr[1]
+3               class_gesture[0]
+4               class_gesture[1]
+5               class_valid
+6               class_pass
+7               gesture[0]
+8               gesture[1]
+9               gesture_valid
+10              gesture_confidence //end voxel_gesture_classifier
+11              start              //start voxel_mac_engine
+12              busy
+13              rd_en
+14              scores_valid
+15              read_address[0]
+16              read_address[1]
+17              read_address[2]
+18              read_address[3] 
+19              read_address[4]
+20              read_address[5]
+21              read_address[6]
+22              read_address[7]
+23              read_address[8]
+24              read_address[9]
+25              tied to ground
+26              tied to ground
+27              tied to ground
+28              tied to ground
+29              tied to ground
+30              tied to ground
+31              tied to ground
+
+
+PAGE 1 (debug_select = 4'b0001): voxel_binning
+bit index       description
+0               event_ready
+1               readout_start
+2               readout_valid
+3               readout_last
+4               readout_index[0] //which of 2048 voxel cells are being read
+5               readout_index[1]
+6               readout_index[2]
+7               readout_index[3]
+8               readout_index[4]
+9               readout_index[5]
+10              readout_index[6]
+11              readout_index[7]
+12              readout_index[8]
+13              readout_index[9]
+14              readout_index[10]
+15              readout_data[0] //data being read out and into the mac engine
+16              readout_data[1]
+17              readout_data[2]
+18              readout_data[3]
+19              readout_data[4]
+20              readout_data[5]
+21              readout_data[6]
+22              readout_data[7]
+23              readout_data[8]
+24              readout_data[9]
+25              readout_data[10]
+26              readout_data[11]
+27              readout_data[12]
+28              readout_data[13]
+29              readout_data[14]
+30              readout_data[15]
+31              tied to ground
+
+PAGE 2 (debug_select = 4'b0010): evt2_decoder and input_FIFO and voxel_core
+bit index       description
+0               data_ready         //start evt2_decoder
+1               event_valid
+2               x_out[0]
+3               x_out[1]
+4               x_out[2]
+5               x_out[3]
+6               y_out[0]
+7               y_out[1]
+8               y_out[2]
+9               y_out[3]
+10              data_valid 
+11              event_ready_i       //end evt2_decoder
+12              ready_i             //start input_FIFO
+13              valid_i
+14              ready_o
+15              valid_o             //end input_FIFO
+16              debug_event_count[0] //start voxel_bin_core
+17              debug_event_count[1]
+18              debug_event_count[2]
+19              debug_event_count[3]
+20              debug_event_count[4]
+21              debug_event_count[5]
+22              debug_event_count[6]
+23              debug_event_count[7]
+24              debug_fifo_empty
+25              debug_fifo_full
+26              debug_temporal_phase
+27              debug_class_valid
+28              debug_class_pass
+29              debug_feature_window_ready
+30              debug_capture_active
+31              debug_score_busy
+
+PAGE 3 (debug_select = 4'b0011): reserved for control module debug signals
+bit index       description
+[31:0]          reserved         
+
+PAGE 4 (debug_select = 4'b0100): evt2_decoder event output
+bit index       description
+0               x_out[0]
+1               x_out[1]
+2               x_out[2]
+3               x_out[3]
+4               y_out[0]
+5               y_out[1]
+6               y_out[2]
+7               y_out[3]
+8               event_valid
+9               data_ready
+[31:10]         tied to ground
+
+PAGE 5 (debug_select = 4'b0101): input to input_FIFO
+[31:0] = [31:0] input_FIFO_in
+
+PAGE 6 (debug_select = 4'b0110): input_FIFO output
+[31:0] = [31:0] input_FIFO_out
+
+PAGE 7 (debug_select = 4'b0111): class score_A
+[31:0] = [31:0] score_A
+
+PAGE 8 (debug_select = 4'b1000): class score_B
+[31:0] = [31:0] score_B
+
+PAGE 9 (debug_select = 4'b1001): class score_C
+[31:0] = [31:0] score_C
+
+PAGE 10 (debug_select = 4'b1010): class score_D
+[31:0] = [31:0] score_D
+*/
+
+localparam PAGE_0 = 4'b0000;
+localparam PAGE_1 = 4'b0001;
+localparam PAGE_2 = 4'b0010;
+localparam PAGE_3 = 4'b0011;
+localparam PAGE_4 = 4'b0100;
+localparam PAGE_5 = 4'b0101;
+localparam PAGE_6 = 4'b0110;
+localparam PAGE_7 = 4'b0111;
+localparam PAGE_8 = 4'b1000;
+localparam PAGE_9 = 4'b1001;
+localparam PAGE_10 = 4'b1010;
+
+logic [31:0] selected_debug;
+always_comb begin
+    unique case (debug_select)
+            PAGE_0: begin
+                selected_debug = {6'b0, mac_dbg , class_dbg};
+            end
+            PAGE_1: begin
+                selected_debug = {1'b0, vox_bin_dbg};
+            end
+            PAGE_2: begin
+                selected_debug = {vox_core_debug, in_fifo_dbg, decoder_dbg};
+            end
+            /*PAGE_3: begin
+                debug_bus = control_dbg
+            end
+            */
+            PAGE_4: begin
+                selected_debug = {22'b0,decoder_output};
+            end
+            PAGE_5: begin
+                selected_debug = fifo_in;
+            end
+            PAGE_6: begin
+                selected_debug = fifo_out;
+            end
+            PAGE_7: begin
+                selected_debug = score_A;
+            end
+            PAGE_8: begin
+                selected_debug = score_B;
+            end
+            PAGE_9: begin
+                selected_debug = score_C;
+            end
+            PAGE_10: begin
+                selected_debug = score_D;
+            end
+            default: selected_debug = {6'b0, mac_dbg , class_dbg};
+    endcase
+end
+
+assign debug_bus = selected_debug;
+
+endmodule
