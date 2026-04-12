@@ -22,7 +22,10 @@ module voxel_mac_engine #(
     input  logic [NUM_CLASSES*WEIGHT_BITS-1:0] weight_data_flat,
 
     output logic [NUM_CLASSES*SCORE_BITS-1:0]  scores_flat,
-    output logic                               scores_valid
+    output logic                               scores_valid,
+    // output ports for debug
+    output logic [14:0]                        mac_dbg,
+    output logic [31:0]                        score_A, score_B, score_C, score_D //scores are all truncated to 32 bits
 );
 
     localparam int ADDR_BITS   = $clog2(FEATURE_COUNT);
@@ -50,6 +53,14 @@ module voxel_mac_engine #(
         for (int g = 0; g < NUM_CLASSES; g++)
             scores_flat[g*SCORE_BITS +: SCORE_BITS] = score_acc[g];
     end
+
+    
+    //score busses for debug pins
+    //only taking lower 32 bits from each score
+    assign score_A = scores_flat[31:0];       // from [35:0]
+    assign score_B = scores_flat[67:36];      // from [71:36]
+    assign score_C = scores_flat[103:72];     // from [107:72]
+    assign score_D = scores_flat[139:108];    // from [143:108]
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -107,5 +118,22 @@ module voxel_mac_engine #(
             endcase
         end
     end
+
+    //debug bus connections
+    assign mac_dbg[0] = start;
+    assign mac_dbg[1] = busy;
+    assign mac_dbg[2] = rd_en;
+    assign mac_dbg[3] = scores_valid;
+    assign mac_dbg[4] = rd_addr[0];
+    assign mac_dbg[5] = rd_addr[1];
+    assign mac_dbg[6] = rd_addr[2];
+    assign mac_dbg[7] = rd_addr[3];
+    assign mac_dbg[8] = rd_addr[4];
+    assign mac_dbg[9] = rd_addr[5];
+    assign mac_dbg[10] = rd_addr[6];
+    assign mac_dbg[11] = rd_addr[7];
+    assign mac_dbg[12] = rd_addr[8];
+    assign mac_dbg[13] = rd_addr[9];
+    assign mac_dbg[14] = rd_addr[10];
 
 endmodule

@@ -69,7 +69,15 @@ module voxel_bin_core #(
     output logic       debug_class_pass,
     output logic       debug_feature_window_ready,
     output logic       debug_capture_active,
-    output logic       debug_score_busy
+    output logic       debug_score_busy,
+
+    //debug mux output
+
+    output logic [31:0] debug_mux,
+
+    //debug mux input
+
+    input logic [3:0] debug_select
 );
 
     // Mode constants
@@ -144,6 +152,17 @@ module voxel_bin_core #(
     logic [2:0]            thresh_rd_addr;
     logic [SCORE_BITS-1:0] thresh_data;
 
+    //debug busses
+    logic [31:0] debug_bus;
+    logic [10:0] class_dbg;
+    logic [14:0] mac_dbg;
+    logic [30:0] vox_bin_dbg;
+    logic [11:0] decoder_dbg;
+    logic [31:0] decoder_output_dbg;
+    logic [3:0] in_fifo_dbg;
+    logic [15:0] vox_core_debug;
+    logic [31:0] score_A, score_B, score_C, score_D;
+
     // mac_start fires when a feature window is ready and the engine is idle
     assign mac_start = feature_window_ready && !mac_busy;
 
@@ -169,6 +188,9 @@ module voxel_bin_core #(
     assign debug_feature_window_ready = feature_window_ready;
     assign debug_capture_active       = capture_active;
     assign debug_score_busy           = mac_busy;
+
+    // concatenating these debug signals into a single bus to route to debug mux
+    assign vox_core_debug = {debug_event_count, debug_score_busy, debug_capture_active, debug_feature_window_ready, debug_class_pass, debug_class_valid, debug_temporal_phase, debug_fifo_full, debug_fifo_empty};
 
     always_ff @(posedge clk) begin
         if (rst)
@@ -207,7 +229,8 @@ module voxel_bin_core #(
         .valid_i (evt_word_valid),
         .ready_o (evt_word_ready),
         .valid_o (fifo_out_valid),
-        .data_o  (fifo_out_data)
+        .data_o  (fifo_out_data),
+        .in_fifo_dbg(in_fifo_dbg)
     );
 
     // ------------------------------------------------------------------
@@ -231,7 +254,9 @@ module voxel_bin_core #(
         .data_ready   (dec_data_ready),
         .x_out        (dec_x16),
         .y_out        (dec_y16),
-        .event_valid  (dec_event_valid)
+        .event_valid  (dec_event_valid),
+        .decoder_dbg  (decoder_dbg),
+        .decoder_output_dbg(decoder_output_dbg)
     );
 
     // ------------------------------------------------------------------
@@ -257,7 +282,8 @@ module voxel_bin_core #(
         .readout_valid(binner_readout_valid),
         .readout_data (binner_readout_data),
         .readout_index(binner_readout_index),
-        .readout_last (binner_readout_last)
+        .readout_last (binner_readout_last),
+        .vox_bin_dbg  (vox_bin_dbg)
     );
 
     // ------------------------------------------------------------------
@@ -335,7 +361,12 @@ module voxel_bin_core #(
         .feature_data     (feature_rd_data),
         .weight_data_flat (mac_weight_flat),
         .scores_flat      (mac_scores_flat),
-        .scores_valid     (mac_scores_valid)
+        .scores_valid     (mac_scores_valid),
+        .mac_dbg          (mac_dbg),
+        .score_A          (score_A),
+        .score_B          (score_B),
+        .score_C          (score_C),
+        .score_D          (score_D)
     );
 
     // ------------------------------------------------------------------
@@ -357,7 +388,27 @@ module voxel_bin_core #(
         .class_pass        (class_pass),
         .gesture           (gesture),
         .gesture_valid     (gesture_valid),
-        .gesture_confidence(gesture_confidence)
+        .gesture_confidence(gesture_confidence),
+        .class_dbg         (class_dbg)
     );
+    selectable_debug #() select_debug_module (
+    .debug_bus(debug_bus),
+    .class_dbg(class_dbg),
+    .mac_dbg(mac_dbg),
+    .vox_bin_dbg(vox_bin_dbg),
+    .decoder_dbg(decoder_dbg),
+    .decoder_output(decoder_output_dbg),
+    .in_fifo_dbg(in_fifo_dbg),
+    .vox_core_debug(vox_core_debug),
+    .score_A(score_A),
+    .score_B(score_B),
+    .score_C(score_C),
+    .score_D(score_D),
+    .fifo_in(evt_word),
+    .fifo_out(fifo_out_data),
+    //input [31:0] control_dbg,
+    .debug_select(debug_select) 
+);
 
+assign debug_mux = debug_bus;
 endmodule

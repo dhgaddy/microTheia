@@ -226,19 +226,40 @@ def write_thresholds(path: Path, class_thresh: list[int], diff_thresh: list[int]
     path.write_text("\n".join(lines) + "\n", encoding="ascii")
 
 
+def collect_weight_set_files(weight_set_dir: Path) -> list[list[Path]]:
+    class_dirs = ["wave_down", "wave_left", "wave_right", "wave_up"]
+    per_class: list[list[Path]] = []
+    for class_dir in class_dirs:
+        d = weight_set_dir / class_dir
+        if not d.exists():
+            raise FileNotFoundError(f"Missing weight-set class directory: {d}")
+        files = sorted(p for p in d.glob("*.bin") if p.is_file())
+        if not files:
+            raise FileNotFoundError(f"No .bin files found in weight-set class directory: {d}")
+        per_class.append(files)
+    return per_class
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parents[1])
     ap.add_argument(
         "--gesture-files",
         nargs=4,
-        default=[
-            "EVT2_gesture_set/wave_down_sun_test1.bin",
-            "EVT2_gesture_set/wave_left_sun_test1.bin",
-            "EVT2_gesture_set/wave_right_sun_test1.bin",
-            "EVT2_gesture_set/wave_up_sun_test1.bin",
-        ],
+        default=None,
         help="Exactly 4 files in class order: down left right up",
+    )
+    ap.add_argument(
+        "--weight-set-dir",
+        type=Path,
+        default=Path("EVT2_gesture_set/weight_set"),
+        help="Directory containing wave_down/left/right/up .bin files",
+    )
+    ap.add_argument(
+        "--extra-gesture-files",
+        nargs=4,
+        default=None,
+        help="Optional extra files (down left right up) appended to training set",
     )
     args = ap.parse_args()
 
@@ -248,13 +269,22 @@ def main() -> None:
     x_parts: list[np.ndarray] = []
     y_parts: list[np.ndarray] = []
     per_file: list[tuple[str, np.ndarray, np.ndarray]] = []
-    for cls, rel in enumerate(args.gesture_files):
-        p = (repo_root / rel).resolve()
-        x = extract_windows(cfg, p)
-        y = np.full(x.shape[0], cls, dtype=np.int64)
-        x_parts.append(x)
-        y_parts.append(y)
-        per_file.append((p.name, x, y))
+    if args.gesture_files:
+        class_files = [[(repo_root / rel).resolve()] for rel in args.gesture_files]
+    else:
+        weight_set_dir = (repo_root / args.weight_set_dir).resolve()
+        class_files = collect_weight_set_files(weight_set_dir)
+    if args.extra_gesture_files:
+        for cls, rel in enumerate(args.extra_gesture_files):
+            class_files[cls].append((repo_root / rel).resolve())
+
+    for cls, files in enumerate(class_files):
+        for p in files:
+            x = extract_windows(cfg, p)
+            y = np.full(x.shape[0], cls, dtype=np.int64)
+            x_parts.append(x)
+            y_parts.append(y)
+            per_file.append((str(p.relative_to(repo_root)), x, y))
 
     x_all = np.concatenate(x_parts, axis=0)
     y_all = np.concatenate(y_parts, axis=0)
