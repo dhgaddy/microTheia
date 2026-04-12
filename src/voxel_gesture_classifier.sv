@@ -21,7 +21,9 @@ module voxel_gesture_classifier #(
     
     output logic [1:0] gesture,
     output logic       gesture_valid,
-    output logic       gesture_confidence
+    output logic       gesture_confidence,
+    //debug bus output
+    output logic [10:0] class_dbg
 );
 
     localparam int ADDR_BITS = $clog2(NUM_CLASSES);
@@ -181,5 +183,18 @@ module voxel_gesture_classifier #(
             end
         end
     end
+
+    //debug bus connections
+    assign class_dbg[0] = thresh_rd_valid;
+    assign class_dbg[1] = thresh_rd_addr[0];
+    assign class_dbg[2] = thresh_rd_addr[1];
+    assign class_dbg[3] = class_gesture[0];
+    assign class_dbg[4] = class_gesture[1];
+    assign class_dbg[5] = class_valid;
+    assign class_dbg[6] = class_pass;
+    assign class_dbg[7] = gesture[0];
+    assign class_dbg[8] = gesture[1];
+    assign class_dbg[9] = gesture_valid;
+    assign class_dbg[10] = gesture_confidence;
 
 endmodule
