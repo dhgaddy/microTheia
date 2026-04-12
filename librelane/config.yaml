@@ -25,6 +25,18 @@ meta:
     #Checker.LVS: null
 
 DESIGN_NAME: chip_top
+
+# Avalon 3.3V standard cell library (replaces default 5V gf180mcu_fd_sc_mcu7t5v0)
+STD_CELL_LIBRARY: gf180mcu_as_sc_mcu7t3v3
+STD_CELL_LIBRARY_OPT: gf180mcu_as_sc_mcu7t3v3
+
+# CVC is not supported for the Avalon 3.3V library
+RUN_CVC: 0
+
+# Provide merged GDS so KLayout XOR can check 3.3V std cell layouts
+EXTRA_GDS_FILES:
+- pdk_dir::libs.ref/gf180mcu_as_sc_mcu7t3v3/gds/gf180mcu_as_sc_mcu7t3v3__merged.gds
+
 VERILOG_FILES:
 - dir::../src/chip_top.sv
 - dir::../src/chip_core.sv
@@ -110,28 +122,19 @@ MAGIC_GDS_FLATGLOB:
 - "M1_P*"
 - "M2_M1*"
 - "M3_M2*"
-- "nmos_5p0*"
+# nmos_5p0* / pmos_5p0* removed: those are 5V std cell internal subcells,
+# not present in the Avalon 3.3V library GDS.
 - "nmos_1p2*"
-- "pmos_5p0*"
 - "pmos_1p2*"
 - "via1_*"
 - "ypass_gate*"
 - "G_ring_*"
-# These additional cells must be flattened to get rid of 3.3V devices
-# (DUALGATE drawn into high-level cells)
-- "dcap_103*"
-- "din_*"
-- "mux821_*"
-- "rdummy_*"
-- "pmoscap_*"
-- "xdec_*"
-- "ypredec*"
-- "xpredec*"
-- "prexdec_*"
-- "xdec8_*"
-- "xdec16_*"
-- "xdec32_*"
-- "sa_*"
+# The following patterns were internal subcell names of the foundry 5V SRAM GDS
+# (gf180mcu_fd_ip_sram). They are NOT needed for the OCD 3.3V SRAMs, which have
+# a different internal layout. If Magic DRC reports false positives inside the
+# OCD SRAM GDS cells, inspect the subcell names and add matching patterns here.
+# - "dcap_103*" "din_*" "mux821_*" "rdummy_*" "pmoscap_*" "xdec_*"
+# - "ypredec*" "xpredec*" "prexdec_*" "xdec8_*" "xdec16_*" "xdec32_*" "sa_*"
 
 # Since we cannot meet the minimum density limit on Metal2,
 # ignore active metal on previous and subsequent layers
@@ -174,22 +177,62 @@ MACROS:
         location: ["expr::$DIE_AREA[2] + -169.25", "expr::$DIE_AREA[3] + -169.25"]
         orientation: N
 
-  gf180mcu_fd_ip_sram__sram512x8m8wm1:
+  # OCD 3.3V SRAMs — gf180mcu_ocd_ip_sram repo (RTimothyEdwards)
+  # Macro ports are identical to the 5V fd_ip_sram set; only the module
+  # names and address widths differ.  Files land under:
+  #   dependencies/pdks/gf180mcuD/libs.ref/gf180mcu_ocd_ip_sram/
+  # after running: make clone-ocd-sram
+
+  gf180mcu_ocd_ip_sram__sram256x8m8wm1:
     gds:
-      - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/gds/gf180mcu_fd_ip_sram__sram512x8m8wm1.gds
+      - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/gds/gf180mcu_ocd_ip_sram__sram256x8m8wm1.gds
     lef:
-      - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/lef/gf180mcu_fd_ip_sram__sram512x8m8wm1.lef
+      - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lef/gf180mcu_ocd_ip_sram__sram256x8m8wm1.lef
     vh:
-      - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/verilog/gf180mcu_fd_ip_sram__sram512x8m8wm1__blackbox.v
+      - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/verilog/gf180mcu_ocd_ip_sram__sram256x8m8wm1.blackbox.v
     lib:
-      "*_tt_025C_5v00":
-        - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/lib/gf180mcu_fd_ip_sram__sram512x8m8wm1__tt_025C_5v00.lib
-      "*_ff_n40C_5v50":
-        - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/lib/gf180mcu_fd_ip_sram__sram512x8m8wm1__ff_n40C_5v50.lib
-      "*_ss_125C_4v50":
-        - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/lib/gf180mcu_fd_ip_sram__sram512x8m8wm1__ss_125C_4v50.lib
+      # sram256x8 has a native TT corner — use it directly.
+      "*_tt_025C_3v30":
+        - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lib/gf180mcu_ocd_ip_sram__sram256x8m8wm1__tt_025C_3v30.lib
+      "*_ff_n40C_3v60":
+        - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lib/gf180mcu_ocd_ip_sram__sram256x8m8wm1__ff_n40C_3v60.lib
+      "*_ss_125C_3v00":
+        - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lib/gf180mcu_ocd_ip_sram__sram256x8m8wm1__ss_125C_3v00.lib
+
+  gf180mcu_ocd_ip_sram__sram512x8m8wm1:
+    gds:
+      - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/gds/gf180mcu_ocd_ip_sram__sram512x8m8wm1.gds
+    lef:
+      - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lef/gf180mcu_ocd_ip_sram__sram512x8m8wm1.lef
+    vh:
+      - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/verilog/gf180mcu_ocd_ip_sram__sram512x8m8wm1.blackbox.v
+    lib:
+      # sram512x8 has no TT corner lib; use ff_n40C as a conservative substitute.
+      "*_tt_025C_3v30":
+        - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lib/gf180mcu_ocd_ip_sram__sram512x8m8wm1__ff_n40C_3v60.lib
+      "*_ff_n40C_3v60":
+        - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lib/gf180mcu_ocd_ip_sram__sram512x8m8wm1__ff_n40C_3v60.lib
+      "*_ss_125C_3v00":
+        - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lib/gf180mcu_ocd_ip_sram__sram512x8m8wm1__ss_125C_3v00.lib
+
+  gf180mcu_ocd_ip_sram__sram1024x8m8wm1:
+    gds:
+      - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/gds/gf180mcu_ocd_ip_sram__sram1024x8m8wm1.gds
+    lef:
+      - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lef/gf180mcu_ocd_ip_sram__sram1024x8m8wm1.lef
+    vh:
+      - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/verilog/gf180mcu_ocd_ip_sram__sram1024x8m8wm1.blackbox.v
+    lib:
+      # sram1024x8 has no TT corner lib; use ff_n40C as a conservative substitute.
+      "*_tt_025C_3v30":
+        - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lib/gf180mcu_ocd_ip_sram__sram1024x8m8wm1__ff_n40C_3v60.lib
+      "*_ff_n40C_3v60":
+        - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lib/gf180mcu_ocd_ip_sram__sram1024x8m8wm1__ff_n40C_3v60.lib
+      "*_ss_125C_3v00":
+        - pdk_dir::libs.ref/gf180mcu_ocd_ip_sram/lib/gf180mcu_ocd_ip_sram__sram1024x8m8wm1__ss_125C_3v00.lib
     instances:
-      # Make sure to specify the SRAMs in pdn_cfg.tcl
+      # Placement TBD when chip_core.sv is written.
+      # These two are placeholders matching the existing PDN entries.
       i_chip_core.sram_0:
         location: [490, 500]
         orientation: N

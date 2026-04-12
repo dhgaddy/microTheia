@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) 2024-2025 Group G Contributors
+# Copyright (c) 2026 Group G Contributors
 import random
 
 import cocotb
@@ -16,6 +16,9 @@ CFG = load_config(MODULE)
 GRID_SIZE     = CFG["GRID_SIZE"]
 SENSOR_WIDTH  = CFG["SENSOR_WIDTH"]
 SENSOR_HEIGHT = CFG["SENSOR_HEIGHT"]
+MAP_SWAP_XY = CFG.get("MAP_SWAP_XY", 0)
+MAP_FLIP_X = CFG.get("MAP_FLIP_X", 0)
+MAP_FLIP_Y = CFG.get("MAP_FLIP_Y", 0)
 
 REQUIRE_TIME_HIGH = 1
 
@@ -45,8 +48,18 @@ class Evt2DecoderModel:
     def _grid_map(x_raw, y_raw):
         x_clamped = x_raw if x_raw < SENSOR_WIDTH else SENSOR_WIDTH - 1
         y_clamped = y_raw if y_raw < SENSOR_HEIGHT else SENSOR_HEIGHT - 1
-        x_grid = x_clamped // (SENSOR_WIDTH // GRID_SIZE)
-        y_grid = y_clamped // (SENSOR_HEIGHT // GRID_SIZE)
+
+        x_swapped = y_clamped if MAP_SWAP_XY else x_clamped
+        y_swapped = x_clamped if MAP_SWAP_XY else y_clamped
+        x_oriented = x_swapped if x_swapped < SENSOR_WIDTH else SENSOR_WIDTH - 1
+        y_oriented = y_swapped if y_swapped < SENSOR_HEIGHT else SENSOR_HEIGHT - 1
+        if MAP_FLIP_X:
+            x_oriented = (SENSOR_WIDTH - 1) - x_oriented
+        if MAP_FLIP_Y:
+            y_oriented = (SENSOR_HEIGHT - 1) - y_oriented
+
+        x_grid = x_oriented // (SENSOR_WIDTH // GRID_SIZE)
+        y_grid = y_oriented // (SENSOR_HEIGHT // GRID_SIZE)
         x_grid = min(x_grid, GRID_SIZE - 1)
         y_grid = min(y_grid, GRID_SIZE - 1)
         return x_grid, y_grid
@@ -174,8 +187,11 @@ async def test_coordinate_clamp_and_timestamp(dut):
     word = build_evt2_cd(EVT_CD_ON, 0x7FF, 0x7FF, 0x2A)
     await drive_and_check(dut, model, 0, word, 1, 1, "clamp")
 
-    assert int(dut.x_out.value) == GRID_SIZE - 1
-    assert int(dut.y_out.value) == GRID_SIZE - 1
+    exp_x, exp_y = model._grid_map(0x7FF, 0x7FF)
+    assert int(dut.x_out.value) == exp_x, \
+        f"clamp x_out mismatch: got {int(dut.x_out.value)} exp {exp_x}"
+    assert int(dut.y_out.value) == exp_y, \
+        f"clamp y_out mismatch: got {int(dut.y_out.value)} exp {exp_y}"
 
 
 @logged_test()
@@ -206,7 +222,7 @@ async def test_randomized_golden_scoreboard(dut):
 
 @logged_test()
 async def test_grid_coordinate_lower_boundaries(dut):
-    """Sensor coordinate at exact lower boundary of each grid cell maps to correct cell."""
+    """Sensor lower boundaries map correctly after configured orientation transform."""
     await setup(dut)
     model = Evt2DecoderModel()
 
@@ -223,8 +239,13 @@ async def test_grid_coordinate_lower_boundaries(dut):
         word = build_evt2_cd(EVT_CD_ON, x_sensor, 0, g & 0x3F)
         await drive_and_check(dut, model, 0, word, 1, 1, f"x-lb-{g}")
         assert int(dut.event_valid.value) == 1
-        assert int(dut.x_out.value) == g, \
-            f"x_sensor={x_sensor} should map to grid {g}, got {int(dut.x_out.value)}"
+        exp_x, exp_y = model._grid_map(x_sensor, 0)
+        got_x = int(dut.x_out.value)
+        got_y = int(dut.y_out.value)
+        assert got_x == exp_x, \
+            f"x_sensor={x_sensor} should map to x={exp_x}, got {got_x}"
+        assert got_y == exp_y, \
+            f"x_sensor={x_sensor} should map to y={exp_y}, got {got_y}"
 
 
 @logged_test()
@@ -249,7 +270,7 @@ async def test_unknown_packet_types_no_event(dut):
 
 @logged_test()
 async def test_consecutive_cd_events_all_valid(dut):
-    """Back-to-back CD events (no stall) all produce event_valid on successive cycles."""
+    """Back-to-back CD events (no stall) produce valid transformed coordinates."""
     await setup(dut)
     model = Evt2DecoderModel()
 
@@ -269,11 +290,16 @@ async def test_consecutive_cd_events_all_valid(dut):
         ((5 * GRID_SIZE) // 8, GRID_SIZE // 8),
     ]
     for i, (gx, gy) in enumerate(coords):
-        word = build_evt2_cd(EVT_CD_ON, gx * step, gy * step, i & 0x3F)
+        x_sensor = gx * step
+        y_sensor = gy * step
+        word = build_evt2_cd(EVT_CD_ON, x_sensor, y_sensor, i & 0x3F)
         await drive_and_check(dut, model, 0, word, 1, 1, f"cd-{i}")
         assert int(dut.event_valid.value) == 1, f"No event_valid for CD event {i}"
-        assert int(dut.x_out.value) == gx, f"x_out mismatch at event {i}"
-        assert int(dut.y_out.value) == gy, f"y_out mismatch at event {i}"
+        exp_x, exp_y = model._grid_map(x_sensor, y_sensor)
+        assert int(dut.x_out.value) == exp_x, \
+            f"x_out mismatch at event {i}: got {int(dut.x_out.value)} exp {exp_x}"
+        assert int(dut.y_out.value) == exp_y, \
+            f"y_out mismatch at event {i}: got {int(dut.y_out.value)} exp {exp_y}"
 
 
 @logged_test()

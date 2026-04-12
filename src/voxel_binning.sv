@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) 2024-2025 Group G Contributors
+// Copyright (c) 2026 Group G Contributors
 `timescale 1ns/1ps
 
 // Features emitted oldest->newest bins, row-major within each bin (y major, x minor).
@@ -16,6 +16,7 @@
 // one cycle after the corresponding read.  Readout takes FEATURE_COUNT + 1 cycles
 // (one extra drain cycle to collect the final Q).
 
+//
 module voxel_binning #(
     parameter  int CLK_FREQ_HZ    = 12_000_000,
     parameter  int WINDOW_MS      = 1000,
@@ -37,7 +38,8 @@ module voxel_binning #(
     output logic                              readout_valid,
     output logic [COUNTER_BITS-1:0]           readout_data,
     output logic [$clog2(RO_INDEX_WIDTH)-1:0] readout_index,
-    output logic                              readout_last
+    output logic                              readout_last,
+    output logic [30:0]                       vox_bin_dbg //debug bus, only 31 bits NOT 32
 );
 
     localparam int CELLS_PER_BIN       = GRID_SIZE * GRID_SIZE;
@@ -337,5 +339,13 @@ module voxel_binning #(
             endcase
         end
     end
+
+    //debug bus connections
+    assign vox_bin_dbg[0] = event_ready;
+    assign vox_bin_dbg[1] = readout_start;
+    assign vox_bin_dbg[2] = readout_valid;
+    assign vox_bin_dbg[3] = readout_last;
+    assign vox_bin_dbg[14:4] =  readout_index;
+    assign vox_bin_dbg[30:15] = readout_data;
 
 endmodule

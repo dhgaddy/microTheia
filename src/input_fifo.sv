@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) 2024-2025 Group G Contributors
+// Copyright (c) 2026 Group G Contributors
 `timescale 1ns/1ps
 
 module input_fifo #(
@@ -12,7 +12,8 @@ module input_fifo #(
     input  logic                  valid_i,
     output logic                  ready_o, 
     output logic                  valid_o,
-    output logic [DATA_WIDTH-1:0] data_o 
+    output logic [DATA_WIDTH-1:0] data_o,
+    output logic [3:0] in_fifo_dbg // debug bus 
 );
 
     localparam int FIFO_DEPTH_LOG2 = $clog2(FIFO_DEPTH);
@@ -126,5 +127,8 @@ module input_fifo #(
             rd_pending  <= rd_pending_n;
         end
     end
+
+    //debug bus connections
+    assign in_fifo_dbg = {valid_o, ready_o, valid_i, ready_i};
 
 endmodule
