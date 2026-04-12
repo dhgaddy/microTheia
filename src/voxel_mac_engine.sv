@@ -24,7 +24,7 @@ module voxel_mac_engine #(
     output logic [NUM_CLASSES*SCORE_BITS-1:0]  scores_flat,
     output logic                               scores_valid,
     // output ports for debug
-    output logic [13:0]                        mac_dbg,
+    output logic [14:0]                        mac_dbg,
     output logic [31:0]                        score_A, score_B, score_C, score_D //scores are all truncated to 32 bits
 );
 
