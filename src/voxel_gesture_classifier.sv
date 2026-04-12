@@ -183,6 +183,8 @@ module voxel_gesture_classifier #(
             end
         end
     end
+
+    //debug bus connections
     assign class_dbg[0] = thresh_rd_valid;
     assign class_dbg[1] = thresh_rd_addr[0];
     assign class_dbg[2] = thresh_rd_addr[1];

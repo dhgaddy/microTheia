@@ -7,9 +7,7 @@ module voxel_mac_engine #(
     parameter int COUNTER_BITS  = 16,
     parameter int WEIGHT_BITS   = 8,
     parameter int NUM_CLASSES   = 4,
-    //changing score bits to match voxel_gesture_classifier and debug structure
-    //need to determine if 32 bits are sufficient or if 36 is needed
-    parameter int SCORE_BITS    = 32 // original: COUNTER_BITS + WEIGHT_BITS + $clog2(FEATURE_COUNT) + 1 = 36
+    parameter int SCORE_BITS    = COUNTER_BITS + WEIGHT_BITS + $clog2(FEATURE_COUNT) + 1
 )(
     input  logic clk,
     input  logic rst,
@@ -27,7 +25,7 @@ module voxel_mac_engine #(
     output logic                               scores_valid,
     // output ports for debug
     output logic [13:0]                        mac_dbg,
-    output logic [31:0]                        score_A, score_B, score_C, score_D
+    output logic [31:0]                        score_A, score_B, score_C, score_D //scores are all truncated to 32 bits
 );
 
     localparam int ADDR_BITS   = $clog2(FEATURE_COUNT);
@@ -55,11 +53,14 @@ module voxel_mac_engine #(
         for (int g = 0; g < NUM_CLASSES; g++)
             scores_flat[g*SCORE_BITS +: SCORE_BITS] = score_acc[g];
     end
+
+    
     //score busses for debug pins
-    assign score_A = scores_flat[31:0];
-    assign score_B = scores_flat[63:32];
-    assign score_C = scores_flat[95:64];
-    assign score_D = scores_flat[123:96];
+    //only taking lower 32 bits from each score
+    assign score_A = scores_flat[31:0];       // from [35:0]
+    assign score_B = scores_flat[67:36];      // from [71:36]
+    assign score_C = scores_flat[103:72];     // from [107:72]
+    assign score_D = scores_flat[139:108];    // from [143:108]
 
     always_ff @(posedge clk) begin
         if (rst) begin
@@ -118,6 +119,7 @@ module voxel_mac_engine #(
         end
     end
 
+    //debug bus connections
     assign mac_dbg[0] = start;
     assign mac_dbg[1] = busy;
     assign mac_dbg[2] = rd_en;
@@ -132,5 +134,6 @@ module voxel_mac_engine #(
     assign mac_dbg[11] = rd_addr[7];
     assign mac_dbg[12] = rd_addr[8];
     assign mac_dbg[13] = rd_addr[9];
+    assign mac_dbg[14] = rd_addr[10];
 
 endmodule

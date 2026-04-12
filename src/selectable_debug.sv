@@ -2,9 +2,12 @@
 // Copyright (c) 2026 Group G Contributors
 `timescale 1ns/1ps
 
+
+//bus widths are NOT parameterized
+//all connections are for SPECIFIC pins
 module selectable_debug #()(
     output [31:0] debug_bus,
-    input [10:0] classifier_dbg,
+    input [10:0] class_dbg,
     input [14:0] mac_dbg,
     input [30:0] vox_bin_dbg,
     input [11:0] decoder_dbg,
@@ -17,7 +20,7 @@ module selectable_debug #()(
 );
 
 //select debug page to connect to 32 bit debug interface
-//recieves debug select signal over SPI
+//receives debug select signal over SPI
 
 /*
 PAGE 0 (debug_select = 4'b0000): voxel_gesture_classifier and voxel_mac_engine debug
@@ -38,15 +41,15 @@ bit index       description
 13              rd_en
 14              scores_valid
 15              read_address[0]
-16              read_address[0]
-17              read_address[0]
-18              read_address[0] 
-19              read_address[0]
-20              read_address[0]
-21              read_address[0]
-22              read_address[0]
-23              read_address[0]
-24              read_address[0]
+16              read_address[1]
+17              read_address[2]
+18              read_address[3] 
+19              read_address[4]
+20              read_address[5]
+21              read_address[6]
+22              read_address[7]
+23              read_address[8]
+24              read_address[9]
 25              tied to ground
 26              tied to ground
 27              tied to ground
@@ -100,7 +103,7 @@ bit index       description
 4               x_out[2]
 5               x_out[3]
 6               y_out[0]
-7               y_out[2]
+7               y_out[1]
 8               y_out[2]
 9               y_out[3]
 10              data_valid 
@@ -128,73 +131,21 @@ bit index       description
 
 PAGE 3 (debug_select = 4'b0011): reserved for control module debug signals
 bit index       description
-0               
-1               
-2              
-3          
-4              
-5              
-6              
-7               
-8             
-9               
-10              
-11              
-12             
-13              
-14              
-15              
-16              
-17              
-18              
-19              
-20              
-21              
-22              
-23              
-24              
-25              
-26              
-27              
-28              
-29              
-30              
-31              
+[31:0]          reserved         
 
 PAGE 4 (debug_select = 4'b0100): evt2_decoder event output
 bit index       description
-0               decoder_out[0]
-1               decoder_out[1]
-2               decoder_out[2]
-3               decoder_out[3]
-4               decoder_out[4]
-5               decoder_out[5]
-6               decoder_out[6]
-7               decoder_out[7]
-8               decoder_out[8]
-9               decoder_out[9]
-10              decoder_out[10]
-11              decoder_out[11]    
-12              decoder_out[12]       
-13              decoder_out[13]
-14              decoder_out[14]
-15              decoder_out[15]
-16              decoder_out[16]
-17              decoder_out[17]
-18              decoder_out[18]
-19              decoder_out[19]
-20              decoder_out[20]
-21              decoder_out[21]
-22              decoder_out[22]
-23              decoder_out[23]
-24              decoder_out[24]
-25              decoder_out[25]
-26              decoder_out[26]
-27              decoder_out[27]
-28              decoder_out[28]
-29              decoder_out[29]
-30              decoder_out[30]
-31              decoder_out[31]
+0               x_out[0]
+1               x_out[1]
+2               x_out[2]
+3               x_out[3]
+4               y_out[0]
+5               y_out[1]
+6               y_out[2]
+7               y_out[3]
+8               event_valid
+9               data_ready
+[31:10]         tied to ground
 
 PAGE 5 (debug_select = 4'b0101): input to input_FIFO
 [31:0] = [31:0] input_FIFO_in
@@ -231,7 +182,7 @@ logic [31:0] selected_debug;
 always_comb begin
     unique case (debug_select)
             PAGE_0: begin
-                selected_debug = {6'b0, mac_dbg , classifier_dbg};
+                selected_debug = {6'b0, mac_dbg , class_dbg};
             end
             PAGE_1: begin
                 selected_debug = {1'b0, vox_bin_dbg};
@@ -244,7 +195,7 @@ always_comb begin
             end
             */
             PAGE_4: begin
-                selected_debug = decoder_output;
+                selected_debug = {22'b0,decoder_output};
             end
             PAGE_5: begin
                 selected_debug = fifo_in;
@@ -264,7 +215,7 @@ always_comb begin
             PAGE_10: begin
                 selected_debug = score_D;
             end
-            default: selected_debug = {7'b0, mac_dbg , classifier_dbg};
+            default: selected_debug = {6'b0, mac_dbg , class_dbg};
     endcase
 end
 
