@@ -1321,4 +1321,3 @@ async def test_coordinate_orientation_sweep(dut):
 
     best_mode = max(modes, key=lambda m: mode_hits[m])
     cocotb.log.info(f"[orientation] best_mode={best_mode}")
-

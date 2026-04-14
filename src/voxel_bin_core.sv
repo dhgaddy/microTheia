@@ -246,16 +246,16 @@ module voxel_bin_core #(
         .MAP_FLIP_X       (MAP_FLIP_X),
         .MAP_FLIP_Y       (MAP_FLIP_Y)
     ) u_evt2_decoder (
-        .clk          (clk),
-        .rst          (rst),
-        .data_in      (fifo_out_data),
-        .data_valid   (fifo_out_valid),
-        .event_ready_i(binner_event_ready),
-        .data_ready   (dec_data_ready),
-        .x_out        (dec_x16),
-        .y_out        (dec_y16),
-        .event_valid  (dec_event_valid),
-        .decoder_dbg  (decoder_dbg),
+        .clk               (clk),
+        .rst               (rst),
+        .data_in           (fifo_out_data),
+        .data_valid        (fifo_out_valid),
+        .event_ready_i     (binner_event_ready),
+        .data_ready        (dec_data_ready),
+        .x_out             (dec_x16),
+        .y_out             (dec_y16),
+        .event_valid       (dec_event_valid),
+        .decoder_dbg       (decoder_dbg),
         .decoder_output_dbg(decoder_output_dbg)
     );
 
@@ -391,24 +391,25 @@ module voxel_bin_core #(
         .gesture_confidence(gesture_confidence),
         .class_dbg         (class_dbg)
     );
-    selectable_debug #() select_debug_module (
-    .debug_bus(debug_bus),
-    .class_dbg(class_dbg),
-    .mac_dbg(mac_dbg),
-    .vox_bin_dbg(vox_bin_dbg),
-    .decoder_dbg(decoder_dbg),
-    .decoder_output(decoder_output_dbg),
-    .in_fifo_dbg(in_fifo_dbg),
-    .vox_core_debug(vox_core_debug),
-    .score_A(score_A),
-    .score_B(score_B),
-    .score_C(score_C),
-    .score_D(score_D),
-    .fifo_in(evt_word),
-    .fifo_out(fifo_out_data),
-    //input [31:0] control_dbg,
-    .debug_select(debug_select) 
-);
+
+    selectable_debug select_debug_module (
+        .debug_bus(debug_bus),
+        .class_dbg(class_dbg),
+        .mac_dbg(mac_dbg),
+        .vox_bin_dbg(vox_bin_dbg),
+        .decoder_dbg(decoder_dbg),
+        .decoder_output(decoder_output_dbg),
+        .in_fifo_dbg(in_fifo_dbg),
+        .vox_core_debug(vox_core_debug),
+        .score_A(score_A),
+        .score_B(score_B),
+        .score_C(score_C),
+        .score_D(score_D),
+        .fifo_in(evt_word),
+        .fifo_out(fifo_out_data),
+        //input [31:0] control_dbg,
+        .debug_select(debug_select) 
+    );
 
 assign debug_mux = debug_bus;
 endmodule
