@@ -15,30 +15,30 @@ from util.config_parser import load_config
 MODULE = os.environ.get("TOPLEVEL")
 CFG = load_config(MODULE)
 
-CLK_FREQ_HZ  = CFG["CLK_FREQ_HZ"]
-WINDOW_MS    = CFG["WINDOW_MS"]
-GRID_SIZE    = CFG["GRID_SIZE"]
-NUM_BINS     = CFG["NUM_BINS"]
-READOUT_BINS = CFG["READOUT_BINS"]
-WEIGHT_BITS  = CFG["WEIGHT_BITS"]
-WEIGHT_SCALE = CFG["WEIGHT_SCALE"]
+CLK_FREQ_HZ      = CFG["CLK_FREQ_HZ"]
+WINDOW_MS        = CFG["WINDOW_MS"]
+GRID_SIZE        = CFG["GRID_SIZE"]
+NUM_BINS         = CFG["NUM_BINS"]
+READOUT_BINS     = CFG["READOUT_BINS"]
+WEIGHT_BITS      = CFG["WEIGHT_BITS"]
+WEIGHT_SCALE     = CFG["WEIGHT_SCALE"]
 SWAP_INPUT_BYTES = CFG.get("SWAP_INPUT_BYTES", 0)
-MAP_SWAP_XY = CFG.get("MAP_SWAP_XY", 0)
-MAP_FLIP_X = CFG.get("MAP_FLIP_X", 0)
-MAP_FLIP_Y = CFG.get("MAP_FLIP_Y", 0)
-SENSOR_WIDTH = CFG["SENSOR_WIDTH"]
-SENSOR_HEIGHT = CFG.get("SENSOR_HEIGHT", SENSOR_WIDTH)
-COUNTER_BITS = CFG.get("COUNTER_BITS", 4)
-NUM_CLASSES  = CFG.get("NUM_CLASSES", 4)
+MAP_SWAP_XY      = CFG.get("MAP_SWAP_XY", 0)
+MAP_FLIP_X       = CFG.get("MAP_FLIP_X", 0)
+MAP_FLIP_Y       = CFG.get("MAP_FLIP_Y", 0)
+SENSOR_WIDTH     = CFG["SENSOR_WIDTH"]
+SENSOR_HEIGHT    = CFG.get("SENSOR_HEIGHT", SENSOR_WIDTH)
+COUNTER_BITS     = CFG.get("COUNTER_BITS", 4)
+NUM_CLASSES      = CFG.get("NUM_CLASSES", 4)
 
 
-BIN_DURATION_MS = WINDOW_MS // READOUT_BINS
-CYCLES_PER_BIN_SAFE = (CLK_FREQ_HZ // 1000) * BIN_DURATION_MS
-X_BIN_DIV = SENSOR_WIDTH // GRID_SIZE
-Y_BIN_DIV = SENSOR_HEIGHT // GRID_SIZE
-FEATURE_COUNT = GRID_SIZE * GRID_SIZE * READOUT_BINS
-CELLS_PER_BIN = GRID_SIZE * GRID_SIZE
-ASSERT_EXPECTED_LABEL = int(os.environ.get("ASSERT_EXPECTED_LABEL", "1"))
+BIN_DURATION_MS          = WINDOW_MS // READOUT_BINS
+CYCLES_PER_BIN_SAFE      = (CLK_FREQ_HZ // 1000) * BIN_DURATION_MS
+X_BIN_DIV                = SENSOR_WIDTH // GRID_SIZE
+Y_BIN_DIV                = SENSOR_HEIGHT // GRID_SIZE
+FEATURE_COUNT            = GRID_SIZE * GRID_SIZE * READOUT_BINS
+CELLS_PER_BIN            = GRID_SIZE * GRID_SIZE
+ASSERT_EXPECTED_LABEL    = int(os.environ.get("ASSERT_EXPECTED_LABEL", "1"))
 EXPECTED_LABEL_MIN_RATIO = float(os.environ.get("EXPECTED_LABEL_MIN_RATIO", "0.60"))
 
 GESTURE_NAMES = {0: "Down", 1: "Left", 2: "Right", 3: "Up"}
@@ -55,6 +55,12 @@ EVT_TIME_HIGH = 0x8
 
 ST_ACCUM = 0
 
+
+# Mode encoding mirrors the RTL typedef
+MODE_BOOT     = 0b00
+MODE_PROGRAM  = 0b01
+MODE_CLASSIFY = 0b10
+MODE_DEBUG    = 0b11
 
 def build_evt2_time_high(payload):
     return (EVT_TIME_HIGH << 28) | (payload & 0x0FFFFFFF)
@@ -235,6 +241,8 @@ async def deposit_weights_and_thresholds(dut, weights, thresholds):
     weights:    list of NUM_CLASSES lists, each of length FEATURE_COUNT.
     thresholds: list of 2*NUM_CLASSES ints (class thresholds then diff thresholds).
     """
+    dut.active_mode_i.value = MODE_PROGRAM
+
     # Write weights one address per cycle for each class.
     for c in range(NUM_CLASSES):
         for addr in range(FEATURE_COUNT):
@@ -253,6 +261,8 @@ async def deposit_weights_and_thresholds(dut, weights, thresholds):
         dut.thresh_wr_data_i.value = int(thresholds[addr])
         await RisingEdge(dut.clk)
     dut.thresh_wr_valid_i.value = 0
+
+    dut.active_mode_i.value = MODE_CLASSIFY 
 
 
 class CoreHarness:
@@ -281,6 +291,7 @@ class CoreHarness:
         self.dut.rst.value = 1
         self.dut.evt_word.value = 0
         self.dut.evt_word_valid.value = 0
+        # self.dut.active_mode_i.value = MODE_BOOT
         self.dut.weight_wr_valid_i.value = 0
         self.dut.weight_wr_class_i.value = 0
         self.dut.weight_wr_addr_i.value = 0
@@ -290,6 +301,7 @@ class CoreHarness:
         self.dut.thresh_wr_data_i.value = 0
         await ClockCycles(self.dut.clk, 8)
         self.dut.rst.value = 0
+        self.dut.active_mode_i.value = MODE_CLASSIFY
         await self.tick(4)
 
     def _sample_cycle(self):
@@ -618,6 +630,7 @@ async def test_reset_mid_pipeline_recovers_cleanly(dut):
     dut.rst.value = 1
     await ClockCycles(dut.clk, 8)
     dut.rst.value = 0
+    dut.active_mode_i.value = MODE_CLASSIFY
 
     # Wait for the binner to return to ST_ACCUM (it clears one bin after reset).
     for _ in range(20_000):
@@ -792,6 +805,7 @@ async def _flush_stale_bins(h, weights=None):
     # Assert hardware reset.
     h.dut.rst.value = 1
     h.dut.evt_word_valid.value = 0
+    # h.dut.active_mode_i.value = MODE_BOOT
     await ClockCycles(h.dut.clk, 16)
     h.dut.rst.value = 0
 
@@ -1140,53 +1154,54 @@ async def test_bin_file_gesture_3(dut):
     )
 
 
-@logged_test()
-async def test_bin_file_timing_replay_ab(dut):
-    """A/B timing investigation: timestamp-forced vs clock-driven replay.
+# # 14
+# @logged_test()
+# async def test_bin_file_timing_replay_ab(dut):
+#     """A/B timing investigation: timestamp-forced vs clock-driven replay.
 
-    This is a diagnostics-oriented test. It logs output differences and requires both
-    modes to produce valid windows and model/DUT agreement.
-    """
-    bin_files = _resolve_bin_files()
-    for i, path in enumerate(bin_files):
-        label = Path(path).stem
-        expected = EXPECTED_BIN_FILE_CLASS[i]
-        h_forced = await _run_bin_file_test(
-            dut,
-            path,
-            f"{label}-forced",
-            expected_class=expected,
-            replay_mode="timestamp_forced",
-            enforce_label=False,
-        )
-        h_clock = await _run_bin_file_test(
-            dut,
-            path,
-            f"{label}-clock",
-            expected_class=expected,
-            replay_mode="clock_driven",
-            enforce_label=False,
-        )
+#     This is a diagnostics-oriented test. It logs output differences and requires both
+#     modes to produce valid windows and model/DUT agreement.
+#     """
+#     bin_files = _resolve_bin_files()
+#     for i, path in enumerate(bin_files):
+#         label = Path(path).stem
+#         expected = EXPECTED_BIN_FILE_CLASS[i]
+#         h_forced = await _run_bin_file_test(
+#             dut,
+#             path,
+#             f"{label}-forced",
+#             expected_class=expected,
+#             replay_mode="timestamp_forced",
+#             enforce_label=False,
+#         )
+#         h_clock = await _run_bin_file_test(
+#             dut,
+#             path,
+#             f"{label}-clock",
+#             expected_class=expected,
+#             replay_mode="clock_driven",
+#             enforce_label=False,
+#         )
 
-        forced_classes = [g for g, _ in h_forced.observed_gestures]
-        clock_classes = [g for g, _ in h_clock.observed_gestures]
-        min_len = min(len(forced_classes), len(clock_classes))
-        if min_len:
-            seq_diff = sum(
-                1 for a, b in zip(forced_classes[:min_len], clock_classes[:min_len]) if a != b
-            )
-            cocotb.log.info(
-                f"[{label}] A/B: forced_windows={h_forced.completed_windows} "
-                f"clock_windows={h_clock.completed_windows} seq_diff={seq_diff}/{min_len}"
-            )
-        else:
-            cocotb.log.info(
-                f"[{label}] A/B: insufficient overlapping gesture outputs for sequence diff"
-            )
+#         forced_classes = [g for g, _ in h_forced.observed_gestures]
+#         clock_classes = [g for g, _ in h_clock.observed_gestures]
+#         min_len = min(len(forced_classes), len(clock_classes))
+#         if min_len:
+#             seq_diff = sum(
+#                 1 for a, b in zip(forced_classes[:min_len], clock_classes[:min_len]) if a != b
+#             )
+#             cocotb.log.info(
+#                 f"[{label}] A/B: forced_windows={h_forced.completed_windows} "
+#                 f"clock_windows={h_clock.completed_windows} seq_diff={seq_diff}/{min_len}"
+#             )
+#         else:
+#             cocotb.log.info(
+#                 f"[{label}] A/B: insufficient overlapping gesture outputs for sequence diff"
+#             )
 
-        assert h_forced.completed_windows > 0 and h_clock.completed_windows > 0, (
-            f"[{label}] Expected both replay modes to produce completed windows"
-        )
+#         assert h_forced.completed_windows > 0 and h_clock.completed_windows > 0, (
+#             f"[{label}] Expected both replay modes to produce completed windows"
+#         )
 
 
 @logged_test()

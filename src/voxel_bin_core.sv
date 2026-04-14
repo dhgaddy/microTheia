@@ -36,7 +36,7 @@ module voxel_bin_core #(
     input  logic       rst,
 
     // Mode control
-    input  logic [1:0] active_mode_i, // 00=BOOT?, 01=PROGRAM, 10=CLASSIFY, 11=DEBUG
+    input  logic [1:0] active_mode_i, // 00=BOOT, 01=PROGRAM, 10=CLASSIFY, 11=DEBUG
 
     // Event stream in
     input  logic [31:0] evt_word,
