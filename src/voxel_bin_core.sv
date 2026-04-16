@@ -36,7 +36,7 @@ module voxel_bin_core #(
     input  logic       rst,
 
     // Mode control
-    input  logic [1:0] active_mode_i, // 00=BOOT, 01=PROGRAM, 10=CLASSIFY, 11=DEBUG
+    input  logic [2:0] active_mode_i, // 00=BOOT, 01=PROGRAM, 10=CLASSIFY, 11=DEBUG
 
     // Event stream in
     input  logic [31:0] evt_word,
@@ -82,10 +82,11 @@ module voxel_bin_core #(
 
     // Mode constants
     typedef enum logic [1:0] {
-        MODE_BOOT     = 2'b00,
-        MODE_PROGRAM  = 2'b01,
-        MODE_CLASSIFY = 2'b10,
-        MODE_DEBUG    = 2'b11
+        MODE_BOOT     = 3'b000,
+        MODE_LOAD     = 3'b001
+        MODE_PROGRAM  = 3'b010,
+        MODE_CLASSIFY = 3'b011,
+        MODE_DEBUG    = 3'b100
     } state_t;
 
     // Classification constants
@@ -94,9 +95,10 @@ module voxel_bin_core #(
     localparam int WEIGHT_ADDR_BITS = $clog2(FEATURE_COUNT);
 
     // Mode-derived enable signals
-    logic mode_program;
+    logic mode_load;
     logic mode_classify;
  
+    assign mode_load     = (active_mode_i == MODE_LOAD);
     assign mode_program  = (active_mode_i == MODE_PROGRAM);
     assign mode_classify = (active_mode_i == MODE_CLASSIFY);
  
@@ -104,8 +106,8 @@ module voxel_bin_core #(
     logic weight_wr_valid_gated;
     logic thresh_wr_valid_gated;
  
-    assign weight_wr_valid_gated = weight_wr_valid_i && mode_program;
-    assign thresh_wr_valid_gated = thresh_wr_valid_i && mode_program;
+    assign weight_wr_valid_gated = weight_wr_valid_i && mode_load;
+    assign thresh_wr_valid_gated = thresh_wr_valid_i && mode_load;
 
     // Internal wires
     logic        fifo_out_valid;
