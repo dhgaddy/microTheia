@@ -24,7 +24,8 @@ module evt2_decoder #(
     output logic [$clog2(GRID_SIZE)-1:0] x_out,
     output logic [$clog2(GRID_SIZE)-1:0] y_out,
     output logic                         event_valid,
-    output logic [11:0]                  decoder_dbg //debug bus
+    output logic [11:0]                  decoder_dbg, //debug bus
+    output logic [31:0]                  decoder_output_dbg
 );
 
     localparam int GRID_BITS = $clog2(GRID_SIZE);
