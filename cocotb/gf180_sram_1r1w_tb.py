@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright (c) 2024-2025 Group G Contributors
+# Copyright (c) 2026 Group G Contributors
 import random
 
 import cocotb
@@ -155,8 +155,11 @@ async def test_output_holds_without_rd_valid(dut):
 
 @logged_test()
 async def test_write_wins_simultaneous_wr_rd(dut):
-    """When wr_valid and rd_valid target the same address simultaneously, write takes priority.
-    A subsequent read of that address must return the newly written value."""
+    """When wr_valid and rd_valid target the same address simultaneously:
+    - Simulation model: read-before-write (rd_data_o one cycle later shows old value
+      because both NBA assignments use pre-posedge sim_mem state).
+    - Synthesis path: write wins (GWEN=0 overrides REN in the GF180 macro).
+    In both cases a subsequent independent read must return the newly written value."""
     await setup(dut)
     seed_val = 0xCC & DATA_MASK
     new_val  = 0xDD & DATA_MASK
@@ -174,10 +177,19 @@ async def test_write_wins_simultaneous_wr_rd(dut):
     dut.wr_valid_i.value = 0
     dut.rd_valid_i.value = 0
 
+    # Simultaneous rd_data_o (one cycle after the above edge): simulation model
+    # returns the old value (read-before-write NBA ordering).
+    await RisingEdge(dut.clk_i)
+    await ReadOnly()
+    sim_rd = int(dut.rd_data_o.value)
+    assert sim_rd == seed_val, \
+        f"Simultaneous rd result: expected old value 0x{seed_val:X} (read-before-write), got 0x{sim_rd:X}"
+    await NextTimeStep()
+
     # A plain subsequent read must return the newly-written value.
     got = await read_word(dut, 10)
     assert got == new_val, \
-        f"Write-wins violation: expected 0x{new_val:X}, got 0x{got:X}"
+        f"Post-simultaneous read: expected new value 0x{new_val:X}, got 0x{got:X}"
 
 
 @logged_test()
