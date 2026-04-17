@@ -1,7 +1,7 @@
 module chip_flash_fsm #(
-    parameter int unsigned PWR_WAIT_CYCLES = 1024,
-    parameter int unsigned RST_WAIT_CYCLES = 1024,
-    parameter int unsigned SPI_DIV         = 4,
+    parameter int unsigned PWR_WAIT_CYCLES     = 1024,
+    parameter int unsigned RST_WAIT_CYCLES     = 1024,
+    parameter int unsigned SPI_DIV             = 4,
     parameter bit          USE_4BYTE_ADDR      = 1'b1,
     parameter logic [31:0] FLASH_WEIGHT_BASE   = 32'h0000_0000,
     parameter logic [31:0] FLASH_THRESH_BASE   = 32'h0010_0000,
@@ -26,14 +26,14 @@ module chip_flash_fsm #(
     output logic spi_sck_o,
     output logic spi_mosi_o,
 
-    output logic                                       weight_wr_valid_o,
-    output logic [$clog2(NUM_CLASSES)-1:0]             weight_wr_class_o,
+    output logic                                                weight_wr_valid_o,
+    output logic [$clog2(NUM_CLASSES)-1:0]                      weight_wr_class_o,
     output logic [$clog2(READOUT_BINS*GRID_SIZE*GRID_SIZE)-1:0] weight_wr_addr_o,
-    output logic [WEIGHT_BITS-1:0]                     weight_wr_data_o,
+    output logic [WEIGHT_BITS-1:0]                              weight_wr_data_o,
 
-    output logic                                       thresh_wr_valid_o,
-    output logic [$clog2(2*NUM_CLASSES)-1:0]           thresh_wr_addr_o,
-    output logic [SCORE_BITS-1:0]                      thresh_wr_data_o,
+    output logic                             thresh_wr_valid_o,
+    output logic [$clog2(2*NUM_CLASSES)-1:0] thresh_wr_addr_o,
+    output logic [SCORE_BITS-1:0]            thresh_wr_data_o,
 
     output logic core_rst_o,
 

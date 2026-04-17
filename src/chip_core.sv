@@ -97,6 +97,125 @@ module chip_core #(
 
     assign bidir_out = count ^ {24'd0, sram_0_out, sram_1_out};
 
+
+    // voxel_bin_core #(
+    //     .CLK_FREQ_HZ               (),
+    //     .WINDOW_MS                 (),
+    //     .GRID_SIZE                 (),
+    //     .NUM_BINS                  (),
+    //     .READOUT_BINS              (),
+    //     .COUNTER_BITS              (),
+    //     .FIFO_DEPTH                (),
+    //     .DATA_WIDTH                (),
+    //     .REQUIRE_TIME_HIGH         (),
+    //     .SWAP_INPUT_BYTES          (),
+    //     .MAP_SWAP_XY               (),
+    //     .MAP_FLIP_X                (),
+    //     .MAP_FLIP_Y                (),
+    //     .SENSOR_WIDTH              (),
+    //     .SENSOR_HEIGHT             (),
+    //     .WEIGHT_BITS               (),
+    //     .NUM_CLASSES               (),
+    //     .CYCLES_PER_BIN            (),
+    //     .SCORE_BITS                ()
+    // ) u_voxel_bin_core (
+    //     .clk                       (clk),
+    //     .rst                       (!rst_n),
+
+    //     // Mode control
+    //     .active_mode_i             (), // 00=BOOT, 01=PROGRAM, 10=CLASSIFY, 11=DEBUG
+
+    //     // Event stream in
+    //     .evt_word                  (),
+    //     .evt_word_valid            (),
+    //     .evt_word_ready            (),
+
+    //     // Gesture 
+    //     .gesture                   (),
+    //     .gesture_valid             (),
+    //     .gesture_confidence        (),
+
+    //     // Weight SRAM write port — loads weights into the per-class SRAMs at runtime.
+    //     // Do not assert weight_wr_valid_i while the MAC engine is running (mac_busy).
+    //     .weight_wr_valid_i         (),
+    //     .weight_wr_class_i         (),
+    //     .weight_wr_addr_i          (),
+    //     .weight_wr_data_i          (),
+
+    //     // Threshold SRAM write port — addr 0-3 = class thresholds, 4-7 = diff thresholds.
+    //     .thresh_wr_valid_i         (),
+    //     .thresh_wr_addr_i          (),
+    //     .thresh_wr_data_i          (),
+
+    //     // Debug outputs
+    //     .debug_event_count         (),
+    //     .debug_fifo_empty          (),
+    //     .debug_fifo_full           (),
+    //     .debug_temporal_phase      (),
+    //     .debug_class_valid         (),
+    //     .debug_class_pass          (),
+    //     .debug_feature_window_ready(),
+    //     .debug_capture_active      (),
+    //     .debug_score_busy          (),
+
+    //     //debug mux output
+    //     .debug_mux                 (),
+
+    //     //debug mux input
+    //     .debug_select              ()
+    // );
+
+
+
+    // chip_flash_fsm #(
+    //     .PWR_WAIT_CYCLES  () 
+    //     .RST_WAIT_CYCLES  ()
+    //     .SPI_DIV          ()
+    //     .USE_4BYTE_ADDR   () 
+    //     .FLASH_WEIGHT_BASE()
+    //     .FLASH_THRESH_BASE()
+
+    //     .NUM_CLASSES      ()
+    //     .GRID_SIZE        () 
+    //     .READOUT_BINS     ()
+    //     .WEIGHT_BITS      ()
+    //     .SCORE_BITS       ()
+
+    //     .THRESH_BIG_ENDIAN()
+    // ) (
+    //     .clk              (),
+    //     .rst_n            (),
+
+    //     .boot_req_i       (),
+    //     .reload_req_i     (),
+    //     .debug_req_i      (),
+
+    //     .spi_miso_i       (),
+    //     .spi_cs_n_o       (),
+    //     .spi_sck_o        (),
+    //     .spi_mosi_o       (),
+
+    //     .weight_wr_valid_o(),
+    //     .weight_wr_class_o(),
+    //     .weight_wr_addr_o (),
+    //     .weight_wr_data_o (),
+
+    //     .thresh_wr_valid_o(),
+    //     .thresh_wr_addr_o (),
+    //     .thresh_wr_data_o (),
+
+    //     .core_rst_o       (),
+
+    //     .boot_done_o      (),
+    //     .boot_fail_o      (),
+    //     .main_state_dbg_o (),
+    //     .load_state_dbg_o (),
+    //     .id_mfr_o         (),
+    //     .id_type_o        (),
+    //     .id_capacity_o    ()
+    // );
+
+
 endmodule
 
 `default_nettype wire
