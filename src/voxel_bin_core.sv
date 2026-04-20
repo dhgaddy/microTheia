@@ -35,6 +35,9 @@ module voxel_bin_core #(
     input  logic       clk,
     input  logic       rst,
 
+    // Mode control
+    input  logic [1:0] active_mode_i, // 00=BOOT, 01=PROGRAM, 10=CLASSIFY, 11=DEBUG
+
     // Event stream in
     input  logic [31:0] evt_word,
     input  logic        evt_word_valid,
@@ -77,9 +80,32 @@ module voxel_bin_core #(
     input logic [3:0] debug_select
 );
 
+    // Mode constants
+    typedef enum logic [1:0] {
+        MODE_BOOT     = 2'b00,
+        MODE_PROGRAM  = 2'b01,
+        MODE_CLASSIFY = 2'b10,
+        MODE_DEBUG    = 2'b11
+    } state_t;
+
+    // Classification constants
     localparam int FEATURE_COUNT    = READOUT_BINS * GRID_SIZE * GRID_SIZE;
     localparam int FEATURE_BITS     = $clog2(FEATURE_COUNT);
     localparam int WEIGHT_ADDR_BITS = $clog2(FEATURE_COUNT);
+
+    // Mode-derived enable signals
+    logic mode_program;
+    logic mode_classify;
+ 
+    assign mode_program  = (active_mode_i == MODE_PROGRAM);
+    assign mode_classify = (active_mode_i == MODE_CLASSIFY);
+ 
+    // Gated SRAM write valids that only pass through in PROGRAM mode
+    logic weight_wr_valid_gated;
+    logic thresh_wr_valid_gated;
+ 
+    assign weight_wr_valid_gated = weight_wr_valid_i && mode_program;
+    assign thresh_wr_valid_gated = thresh_wr_valid_i && mode_program;
 
     // Internal wires
     logic        fifo_out_valid;
@@ -220,16 +246,16 @@ module voxel_bin_core #(
         .MAP_FLIP_X       (MAP_FLIP_X),
         .MAP_FLIP_Y       (MAP_FLIP_Y)
     ) u_evt2_decoder (
-        .clk          (clk),
-        .rst          (rst),
-        .data_in      (fifo_out_data),
-        .data_valid   (fifo_out_valid),
-        .event_ready_i(binner_event_ready),
-        .data_ready   (dec_data_ready),
-        .x_out        (dec_x16),
-        .y_out        (dec_y16),
-        .event_valid  (dec_event_valid),
-        .decoder_dbg  (decoder_dbg),
+        .clk               (clk),
+        .rst               (rst),
+        .data_in           (fifo_out_data),
+        .data_valid        (fifo_out_valid),
+        .event_ready_i     (binner_event_ready),
+        .data_ready        (dec_data_ready),
+        .x_out             (dec_x16),
+        .y_out             (dec_y16),
+        .event_valid       (dec_event_valid),
+        .decoder_dbg       (decoder_dbg),
         .decoder_output_dbg(decoder_output_dbg)
     );
 
@@ -278,7 +304,7 @@ module voxel_bin_core #(
     );
 
     // ------------------------------------------------------------------
-    // Weight SRAMs × NUM_CLASSES (writable at runtime via weight_wr_* ports)
+    // Weight SRAMs x NUM_CLASSES (writable at runtime via weight_wr_* ports)
     // ------------------------------------------------------------------
     genvar g;
     generate
@@ -289,7 +315,7 @@ module voxel_bin_core #(
             ) u_weight_ram (
                 .clk_i      (clk),
                 .reset_i    (rst),
-                .wr_valid_i (weight_wr_valid_i && (weight_wr_class_i == 2'(g))),
+                .wr_valid_i (weight_wr_valid_gated && (weight_wr_class_i == 2'(g))),
                 .wr_data_i  (weight_wr_data_i),
                 .wr_addr_i  (weight_wr_addr_i),
                 .rd_valid_i (weight_rd_valid),
@@ -308,7 +334,7 @@ module voxel_bin_core #(
     ) u_thresh_ram (
         .clk_i      (clk),
         .reset_i    (rst),
-        .wr_valid_i (thresh_wr_valid_i),
+        .wr_valid_i (thresh_wr_valid_gated),
         .wr_data_i  (thresh_wr_data_i),
         .wr_addr_i  (thresh_wr_addr_i),
         .rd_valid_i (thresh_rd_valid),
@@ -365,24 +391,25 @@ module voxel_bin_core #(
         .gesture_confidence(gesture_confidence),
         .class_dbg         (class_dbg)
     );
-    selectable_debug #() select_debug_module (
-    .debug_bus(debug_bus),
-    .class_dbg(class_dbg),
-    .mac_dbg(mac_dbg),
-    .vox_bin_dbg(vox_bin_dbg),
-    .decoder_dbg(decoder_dbg),
-    .decoder_output(decoder_output_dbg),
-    .in_fifo_dbg(in_fifo_dbg),
-    .vox_core_debug(vox_core_debug),
-    .score_A(score_A),
-    .score_B(score_B),
-    .score_C(score_C),
-    .score_D(score_D),
-    .fifo_in(evt_word),
-    .fifo_out(fifo_out_data),
-    //input [31:0] control_dbg,
-    .debug_select(debug_select) 
-);
+
+    selectable_debug select_debug_module (
+        .debug_bus(debug_bus),
+        .class_dbg(class_dbg),
+        .mac_dbg(mac_dbg),
+        .vox_bin_dbg(vox_bin_dbg),
+        .decoder_dbg(decoder_dbg),
+        .decoder_output(decoder_output_dbg),
+        .in_fifo_dbg(in_fifo_dbg),
+        .vox_core_debug(vox_core_debug),
+        .score_A(score_A),
+        .score_B(score_B),
+        .score_C(score_C),
+        .score_D(score_D),
+        .fifo_in(evt_word),
+        .fifo_out(fifo_out_data),
+        //input [31:0] control_dbg,
+        .debug_select(debug_select) 
+    );
 
 assign debug_mux = debug_bus;
 endmodule

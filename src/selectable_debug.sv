@@ -5,7 +5,7 @@
 
 //bus widths are NOT parameterized
 //all connections are for SPECIFIC pins
-module selectable_debug #()(
+module selectable_debug (
     output [31:0] debug_bus,
     input [10:0] class_dbg,
     input [14:0] mac_dbg,
