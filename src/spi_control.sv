@@ -1,11 +1,16 @@
-//SPI module, type 0 only 
-// type 0 means:
-// bit shifts out on negedge of SCLK (for both MISO and MOSI)
-// bit sampled on posedge of SCLK (again for both)
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Group G Contributors
 
-//handling CDC within this module
-// cannot swap cdc fifo ram for gf180 sram macro because of dual clock ports
-// doing small register based cdc that feeds into larger single domain fifo's using gf180 macro
+//SPI control interface module, type 0 SPI only 
+//  type 0 means:
+//  bit shifts out on negedge of SCLK (for both MISO and MOSI)
+//  bit sampled on posedge of SCLK (again for both)
+
+//  this module handles packing and unpacking bits in both directions (parameterized)
+//  CDC is accomplished with a small register-based CDC FIFO that drains into a larger SRAM-based single clock domain buffering FIFO (one set in each direction)
+
+//  calls to read from FIFOs are scheduled to maintain consistent serial output/input, but I would expect issues with attempting to pack less than 3 bits per write
+
 module spi_control #(
     parameter DATA_WIDTH = 32,
     parameter REG_FIFO_LOG2 = 6,

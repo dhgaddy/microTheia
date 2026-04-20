@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Group G Contributors
+
 //the idea is using registers for cdc that drain directly into a single clock domain sram fifo for input/output buffering
 
 module reg_cdc_sram_buffer 
@@ -83,12 +86,13 @@ input_fifo #(
         .in_fifo_dbg(in_fifo_dbg)
     );
 //---- READ OUT FROM SRAM BUFFER FIFO 
+
 always_ff @(posedge pclk_i) begin
     if(preset_i) begin
         sram_ovfl <= 1'b0;
     end
     else if(cdc_read_side_valid_o && !cdc_read_side_ready_i) begin
-        sram_ovfl <= 1'b1; //overflow flag for sram, register overflow flag is just cdc_write_side_ready_o
+        sram_ovfl <= 1'b1; //overflow flag for sram
     end      
 end    
 endmodule

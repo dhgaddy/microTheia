@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Group G Contributors
 module delaybuffer
   #(parameter [31:0] width_p = 8
    ,parameter [31:0] delay_p = 8
@@ -18,7 +20,7 @@ module delaybuffer
     always_ff @(posedge clk_i) begin
       if (reset_i) begin
         valid_o <= 1'b0;
-        data_o  <= '0; //switching from 'x to '0
+        data_o  <= '0; //switching from 'x to '0 <- This fixed the chin_in_valid while empty bug
         for (int i = 0; i < delay_p; i++) begin
            datapath[i] <= '0; //same here
         end   

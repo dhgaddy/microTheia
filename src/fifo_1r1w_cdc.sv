@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Group G Contributors
 module fifo_1r1w_cdc
  #(parameter [31:0] width_p = 32
   ,parameter [31:0] depth_log2_p = 8
@@ -124,7 +126,7 @@ assign pdata_o = data_w;
     .wr_data_i(cdata_i),
     .wr_addr_i(w_addr),
     .rd_addr_i(r_addr),
-    .rd_valid_i(1'b1), //not empty
+    .rd_valid_i(1'b1), //keep going
     .rd_data_o(data_w)
   );
 

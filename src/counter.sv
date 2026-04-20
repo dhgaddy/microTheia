@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Group G Contributors
 module counter
   #(parameter width_p = 4,
     /* verilator lint_off WIDTHTRUNC */
@@ -9,8 +11,6 @@ module counter
    ,input [0:0] down_i
    ,output [width_p-1:0] count_o
    ,output [width_p - 1:0] count_fast);
-
-   // Your code here:
 
    logic [width_p-1:0] q_l, d_l, count_next_w;
 

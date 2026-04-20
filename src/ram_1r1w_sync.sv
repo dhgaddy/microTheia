@@ -1,7 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Group G Contributors
 `ifndef BINPATH
  `define BINPATH ""
 `endif
-//this is the ram module from CSE 225
+//this is my ram module from CSE 225
 // i think it will map to registers if we use it for the chip
 // used for a dual clock port cdc fifo that is register based, because gf180 sram macro is single clock port
 
@@ -25,10 +27,10 @@ module ram_1r1w_sync
   logic [width_p-1:0] mem [depth_p-1:0];
   logic [width_p-1:0] rd_data_o_w;
    initial begin
-      // Display depth and width (You will need to match these in your init file)
+      // Display depth and width (must match these in init file)
       $display("%m: depth_p is %d, width_p is %d", depth_p, width_p);
       // wire [bar:0] foo [baz:0];
-      // In order to get the memory contents in iverilog you need to run this for loop during initialization:
+      // to get the memory contents in iverilog run this for loop during initialization:
       for (int i = 0; i < depth_p; i++) begin
         // $dumpvars(0,mem);
         ;
