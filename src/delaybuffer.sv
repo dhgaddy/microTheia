@@ -18,9 +18,9 @@ module delaybuffer
     always_ff @(posedge clk_i) begin
       if (reset_i) begin
         valid_o <= 1'b0;
-        data_o  <= 'x; 
+        data_o  <= '0; //switching from 'x to '0
         for (int i = 0; i < delay_p; i++) begin
-           datapath[i] <= 'x;
+           datapath[i] <= '0; //same here
         end   
       end else begin
         if (transfer_signal) begin

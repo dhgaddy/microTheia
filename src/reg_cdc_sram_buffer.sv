@@ -20,7 +20,7 @@ module reg_cdc_sram_buffer
   ,output [DATA_WIDTH - 1:0] pdata_o //from sram buffer fifo
   ,input [0:0] pready_i //to sram buffer fifo
   ,output [3:0] in_fifo_dbg // debug signals from sram fifo
-  ,output [0:0] sram_ovfl
+  ,output logic [0:0] sram_ovfl
 ); 
 
 //----------CDC WRITE IN
@@ -43,12 +43,28 @@ fifo_1r1w_cdc //my cdc fifo module from CSE 225, its internal ram module will ju
   ,.cready_o(cdc_write_side_ready_o) // out through port cdc_cready_o
 
   ,.pclk_i(pclk_i) //
-  ,.preset_i(preset_i), //
-  ,.pvalid_o(cdc_read_side_valid_o), // to sram buffer fifo
-  ,.pdata_o(read_between_data), // to sram buffer fifo
+  ,.preset_i(preset_i) //
+  ,.pvalid_o(cdc_read_side_valid_o) // to sram buffer fifo
+  ,.pdata_o(read_between_data) // to sram buffer fifo
   ,.pready_i(cdc_read_side_ready_i) // from sram buffer fifo
   );
 //---------READ OUT FROM CDC REGISTERS TO INPUT BUFFER
+
+logic [DATA_WIDTH-1:0] cdc_read_data_r;
+logic [0:0] cdc_read_valid_r;
+
+always_ff @(posedge pclk_i) begin
+    if (preset_i) begin
+        cdc_read_data_r  <= '0;
+        cdc_read_valid_r <= 1'b0;
+    end
+    else begin
+        cdc_read_data_r  <= read_between_data;
+        cdc_read_valid_r <= cdc_read_side_valid_o;
+    end
+end
+
+
 
 //---------SRAM BASED INPUT BUFFER WRITES IN FROM CDC REGISTERS
 //this is the one that already uses the gf180 sram macro
@@ -58,9 +74,9 @@ input_fifo #(
     ) u_input_fifo (
         .clk_i   (pclk_i),
         .reset_i (preset_i),
-        .data_i  (read_between_data),
+        .data_i  (cdc_read_data_r),
         .ready_i (pready_i),
-        .valid_i (cdc_read_side_valid_o),
+        .valid_i (cdc_read_valid_r),
         .ready_o (cdc_read_side_ready_i),
         .valid_o (pvalid_o),
         .data_o  (pdata_o),

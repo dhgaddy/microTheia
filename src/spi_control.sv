@@ -22,9 +22,9 @@ module spi_control #(
     output logic [0:0] MISO, //master in slave out
     output [DATA_WIDTH - 1:0] chip_in, //data from master that has been byte packed and crossed into chip clock domain, headed further into chip
     output [0:0] chip_in_valid, //valid signal for data from master headed into chip
-    output [0:0] in_ovfl, out_ovfl, //overflow flag for cdc input/output register fifos, if their ready_o ever goes low then flag is set high and stays high until reset
+    output logic [0:0] in_ovfl, out_ovfl, //overflow flag for cdc input/output register fifos, if their ready_o ever goes low then flag is set high and stays high until reset
     output [3:0] sram_in_fifo_dbg, sram_out_fifo_dbg,
-    output [0:0] sram_out_ovfl, sram_in_ovfl;
+    output logic [0:0] sram_out_ovfl, sram_in_ovfl
 );
 
 // ----------CHIP IN SECTION---------
@@ -83,7 +83,7 @@ reg_cdc_sram_buffer //module that handles cdc and input buffering
   ,.creset_i(reset_i) //connecting the same chip side reset to both ports, not sure about
   ,.cdata_i(packed_word) //writing in packed bytes
   ,.cvalid_i(valid_word) //using valid byte signal as write trigger
-  ,.cready_o(cready_o_wire), //tieing to overflow signal
+  ,.cdc_cready_o(cready_o_wire), //tieing to overflow signal
 
   .pclk_i(clk_i),
   .preset_i(reset_i),
@@ -197,7 +197,7 @@ reg_cdc_sram_buffer //cdc and buffering for chip out side
   ,.creset_i(reset_i) //connecting the same chip side reset to both ports, not sure about
   ,.cdata_i(chip_out) //data from chip to be sent out over spi
   ,.cvalid_i(chip_out_valid) //signal comes from inside chip
-  ,.cready_o(chip_out_ready_o) //signal to chip that there is room in output spi fifo, also tied to an overflow signal
+  ,.cdc_cready_o(chip_out_ready_o) //signal to chip that there is room in output spi fifo, also tied to an overflow signal
 
   ,.pclk_i(SCLK) //using SPI master clock on the read side
   ,.preset_i(reset_i) //using same reset for everything
