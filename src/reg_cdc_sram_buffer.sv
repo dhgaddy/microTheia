@@ -49,7 +49,7 @@ fifo_1r1w_cdc //my cdc fifo module from CSE 225, its internal ram module will ju
   ,.pready_i(cdc_read_side_ready_i) // from sram buffer fifo
   );
 //---------READ OUT FROM CDC REGISTERS TO INPUT BUFFER
-
+/*
 logic [DATA_WIDTH-1:0] cdc_read_data_r;
 logic [0:0] cdc_read_valid_r;
 
@@ -63,7 +63,7 @@ always_ff @(posedge pclk_i) begin
         cdc_read_valid_r <= cdc_read_side_valid_o;
     end
 end
-
+*/
 
 
 //---------SRAM BASED INPUT BUFFER WRITES IN FROM CDC REGISTERS
@@ -74,9 +74,9 @@ input_fifo #(
     ) u_input_fifo (
         .clk_i   (pclk_i),
         .reset_i (preset_i),
-        .data_i  (cdc_read_data_r),
+        .data_i  (read_between_data),
         .ready_i (pready_i),
-        .valid_i (cdc_read_valid_r),
+        .valid_i (cdc_read_side_valid_o),
         .ready_o (cdc_read_side_ready_i),
         .valid_o (pvalid_o),
         .data_o  (pdata_o),
