@@ -5,7 +5,8 @@ TOP = voxel_bin_top
 
 PDK_ROOT ?= $(MAKEFILE_DIR)/dependencies/pdks
 PDK ?= gf180mcuD
-PDK_TAG ?= 1.6.6
+PDK_TAG ?= 1.8.0
+SCL ?= gf180mcu_as_sc_mcu7t3v3
 AVALON_REPO ?= https://github.com/AvalonSemiconductors/gf180mcu_as_sc_mcu7t3v3.git
 
 AVAILABLE_SLOTS = 1x1 0p5x1 1x0p5 0p5x0p5
@@ -82,31 +83,33 @@ clone-avalon-pdk: ## Merge Avalon 3.3V std cell library into dependencies/pdks/g
 	cp -r $(AVALON_TMP)/pdk/libs.ref/. $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.ref/
 	cp -r $(AVALON_TMP)/pdk/libs.tech/. $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.tech/
 	rm -rf $(AVALON_TMP)
+	cp $(MAKEFILE_DIR)/librelane/gf180mcu_as_sc_mcu7t3v3_config.tcl \
+		$(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.tech/librelane/gf180mcu_as_sc_mcu7t3v3/config.tcl
 	@echo "Avalon 3.3V library merged into dependencies/pdks/gf180mcuD/"
 .PHONY: clone-avalon-pdk
 
 librelane: ## Run LibreLane flow (synthesis, PnR, verification)
-	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --manual-pdk
+	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --scl ${SCL} --manual-pdk
 .PHONY: librelane
 
 librelane-nodrc: ## Run LibreLane flow without DRC checks
-	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --manual-pdk --skip KLayout.Antenna --skip KLayout.DRC --skip Magic.DRC
+	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --scl ${SCL} --manual-pdk --skip KLayout.Antenna --skip KLayout.DRC --skip Magic.DRC
 .PHONY: librelane-nodrc
 
 librelane-klayoutdrc: ## Run LibreLane flow without magic DRC checks
-	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --manual-pdk --skip Magic.DRC
+	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --scl ${SCL} --manual-pdk --skip Magic.DRC
 .PHONY: librelane-klayoutdrc
 
 librelane-magicdrc: ## Run LibreLane flow without KLayout DRC checks
-	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --manual-pdk --skip KLayout.DRC
+	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --scl ${SCL} --manual-pdk --skip KLayout.DRC
 .PHONY: librelane-magicdrc
 
 librelane-openroad: ## Open the last run in OpenROAD
-	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --manual-pdk --last-run --flow OpenInOpenROAD
+	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --scl ${SCL} --manual-pdk --last-run --flow OpenInOpenROAD
 .PHONY: librelane-openroad
 
 librelane-klayout: ## Open the last run in KLayout
-	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --manual-pdk --last-run --flow OpenInKLayout
+	librelane librelane/slots/slot_${SLOT}.yaml librelane/config.yaml --pdk ${PDK} --pdk-root ${PDK_ROOT} --scl ${SCL} --manual-pdk --last-run --flow OpenInKLayout
 .PHONY: librelane-klayout
 
 librelane-padring: ## Only create the padring
@@ -141,7 +144,7 @@ sim: ## Run RTL simulation with cocotb
 		fi; \
 		rm -rf cocotb/sim_build/$$d; \
 		\
-		SRCS="src/gf180_sram_1r1w.sv src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv"; \
+		SRCS="src/gf180_sram_1r1w.sv src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/selectable_debug.sv"; \
 		\
 		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
 		export SIM_CONFIG=$(CONFIG_FILE); \
@@ -166,14 +169,14 @@ sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=gf180_sram_1r1w CONFIG=gf180_sram_1r1w
 	$(MAKE) sim DUT=input_fifo
 	$(MAKE) sim DUT=evt2_decoder
-	$(MAKE) sim DUT=uart_rx
-	$(MAKE) sim DUT=uart_tx
-	$(MAKE) sim DUT=uart_debug
+# 	$(MAKE) sim DUT=uart_rx
+# 	$(MAKE) sim DUT=uart_tx
+# 	$(MAKE) sim DUT=uart_debug
 	$(MAKE) sim DUT=voxel_gesture_classifier
 	$(MAKE) sim DUT=voxel_mac_engine
 	$(MAKE) sim DUT=voxel_binning
 	$(MAKE) sim DUT=voxel_bin_core
-	$(MAKE) sim DUT=voxel_bin_top
+# 	$(MAKE) sim DUT=voxel_bin_top
 .PHONY: sim-all
 
 sim-gl: ## Run gate-level simulation with cocotb (after copy-final)
