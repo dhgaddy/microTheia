@@ -114,7 +114,7 @@ logic [DATA_WIDTH - 1:0] next_tx_byte;
 
 //flag indicating next_tx_byte currently holds a valid unused word
 logic [0:0] next_tx_valid;
-
+logic [0:0] consumed_during_idle;
 
 always_ff @(negedge SCLK) begin
     if(reset_i) begin
@@ -125,6 +125,7 @@ always_ff @(negedge SCLK) begin
         need_read     <= 1'b0;
         MISO          <= 1'b0;
         out_ovfl      <= 1'b0;
+        consumed_during_idle <= 1'b0;
     end
     else begin
         //default is no read unless something calls for it
@@ -146,8 +147,12 @@ always_ff @(negedge SCLK) begin
 
             // preload shifter while idle so first bit is already valid before first posedge after CS goes low
             if(next_tx_valid) begin
-                out_shifter <= next_tx_byte;
+                out_shifter <= {next_tx_byte, 1'b0};
                 MISO        <= next_tx_byte[DATA_WIDTH - 1];
+                if(!consumed_during_idle) begin
+                    out_counter <= out_counter + 1'd1; //preloaded bit needs to be counted? was this the bug?
+                end    
+                consumed_during_idle <= 1'b1;
             end
             else begin //if nothing buffered and fifo has nothing then 0 is valid first bit
                 out_shifter <= '0;
@@ -156,7 +161,7 @@ always_ff @(negedge SCLK) begin
         end
         else begin // CS low, a transaction is active or beginning
             MISO <= out_shifter[DATA_WIDTH - 1]; //msb first
-
+            consumed_during_idle <= 1'b0;
             if(out_counter < DATA_WIDTH - 1) begin //a bit is shifted out no matter what if a transaction is active
                 out_shifter <= {out_shifter[DATA_WIDTH - 2:0], 1'b0}; //shift left
                 out_counter <= out_counter + 1'd1; //keep track of bits shifted
@@ -180,7 +185,7 @@ always_ff @(negedge SCLK) begin
                 end
                 else begin
                     out_shifter <= '0; //otherwise shift out DATA_WIDTH 0s and then check again
-                    need_read   <= 1'b1; // request read again to possibly be preloaded before next 8 bits finish shifting
+                    need_read   <= 1'b1; // request read again to possibly be preloaded before next DATA_WIDTH bits finish shifting
                 end
             end
         end
