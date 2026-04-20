@@ -6,7 +6,7 @@
 //handling CDC within this module
 // cannot swap cdc fifo ram for gf180 sram macro because of dual clock ports
 // doing small register based cdc that feeds into larger single domain fifo's using gf180 macro
-module spi_type_0_s #(
+module spi_control #(
     parameter DATA_WIDTH = 32,
     parameter REG_FIFO_LOG2 = 6,
     parameter FIFO_DEPTH = 256
