@@ -286,8 +286,9 @@ class CoreHarness:
         self.window_scores = []              # list[list[int]] per completed window
         self.window_pred = []                # list[(best_class, pass, margin)] per window
 
-    async def setup(self):
-        cocotb.start_soon(Clock(self.dut.clk, 10, units="ns").start())
+    async def setup(self, start_clock=True):
+        if start_clock:
+            cocotb.start_soon(Clock(self.dut.clk, 10, units="ns").start())
         self.dut.rst.value = 1
         self.dut.evt_word.value = 0
         self.dut.evt_word_valid.value = 0
@@ -993,33 +994,22 @@ async def _stream_bin_file_with_timing(h, bin_path):
 
 
 async def _stream_bin_file_clock_driven(h, bin_path):
-    """Replay EVT2 words with clock-time spacing from EVT2 timestamps.
+    """Replay EVT2 words without timestamp-forced bin rollovers.
 
     Unlike timestamp-forced mode, this path does not force bin rollover from timestamps.
     Bin advancement comes only from the DUT's timer behavior and any explicit final flush.
+
+    With CYCLES_PER_BIN=0 the DUT timer never fires, so real-time inter-event delays
+    serve no purpose and are omitted to keep harness sampling per-word (correct) and
+    simulation time bounded.
     """
     words = _read_evt2_bin(bin_path)
-    cycles_per_us = max(1, CLK_FREQ_HZ // 1_000_000)
-
-    time_high = 0
-    prev_ts_us = None
     for word in words:
-        fields = _decode_evt2_word_fields(word)
-        pkt = fields["pkt"]
-        if pkt == EVT_TIME_HIGH:
-            time_high = fields["word"] & 0x0FFFFFFF
-        elif pkt in (EVT_CD_OFF, EVT_CD_ON):
-            ts_us = (time_high << 6) | fields["ts_lsb"]
-            if prev_ts_us is not None and ts_us >= prev_ts_us:
-                delta_us = ts_us - prev_ts_us
-                if delta_us:
-                    await h.tick(delta_us * cycles_per_us)
-            prev_ts_us = ts_us
         await h.send_word(word)
 
 
 async def _run_bin_file_test(
-    dut, bin_path, label, expected_class=None, replay_mode="timestamp_forced", enforce_label=None
+    dut, bin_path, label, expected_class=None, replay_mode="timestamp_forced", enforce_label=None, start_clock=True
 ):
     """Core logic shared by all four bin-file tests.
 
@@ -1038,7 +1028,7 @@ async def _run_bin_file_test(
     weights = load_weights_from_mem()
     score_model = ScoreModel(weights)
     h = CoreHarness(dut, score_model=score_model)
-    await h.setup()
+    await h.setup(start_clock=start_clock)
     await _flush_stale_bins(h, weights=weights)
 
     cocotb.log.info(f"[{label}] Streaming {bin_path} (mode={replay_mode}) ...")
@@ -1154,54 +1144,57 @@ async def test_bin_file_gesture_3(dut):
     )
 
 
-# # 14
-# @logged_test()
-# async def test_bin_file_timing_replay_ab(dut):
-#     """A/B timing investigation: timestamp-forced vs clock-driven replay.
+# 14
+@logged_test()
+async def test_bin_file_timing_replay_ab(dut):
+    """A/B timing investigation: timestamp-forced vs clock-driven replay.
 
-#     This is a diagnostics-oriented test. It logs output differences and requires both
-#     modes to produce valid windows and model/DUT agreement.
-#     """
-#     bin_files = _resolve_bin_files()
-#     for i, path in enumerate(bin_files):
-#         label = Path(path).stem
-#         expected = EXPECTED_BIN_FILE_CLASS[i]
-#         h_forced = await _run_bin_file_test(
-#             dut,
-#             path,
-#             f"{label}-forced",
-#             expected_class=expected,
-#             replay_mode="timestamp_forced",
-#             enforce_label=False,
-#         )
-#         h_clock = await _run_bin_file_test(
-#             dut,
-#             path,
-#             f"{label}-clock",
-#             expected_class=expected,
-#             replay_mode="clock_driven",
-#             enforce_label=False,
-#         )
+    This is a diagnostics-oriented test. It logs output differences and requires both
+    modes to produce valid windows and model/DUT agreement.
+    """
+    bin_files = _resolve_bin_files()
+    for i, path in enumerate(bin_files):
+        label = Path(path).stem
+        expected = EXPECTED_BIN_FILE_CLASS[i]
+        # Start the clock only on the very first call; it persists for all subsequent runs.
+        h_forced = await _run_bin_file_test(
+            dut,
+            path,
+            f"{label}-forced",
+            expected_class=expected,
+            replay_mode="timestamp_forced",
+            enforce_label=False,
+            start_clock=(i == 0),
+        )
+        h_clock = await _run_bin_file_test(
+            dut,
+            path,
+            f"{label}-clock",
+            expected_class=expected,
+            replay_mode="clock_driven",
+            enforce_label=False,
+            start_clock=False,
+        )
 
-#         forced_classes = [g for g, _ in h_forced.observed_gestures]
-#         clock_classes = [g for g, _ in h_clock.observed_gestures]
-#         min_len = min(len(forced_classes), len(clock_classes))
-#         if min_len:
-#             seq_diff = sum(
-#                 1 for a, b in zip(forced_classes[:min_len], clock_classes[:min_len]) if a != b
-#             )
-#             cocotb.log.info(
-#                 f"[{label}] A/B: forced_windows={h_forced.completed_windows} "
-#                 f"clock_windows={h_clock.completed_windows} seq_diff={seq_diff}/{min_len}"
-#             )
-#         else:
-#             cocotb.log.info(
-#                 f"[{label}] A/B: insufficient overlapping gesture outputs for sequence diff"
-#             )
+        forced_classes = [g for g, _ in h_forced.observed_gestures]
+        clock_classes = [g for g, _ in h_clock.observed_gestures]
+        min_len = min(len(forced_classes), len(clock_classes))
+        if min_len:
+            seq_diff = sum(
+                1 for a, b in zip(forced_classes[:min_len], clock_classes[:min_len]) if a != b
+            )
+            cocotb.log.info(
+                f"[{label}] A/B: forced_windows={h_forced.completed_windows} "
+                f"clock_windows={h_clock.completed_windows} seq_diff={seq_diff}/{min_len}"
+            )
+        else:
+            cocotb.log.info(
+                f"[{label}] A/B: insufficient overlapping gesture outputs for sequence diff"
+            )
 
-#         assert h_forced.completed_windows > 0 and h_clock.completed_windows > 0, (
-#             f"[{label}] Expected both replay modes to produce completed windows"
-#         )
+        assert h_forced.completed_windows > 0 and h_clock.completed_windows > 0, (
+            f"[{label}] Expected both replay modes to produce completed windows"
+        )
 
 
 @logged_test()
