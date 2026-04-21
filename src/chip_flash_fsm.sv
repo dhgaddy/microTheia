@@ -85,7 +85,8 @@ module chip_flash_fsm #(
         LD_T_WRITE         = 6'd14,
         LD_T_NEXT          = 6'd15,
         LD_DONE            = 6'd16,
-        LD_FAIL            = 6'd17
+        LD_FAIL            = 6'd17,
+        LD_W_CAPTURE       = 6'd18
     } load_state_t;
 
     main_state_t main_state;
@@ -118,6 +119,7 @@ module chip_flash_fsm #(
     logic spi_start;
     logic spi_high_phase;
     logic first_bit;
+    logic weight_stream_primed;
 
     assign main_state_dbg_o = main_state;
     assign load_state_dbg_o = load_state;
@@ -161,6 +163,7 @@ module chip_flash_fsm #(
             rx_shift          <= 8'h00;
             rx_count          <= 8'h00;
             first_bit         <= 1'b0;
+            weight_stream_primed <= 1'b0;
 
             weight_wr_valid_o <= 1'b0;
             weight_wr_class_o <= '0;
@@ -249,6 +252,7 @@ module chip_flash_fsm #(
                         thresh_byte_idx   <= '0;
                         thresh_pack_reg   <= '0;
                         rx_count          <= '0;
+                        weight_stream_primed <= 1'b0;
                         id_mfr_r          <= 8'h00;
                         id_type_r         <= 8'h00;
                         id_capacity_r     <= 8'h00;
@@ -364,9 +368,10 @@ module chip_flash_fsm #(
                             end
 
                             LD_W_OPEN: begin
-                                spi_cs_n_o      <= 1'b0;
-                                rx_count        <= '0;
-                                addr_bytes_left <= USE_4BYTE_ADDR ? 3'd4 : 3'd3;
+                                spi_cs_n_o           <= 1'b0;
+                                rx_count             <= '0;
+                                weight_stream_primed <= 1'b0;
+                                addr_bytes_left      <= USE_4BYTE_ADDR ? 3'd4 : 3'd3;
                                 tx_byte         <= USE_4BYTE_ADDR ? CMD_4READ : CMD_READ;
                                 spi_start       <= 1'b1;
                                 load_state      <= LD_W_ADDR;
@@ -401,9 +406,18 @@ module chip_flash_fsm #(
                                 end
 
                                 if (spi_done) begin
-                                    weight_wr_data_o <= rx_byte[WEIGHT_BITS-1:0];
-                                    load_state       <= LD_W_WRITE;
+                                    if (!weight_stream_primed) begin
+                                        weight_stream_primed <= 1'b1;
+                                        load_state           <= LD_W_DATA;
+                                    end else begin
+                                        load_state <= LD_W_CAPTURE;
+                                    end
                                 end
+                            end
+
+                            LD_W_CAPTURE: begin
+                                weight_wr_data_o <= rx_byte[WEIGHT_BITS-1:0];
+                                load_state       <= LD_W_WRITE;
                             end
 
                             LD_W_WRITE: begin
@@ -424,8 +438,8 @@ module chip_flash_fsm #(
                                         thresh_entry_idx  <= '0;
                                         thresh_byte_idx   <= '0;
                                         thresh_pack_reg   <= '0;
-                                        spi_start <= 1'b1;
-                                        load_state <= LD_T_DATA;
+                                        rx_count          <= '0;
+                                        load_state        <= LD_T_DATA;
                                     end else begin
                                         weight_class_idx <= weight_class_idx + 1'b1;
                                         load_state       <= LD_W_DATA;
@@ -443,17 +457,12 @@ module chip_flash_fsm #(
                                 end
 
                                 if (spi_done) begin
-                                    if (rx_count > 0) begin
-                                        thresh_pack_reg <= {thresh_pack_reg[31:0], rx_byte};
-                                    end
+                                    thresh_pack_reg <= {thresh_pack_reg[31:0], rx_byte};
 
                                     if (thresh_byte_idx == 3'd4) begin
                                         load_state <= LD_T_WRITE;
                                     end else begin
-                                        if (rx_count > 0) begin
-                                            thresh_byte_idx <= thresh_byte_idx + 1'b1;
-                                        end
-                                        rx_count <= rx_count + 1'b1;
+                                        thresh_byte_idx <= thresh_byte_idx + 1'b1;
                                     end
                                 end
                             end
@@ -469,7 +478,7 @@ module chip_flash_fsm #(
                                 thresh_wr_valid_o <= 1'b0;
                                 thresh_flash_addr <= thresh_flash_addr + 3'b101;
                                 thresh_byte_idx   <= '0;
-                                thresh_pack_reg  <= '0;
+                                thresh_pack_reg   <= '0;
 
                                 if (thresh_entry_idx == THRESH_COUNT-1) begin
                                     load_state <= LD_DONE;
@@ -523,6 +532,7 @@ module chip_flash_fsm #(
                         thresh_entry_idx  <= '0;
                         thresh_byte_idx   <= '0;
                         thresh_pack_reg   <= '0;
+                        weight_stream_primed <= 1'b0;
                     end
                 end
 
@@ -544,6 +554,7 @@ module chip_flash_fsm #(
                         thresh_entry_idx  <= '0;
                         thresh_byte_idx   <= '0;
                         thresh_pack_reg   <= '0;
+                        weight_stream_primed <= 1'b0;
                     end
                 end
 
