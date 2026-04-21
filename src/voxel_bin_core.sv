@@ -82,11 +82,10 @@ module voxel_bin_core #(
 
     // Mode constants
     typedef enum logic [1:0] {
-        MODE_BOOT     = 3'b000,
-        MODE_LOAD     = 3'b001,
-        MODE_PROGRAM  = 3'b010,
-        MODE_CLASSIFY = 3'b011,
-        MODE_DEBUG    = 3'b100
+        MODE_BOOT     = 2'b00,
+        MODE_LOAD     = 2'b01,
+        MODE_CLASSIFY = 2'b10,
+        MODE_DEBUG    = 2'b11
     } state_t;
 
     // Classification constants
@@ -99,7 +98,6 @@ module voxel_bin_core #(
     logic mode_classify;
  
     assign mode_load     = (active_mode_i == MODE_LOAD);
-    assign mode_program  = (active_mode_i == MODE_PROGRAM);
     assign mode_classify = (active_mode_i == MODE_CLASSIFY);
  
     // Gated SRAM write valids that only pass through in PROGRAM mode
