@@ -4,13 +4,13 @@ module chip_flash_fsm #(
     parameter int unsigned SPI_DIV             = 4,
     parameter bit          USE_4BYTE_ADDR      = 1'b1,
     parameter logic [31:0] FLASH_WEIGHT_BASE   = 32'h0000_0000,
-    parameter logic [31:0] FLASH_THRESH_BASE   = 32'h0010_0000,
+    parameter logic [31:0] FLASH_THRESH_BASE   = 32'h0000_2000,
 
     parameter int unsigned NUM_CLASSES         = 4,
     parameter int unsigned GRID_SIZE           = 16,
     parameter int unsigned READOUT_BINS        = 8,
     parameter int unsigned WEIGHT_BITS         = 8,
-    parameter int unsigned SCORE_BITS          = 36,
+    parameter int unsigned SCORE_BITS          = 40,
 
     parameter bit          THRESH_BIG_ENDIAN   = 1'b1
 ) (
@@ -81,15 +81,11 @@ module chip_flash_fsm #(
         LD_W_DATA          = 6'd10,
         LD_W_WRITE         = 6'd11,
         LD_W_NEXT          = 6'd12,
-        LD_W_CLOSE         = 6'd13,
-        LD_T_GAP           = 6'd14,
-        LD_T_OPEN          = 6'd15,
-        LD_T_ADDR          = 6'd16,
-        LD_T_DATA          = 6'd17,
-        LD_T_WRITE         = 6'd18,
-        LD_T_NEXT          = 6'd19,
-        LD_DONE            = 6'd20,
-        LD_FAIL            = 6'd21
+        LD_T_DATA          = 6'd13,
+        LD_T_WRITE         = 6'd14,
+        LD_T_NEXT          = 6'd15,
+        LD_DONE            = 6'd16,
+        LD_FAIL            = 6'd17
     } load_state_t;
 
     main_state_t main_state;
@@ -112,6 +108,7 @@ module chip_flash_fsm #(
 
     logic [7:0] tx_byte;
     logic [7:0] rx_byte;
+    logic [7:0] rx_count;
     logic [7:0] tx_shift;
     logic [7:0] rx_shift;
     logic [2:0] bit_idx;
@@ -120,6 +117,7 @@ module chip_flash_fsm #(
     logic spi_done;
     logic spi_start;
     logic spi_high_phase;
+    logic first_bit;
 
     assign main_state_dbg_o = main_state;
     assign load_state_dbg_o = load_state;
@@ -161,6 +159,8 @@ module chip_flash_fsm #(
             rx_byte           <= 8'h00;
             tx_shift          <= 8'h00;
             rx_shift          <= 8'h00;
+            rx_count          <= 8'h00;
+            first_bit         <= 1'b0;
 
             weight_wr_valid_o <= 1'b0;
             weight_wr_class_o <= '0;
@@ -179,16 +179,11 @@ module chip_flash_fsm #(
             id_type_r         <= 8'h00;
             id_capacity_r     <= 8'h00;
         end else begin
-            // Default one-cycle strobes.
             spi_start         <= 1'b0;
             spi_done          <= 1'b0;
             weight_wr_valid_o <= 1'b0;
             thresh_wr_valid_o <= 1'b0;
 
-            // -----------------------------------------------------------------
-            // Small SPI byte engine.
-            // Launches one byte when spi_start pulses high.
-            // -----------------------------------------------------------------
             if (spi_start && !spi_busy) begin
                 spi_busy       <= 1'b1;
                 spi_high_phase <= 1'b0;
@@ -198,26 +193,29 @@ module chip_flash_fsm #(
                 rx_shift       <= 8'h00;
                 spi_sck_o      <= 1'b0;
                 spi_mosi_o     <= tx_byte[7];
+                first_bit      <= 1'b1;
             end else if (spi_busy) begin
                 if (spi_div_cnt == SPI_DIV-1) begin
                     spi_div_cnt <= '0;
 
                     if (!spi_high_phase) begin
-                        // Rising edge: sample MISO.
                         spi_sck_o      <= 1'b1;
-                        rx_shift       <= {rx_shift[6:0], spi_miso_i};
                         spi_high_phase <= 1'b1;
+
+                        if (bit_idx == 3'd0) begin
+                            rx_shift <= {rx_shift[6:0], spi_miso_i};
+                            rx_byte  <= {rx_shift[6:0], spi_miso_i};
+                            spi_busy <= 1'b0;
+                            spi_done <= 1'b1;
+                        end else begin
+                            rx_shift <= {rx_shift[6:0], spi_miso_i};
+                        end
+
                     end else begin
-                        // Falling edge: prepare next MOSI bit.
                         spi_sck_o      <= 1'b0;
                         spi_high_phase <= 1'b0;
 
-                        if (bit_idx == 3'd0) begin
-                            // Byte complete.
-                            spi_busy <= 1'b0;
-                            spi_done <= 1'b1;
-                            rx_byte  <= {rx_shift[6:0], spi_miso_i};
-                        end else begin
+                        if (bit_idx != 3'd0) begin
                             bit_idx    <= bit_idx - 3'd1;
                             tx_shift   <= {tx_shift[6:0], 1'b0};
                             spi_mosi_o <= tx_shift[6];
@@ -229,9 +227,6 @@ module chip_flash_fsm #(
             end
 
             unique case (main_state)
-                // =============================================================
-                // ST_BOOT
-                // =============================================================
                 ST_BOOT: begin
                     core_rst_o  <= 1'b1;
                     boot_done_o <= 1'b0;
@@ -253,15 +248,13 @@ module chip_flash_fsm #(
                         thresh_entry_idx  <= '0;
                         thresh_byte_idx   <= '0;
                         thresh_pack_reg   <= '0;
+                        rx_count          <= '0;
                         id_mfr_r          <= 8'h00;
                         id_type_r         <= 8'h00;
                         id_capacity_r     <= 8'h00;
                     end
                 end
 
-                // =============================================================
-                // ST_LOAD
-                // =============================================================
                 ST_LOAD: begin
                     core_rst_o  <= 1'b1;
                     boot_done_o <= 1'b0;
@@ -278,7 +271,6 @@ module chip_flash_fsm #(
                             end
 
                             LD_WAIT_PWR: begin
-                                // Keep flash deselected during initial wait.
                                 spi_cs_n_o <= 1'b1;
                                 if (pwr_wait_cnt == PWR_WAIT_CYCLES-1) begin
                                     load_state <= LD_SEND_RSTEN;
@@ -288,9 +280,7 @@ module chip_flash_fsm #(
                             end
 
                             LD_SEND_RSTEN: begin
-                                // Send 66h once, then wait for completion.
                                 spi_cs_n_o <= 1'b0;
-
                                 if (!spi_busy && !spi_done) begin
                                     tx_byte   <= CMD_RSTEN;
                                     spi_start <= 1'b1;
@@ -303,7 +293,6 @@ module chip_flash_fsm #(
                             end
 
                             LD_SEND_RST: begin
-                                // Send 99h once, then wait for completion.
                                 spi_cs_n_o <= 1'b0;
 
                                 if (!spi_busy && !spi_done) begin
@@ -319,7 +308,6 @@ module chip_flash_fsm #(
                             end
 
                             LD_WAIT_RESET_GAP: begin
-                                // Keep flash deselected while reset settles.
                                 spi_cs_n_o <= 1'b1;
                                 if (rst_wait_cnt == RST_WAIT_CYCLES-1) begin
                                     load_state <= LD_SEND_RDID;
@@ -329,7 +317,6 @@ module chip_flash_fsm #(
                             end
 
                             LD_SEND_RDID: begin
-                                // Send 9Fh once, then begin reading back 3 ID bytes.
                                 spi_cs_n_o <= 1'b0;
 
                                 if (!spi_busy && !spi_done) begin
@@ -376,11 +363,9 @@ module chip_flash_fsm #(
                                 end
                             end
 
-                            // -------------------------------------------------
-                            // Weight load
-                            // -------------------------------------------------
                             LD_W_OPEN: begin
                                 spi_cs_n_o      <= 1'b0;
+                                rx_count        <= '0;
                                 addr_bytes_left <= USE_4BYTE_ADDR ? 3'd4 : 3'd3;
                                 tx_byte         <= USE_4BYTE_ADDR ? CMD_4READ : CMD_READ;
                                 spi_start       <= 1'b1;
@@ -389,7 +374,6 @@ module chip_flash_fsm #(
 
                             LD_W_ADDR: begin
                                 if (!spi_busy && !spi_done && addr_bytes_left != 0) begin
-                                    // Launch the next address byte when the engine is idle.
                                     if (addr_bytes_left == 3'd4)
                                         tx_byte <= weight_flash_addr[31:24];
                                     else if (addr_bytes_left == 3'd3)
@@ -404,8 +388,6 @@ module chip_flash_fsm #(
 
                                 if (spi_done) begin
                                     if (addr_bytes_left == 3'd1) begin
-                                        // Address phase is complete.
-                                        // Next transfer clocks out the first data byte.
                                         load_state <= LD_W_DATA;
                                     end
                                     addr_bytes_left <= addr_bytes_left - 1'b1;
@@ -433,13 +415,17 @@ module chip_flash_fsm #(
 
                             LD_W_NEXT: begin
                                 weight_flash_addr <= weight_flash_addr + 1'b1;
-
+                                weight_wr_valid_o <= 1'b0;
                                 if (weight_word_idx == FEATURE_COUNT-1) begin
                                     weight_word_idx <= '0;
 
                                     if (weight_class_idx == NUM_CLASSES-1) begin
-                                        // Finished all weights for all classes.
-                                        load_state <= LD_W_CLOSE;
+                                        thresh_flash_addr <= weight_flash_addr;
+                                        thresh_entry_idx  <= '0;
+                                        thresh_byte_idx   <= '0;
+                                        thresh_pack_reg   <= '0;
+                                        spi_start <= 1'b1;
+                                        load_state <= LD_T_DATA;
                                     end else begin
                                         weight_class_idx <= weight_class_idx + 1'b1;
                                         load_state       <= LD_W_DATA;
@@ -450,82 +436,24 @@ module chip_flash_fsm #(
                                 end
                             end
 
-                            LD_W_CLOSE: begin
-                                // End the weight read transaction cleanly.
-                                spi_cs_n_o        <= 1'b1;
-                                rst_wait_cnt      <= '0;
-                                thresh_flash_addr <= FLASH_THRESH_BASE;
-                                thresh_entry_idx  <= '0;
-                                thresh_byte_idx   <= '0;
-                                thresh_pack_reg   <= '0;
-                                load_state        <= LD_T_GAP;
-                            end
-
-                            LD_T_GAP: begin
-                                // Hold CS# high briefly before opening the threshold read.
-                                spi_cs_n_o <= 1'b1;
-
-                                if (rst_wait_cnt == 32'd1) begin
-                                    load_state <= LD_T_OPEN;
-                                end else begin
-                                    rst_wait_cnt <= rst_wait_cnt + 1'b1;
-                                end
-                            end
-
-                            // -------------------------------------------------
-                            // Threshold load
-                            // -------------------------------------------------
-                            LD_T_OPEN: begin
-                                spi_cs_n_o <= 1'b0;
-
-                                if (!spi_busy && !spi_done) begin
-                                    addr_bytes_left <= USE_4BYTE_ADDR ? 3'd4 : 3'd3;
-                                    tx_byte         <= USE_4BYTE_ADDR ? CMD_4READ : CMD_READ;
-                                    spi_start       <= 1'b1;
-                                    load_state      <= LD_T_ADDR;
-                                end
-                            end
-
-                            LD_T_ADDR: begin
-                                if (!spi_busy && !spi_done && addr_bytes_left != 0) begin
-                                    if (addr_bytes_left == 3'd4)
-                                        tx_byte <= thresh_flash_addr[31:24];
-                                    else if (addr_bytes_left == 3'd3)
-                                        tx_byte <= thresh_flash_addr[23:16];
-                                    else if (addr_bytes_left == 3'd2)
-                                        tx_byte <= thresh_flash_addr[15:8];
-                                    else
-                                        tx_byte <= thresh_flash_addr[7:0];
-
-                                    spi_start <= 1'b1;
-                                end
-
-                                if (spi_done) begin
-                                    if (addr_bytes_left == 3'd1) begin
-                                        load_state <= LD_T_DATA;
-                                    end
-                                    addr_bytes_left <= addr_bytes_left - 1'b1;
-                                end
-                            end
-
                             LD_T_DATA: begin
                                 if (!spi_busy && !spi_done) begin
-                                    // Generate clocks to receive next threshold byte.
                                     tx_byte   <= 8'h00;
                                     spi_start <= 1'b1;
                                 end
 
                                 if (spi_done) begin
-                                    if (THRESH_BIG_ENDIAN) begin
-                                        thresh_pack_reg <= {thresh_pack_reg[(THRESH_BYTES*8)-9:0], rx_byte};
-                                    end else begin
-                                        thresh_pack_reg[(thresh_byte_idx*8) +: 8] <= rx_byte;
+                                    if (rx_count > 0) begin
+                                        thresh_pack_reg <= {thresh_pack_reg[31:0], rx_byte};
                                     end
 
-                                    if (thresh_byte_idx == THRESH_BYTES-1) begin
+                                    if (thresh_byte_idx == 3'd4) begin
                                         load_state <= LD_T_WRITE;
                                     end else begin
-                                        thresh_byte_idx <= thresh_byte_idx + 1'b1;
+                                        if (rx_count > 0) begin
+                                            thresh_byte_idx <= thresh_byte_idx + 1'b1;
+                                        end
+                                        rx_count <= rx_count + 1'b1;
                                     end
                                 end
                             end
@@ -533,18 +461,17 @@ module chip_flash_fsm #(
                             LD_T_WRITE: begin
                                 thresh_wr_valid_o <= 1'b1;
                                 thresh_wr_addr_o  <= thresh_entry_idx;
-                                thresh_wr_data_o  <= thresh_pack_reg[SCORE_BITS-1:0];
+                                thresh_wr_data_o  <= thresh_pack_reg;
                                 load_state        <= LD_T_NEXT;
                             end
 
                             LD_T_NEXT: begin
-                                // Move to the next threshold entry.
-                                thresh_flash_addr <= thresh_flash_addr + THRESH_BYTES;
-                                thresh_pack_reg   <= '0;
+                                thresh_wr_valid_o <= 1'b0;
+                                thresh_flash_addr <= thresh_flash_addr + 3'b101;
                                 thresh_byte_idx   <= '0;
+                                thresh_pack_reg  <= '0;
 
                                 if (thresh_entry_idx == THRESH_COUNT-1) begin
-                                    spi_cs_n_o <= 1'b1;
                                     load_state <= LD_DONE;
                                 end else begin
                                     thresh_entry_idx <= thresh_entry_idx + 1'b1;
@@ -553,10 +480,10 @@ module chip_flash_fsm #(
                             end
 
                             LD_DONE: begin
-                                // Boot finished. Release the core immediately.
                                 spi_cs_n_o  <= 1'b1;
                                 boot_done_o <= 1'b1;
                                 core_rst_o  <= 1'b0;
+                                rx_count    <= '0;
                                 main_state  <= ST_RUN;
                                 load_state  <= LD_IDLE;
                             end
@@ -574,9 +501,6 @@ module chip_flash_fsm #(
                     end
                 end
 
-                // =============================================================
-                // ST_RUN
-                // =============================================================
                 ST_RUN: begin
                     core_rst_o  <= 1'b0;
                     spi_cs_n_o  <= 1'b1;
@@ -602,9 +526,6 @@ module chip_flash_fsm #(
                     end
                 end
 
-                // =============================================================
-                // ST_DEBUG
-                // =============================================================
                 ST_DEBUG: begin
                     core_rst_o <= 1'b1;
                     spi_cs_n_o <= 1'b1;
