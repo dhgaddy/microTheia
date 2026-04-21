@@ -4,9 +4,12 @@ Project uses wafer.space MPW and runs using the gf180mcu PDK.
 
 ## Prerequisites and setup
 
+Make sure Git and Git LFS are installed.
+
 ```bash
 git clone git@github.com:MrPoloGit/group-g.git
 cd group-g
+git lfs pull
 ```
 
 Ensure [Docker](https://www.docker.com/) is installed and start the devcontainer. You can also open this repository in a github codespace.
