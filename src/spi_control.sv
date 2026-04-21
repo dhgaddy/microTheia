@@ -108,7 +108,7 @@ assign chip_in_valid = in_fifo_valid_o;
 //----------CHIP OUT BEGIN--------
 //this side is a little more complicated because the bit on MISO must awlays be valid the very first posedge of SCLK after CS goes low
 
-logic [DATA_WIDTH - 1:0] out_shifter;
+logic [DATA_WIDTH - 1:0] out_shifter, backup_shifter;
 logic [DATA_WIDTH_W - 1:0] out_counter;
 logic [DATA_WIDTH - 1:0] fifo_data_from_chip;
 logic [0:0] fifo_from_chip_valid;
@@ -124,6 +124,7 @@ logic [0:0] consumed_during_idle;
 always_ff @(negedge SCLK) begin
     if(reset_i) begin
         out_shifter   <= '0;
+        backup_shifter <= '0;
         out_counter   <= '0;
         next_tx_byte  <= '0;
         next_tx_valid <= 1'b0;
@@ -138,6 +139,7 @@ always_ff @(negedge SCLK) begin
         //if fifo has a valid byte and staging register isnt full then grab it and set valid flag
         if(fifo_from_chip_valid && !next_tx_valid) begin
             next_tx_byte  <= fifo_data_from_chip;
+            need_read <= 1'b1;
             next_tx_valid <= 1'b1;
         end
         if(~chip_out_ready_o) begin
@@ -145,23 +147,33 @@ always_ff @(negedge SCLK) begin
         end
 
         if(CS)begin // cs high means not a transaction, but the out_shifter needs to stay loaded and ready
-            out_counter <= '0;
-            if(!next_tx_valid) begin // if no byte is buffered already ask fifo for one
-                need_read <= 1'b1;
+            if(!consumed_during_idle) begin //this check is important, fixed a bug
+                out_counter <= '0;
             end
+            else begin
+                out_counter <= 1;
+            end
+            //below was causing problems, better to send the read request only when the register or the fifo data get used
+            /*if(!next_tx_valid) begin // if no byte is buffered already ask fifo for one
+                need_read <= 1'b1;
+            end*/
 
             // preload shifter while idle so first bit is already valid before first posedge after CS goes low
-            if(next_tx_valid) begin
+            if(next_tx_valid&!consumed_during_idle) begin
                 out_shifter <= {next_tx_byte, 1'b0};
+                backup_shifter <= next_tx_byte;
                 MISO        <= next_tx_byte[DATA_WIDTH - 1];
-                if(!consumed_during_idle) begin
-                    out_counter <= out_counter + 1'd1; //preloaded bit needs to be counted? was this the bug?
-                end    
+                //if(!consumed_during_idle) begin
+                    out_counter <= out_counter + 1'd1; //preloaded bit needs to be counted
+                    next_tx_valid <= 1'b0; //consume the byte? 
+                //end    
+                need_read <= 1'b1;
                 consumed_during_idle <= 1'b1;
             end
-            else begin //if nothing buffered and fifo has nothing then 0 is valid first bit
+            else if (!consumed_during_idle) begin //if nothing buffered and fifo has nothing then 0 is valid first bit
                 out_shifter <= '0;
                 MISO        <= 1'b0;
+                //need_read <= 1'b1;
             end
         end
         else begin // CS low, a transaction is active or beginning
@@ -183,13 +195,18 @@ always_ff @(negedge SCLK) begin
                 // reload directly from holding register if available
                 if(next_tx_valid) begin
                     out_shifter   <= next_tx_byte;
+                    backup_shifter <= next_tx_byte;
                     next_tx_valid <= 1'b0; //consume buffered byte
+                    //need_read <= 1'b1;
                 end
                 else if(fifo_from_chip_valid) begin
                     out_shifter <= fifo_data_from_chip;
+                    backup_shifter <= fifo_data_from_chip;
+                    need_read <= 1'b1;
                 end
                 else begin
                     out_shifter <= '0; //otherwise shift out DATA_WIDTH 0s and then check again
+                    backup_shifter <= '0;
                     need_read   <= 1'b1; // request read again to possibly be preloaded before next DATA_WIDTH bits finish shifting
                 end
             end
