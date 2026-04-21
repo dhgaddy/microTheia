@@ -17,7 +17,8 @@ RUN apt-get -y install \
     gnupg \
     ca-certificates \
     python3 \
-    python3-pip
+    python3-pip \
+    git-lfs
 
 #install oss-cad-suite
 RUN cd /opt && \
