@@ -144,7 +144,7 @@ sim: ## Run RTL simulation with cocotb
 		fi; \
 		rm -rf cocotb/sim_build/$$d; \
 		\
-		SRCS="src/gf180_sram_1r1w.sv src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/chip_flash_fsm.sv src/selectable_debug.sv"; \
+		SRCS="src/gf180_sram_1r1w.sv src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/uart_*.sv src/chip_flash_fsm.sv src/gray2bin.sv src/bin2gray.sv src/counter.sv src/delaybuffer.sv src/fifo_1r1w_cdc.sv src/ram_1r1w_sync.sv src/reg_cdc_sram_buffer.sv src/spi_control.sv src/selectable_debug.sv"; \
 		\
 		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
 		export SIM_CONFIG=$(CONFIG_FILE); \
