@@ -24,7 +24,8 @@ module evt2_decoder #(
     output logic [$clog2(GRID_SIZE)-1:0] x_out,
     output logic [$clog2(GRID_SIZE)-1:0] y_out,
     output logic                         event_valid,
-    output logic [11:0]                  decoder_dbg, //debug bus
+    output logic [33:0]                  ts_out,       // full 34-bit timestamp of last CD event
+    output logic [11:0]                  decoder_dbg,  //debug bus
     output logic [31:0]                  decoder_output_dbg
 );
 
@@ -53,7 +54,8 @@ module evt2_decoder #(
     wire [10:0] y_raw    = evt_word[10:0];
     wire        is_cd    = (pkt_type == EVT_CD_OFF) || (pkt_type == EVT_CD_ON);
 
-    logic have_time_high;
+    logic        have_time_high;
+    logic [27:0] time_high_reg;
 
     logic [10:0]          x_clamped;
     logic [10:0]          y_clamped;
@@ -118,8 +120,10 @@ module evt2_decoder #(
     always_ff @(posedge clk) begin
         if (rst) begin
             have_time_high <= 1'b0;
+            time_high_reg  <= '0;
             x_out          <= '0;
             y_out          <= '0;
+            ts_out         <= '0;
             event_valid    <= 1'b0;
         end else begin
             event_valid <= 1'b0;
@@ -128,6 +132,7 @@ module evt2_decoder #(
                 case (pkt_type)
                     EVT_TIME_HIGH: begin
                         have_time_high <= 1'b1;
+                        time_high_reg  <= evt_word[27:0];
                     end
 
                     EVT_CD_OFF,
@@ -135,6 +140,7 @@ module evt2_decoder #(
                         if (!REQUIRE_TIME_HIGH || have_time_high) begin
                             x_out       <= x_grid;
                             y_out       <= y_grid;
+                            ts_out      <= {time_high_reg, evt_word[27:22]};
                             event_valid <= 1'b1;
                         end
                     end
@@ -147,6 +153,6 @@ module evt2_decoder #(
         end
     end
 
-    //debug connections
-    assign decoder_dbg = {event_ready_i, data_valid, y_out, x_out, event_valid, data_ready};
+    assign decoder_dbg        = {event_ready_i, data_valid, y_out, x_out, event_valid, data_ready};
+    assign decoder_output_dbg = ts_out[31:0];
 endmodule
