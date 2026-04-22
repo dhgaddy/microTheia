@@ -26,7 +26,6 @@ module voxel_bin_core #(
     parameter int SENSOR_HEIGHT     = 320,
     parameter int WEIGHT_BITS       = 8,
     parameter int NUM_CLASSES       = 4,
-    parameter int CYCLES_PER_BIN    = 0,
     // SCORE_BITS as a parameter (not localparam) so it can appear in port widths.
     // Default matches the formula used internally; callers should not override this.
     parameter int SCORE_BITS        = COUNTER_BITS + WEIGHT_BITS +
@@ -71,6 +70,9 @@ module voxel_bin_core #(
     output logic       debug_capture_active,
     output logic       debug_score_busy,
 
+    // Force a bin rollover (test/debug use only; tie to 0 in production)
+    input  logic       force_rollover_i,
+
     //debug mux output
 
     output logic [31:0] debug_mux,
@@ -114,6 +116,7 @@ module voxel_bin_core #(
 
     logic [($clog2(GRID_SIZE))-1:0] dec_x16;
     logic [($clog2(GRID_SIZE))-1:0] dec_y16;
+    logic [33:0]                    dec_ts_out;
     logic                           dec_event_valid;
     logic                           dec_data_ready;
 
@@ -254,6 +257,7 @@ module voxel_bin_core #(
         .data_ready        (dec_data_ready),
         .x_out             (dec_x16),
         .y_out             (dec_y16),
+        .ts_out            (dec_ts_out),
         .event_valid       (dec_event_valid),
         .decoder_dbg       (decoder_dbg),
         .decoder_output_dbg(decoder_output_dbg)
@@ -263,20 +267,20 @@ module voxel_bin_core #(
     // Voxel binning
     // ------------------------------------------------------------------
     voxel_binning #(
-        .CLK_FREQ_HZ   (CLK_FREQ_HZ),
-        .WINDOW_MS     (WINDOW_MS),
-        .GRID_SIZE     (GRID_SIZE),
-        .NUM_BINS      (NUM_BINS),
-        .READOUT_BINS  (READOUT_BINS),
-        .COUNTER_BITS  (COUNTER_BITS),
-        .CYCLES_PER_BIN(CYCLES_PER_BIN)
+        .WINDOW_MS    (WINDOW_MS),
+        .GRID_SIZE    (GRID_SIZE),
+        .NUM_BINS     (NUM_BINS),
+        .READOUT_BINS (READOUT_BINS),
+        .COUNTER_BITS (COUNTER_BITS)
     ) u_voxel_binning (
-        .clk          (clk),
-        .rst          (rst),
-        .event_valid  (dec_event_valid),
-        .event_x      (dec_x16),
-        .event_y      (dec_y16),
-        .event_ready  (binner_event_ready),
+        .clk             (clk),
+        .rst             (rst),
+        .event_valid     (dec_event_valid),
+        .event_x         (dec_x16),
+        .event_y         (dec_y16),
+        .ts_in           (dec_ts_out),
+        .force_rollover_i(force_rollover_i),
+        .event_ready     (binner_event_ready),
         .readout_ready(binner_readout_ready),
         .readout_start(binner_readout_start),
         .readout_valid(binner_readout_valid),

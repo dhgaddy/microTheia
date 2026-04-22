@@ -18,13 +18,11 @@
 
 //
 module voxel_binning #(
-    parameter  int CLK_FREQ_HZ    = 12_000_000,
     parameter  int WINDOW_MS      = 1000,
     parameter  int GRID_SIZE      = 16,
     parameter  int NUM_BINS       = 8,
     parameter  int READOUT_BINS   = 8,
     parameter  int COUNTER_BITS   = 16,
-    parameter  int CYCLES_PER_BIN = 0,
     localparam int RO_INDEX_WIDTH = READOUT_BINS*GRID_SIZE*GRID_SIZE
 )(
     input  logic                              clk,
@@ -32,6 +30,8 @@ module voxel_binning #(
     input  logic                              event_valid,
     input  logic [$clog2(GRID_SIZE)-1:0]      event_x,
     input  logic [$clog2(GRID_SIZE)-1:0]      event_y,
+    input  logic [33:0]                       ts_in,          // 34-bit EVT2 timestamp (us), valid with event_valid
+    input  logic                              force_rollover_i, // pulse high for one cycle to force a bin advance (test use)
     output logic                              event_ready,
     input  logic                              readout_ready,
     output logic                              readout_start,
@@ -49,11 +49,8 @@ module voxel_binning #(
     localparam int CELL_BITS           = (CELLS_PER_BIN > 1) ? $clog2(CELLS_PER_BIN) : 1;
     localparam int BIN_COUNT_BITS      = $clog2(NUM_BINS + 1);
     localparam int MEM_ADDR_BITS       = $clog2(TOTAL_CELLS > 1 ? TOTAL_CELLS : 2);
-    localparam int BIN_DURATION_MS     = WINDOW_MS / READOUT_BINS;
-    localparam int CYCLES_PER_BIN_AUTO = (CLK_FREQ_HZ / 1000) * BIN_DURATION_MS;
-    localparam int CYCLES_PER_BIN_USE  = (CYCLES_PER_BIN == 0) ? CYCLES_PER_BIN_AUTO : CYCLES_PER_BIN;
-    localparam int CYCLES_PER_BIN_SAFE = (CYCLES_PER_BIN_USE < 1) ? 1 : CYCLES_PER_BIN_USE;
-    localparam int TIMER_BITS          = (CYCLES_PER_BIN_SAFE > 1) ? $clog2(CYCLES_PER_BIN_SAFE) : 1;
+    localparam int BIN_DURATION_US      = (WINDOW_MS * 1000) / READOUT_BINS;
+    localparam logic [33:0] BIN_DURATION_TS = 34'(BIN_DURATION_US);
 
     initial begin
         if (READOUT_BINS > NUM_BINS)
@@ -100,7 +97,8 @@ module voxel_binning #(
     // ------------------------------------------------------------------
     // Control registers
     // ------------------------------------------------------------------
-    logic [TIMER_BITS-1:0]    timer_ctr;
+    logic [33:0]              bin_start_ts;   // timestamp of the start of the current bin
+    logic                     ts_initialized; // set on first CD event
     logic [BIN_BITS-1:0]      wr_bin_idx;
     logic [BIN_BITS-1:0]      clear_bin_idx;
     logic [BIN_BITS-1:0]      snapshot_start_bin;
@@ -149,6 +147,17 @@ module voxel_binning #(
                       : BIN_BITS'(rd_bin_calc);
 
         event_cell_idx = CELL_BITS'(event_y * GRID_SIZE + event_x);
+    end
+
+    // ------------------------------------------------------------------
+    // Rollover trigger: timestamp crossed a bin boundary, or explicit force.
+    // ------------------------------------------------------------------
+    logic do_rollover;
+
+    always_comb begin
+        do_rollover = force_rollover_i ||
+                      (event_valid && ts_initialized &&
+                       ((ts_in - bin_start_ts) >= BIN_DURATION_TS));
     end
 
     // ------------------------------------------------------------------
@@ -235,7 +244,8 @@ module voxel_binning #(
     always_ff @(posedge clk) begin
         if (rst) begin
             state          <= ST_CLEAR;
-            timer_ctr      <= '0;
+            bin_start_ts   <= '0;
+            ts_initialized <= 1'b0;
             wr_bin_idx     <= '0;
             clear_bin_idx  <= '0;
             completed_bins <= '0;
@@ -264,9 +274,13 @@ module voxel_binning #(
                         rmw_pending <= 1'b0;
                     end
 
-                    // Bin timer
-                    if (timer_ctr == TIMER_BITS'(CYCLES_PER_BIN_SAFE - 1)) begin
-                        timer_ctr      <= '0;
+                    // Latch bin start on the first CD event; roll on timestamp boundary.
+                    if (event_valid && !ts_initialized) begin
+                        ts_initialized <= 1'b1;
+                        bin_start_ts   <= ts_in;
+                    end else if (do_rollover) begin
+                        if (ts_initialized)
+                            bin_start_ts <= bin_start_ts + BIN_DURATION_TS;
                         clear_bin_idx  <= next_wr_bin;
                         completed_bins <= completed_bins_next;
 
@@ -284,8 +298,6 @@ module voxel_binning #(
                             state          <= ST_CLEAR;
                             clear_cell_idx <= '0;
                         end
-                    end else begin
-                        timer_ctr <= timer_ctr + 1'b1;
                     end
                 end
 
