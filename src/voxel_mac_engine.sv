@@ -100,7 +100,7 @@ module voxel_mac_engine #(
                             // zero-extended to SCORE_BITS before accumulation.
                             logic [COUNTER_BITS+WEIGHT_BITS-1:0] product;
                             product = feature_data *
-                                      weight_data_flat[g*WEIGHT_BITS +: WEIGHT_BITS];
+                                      weight_data_flat[g*WEIGHT_BITS +: WEIGHT_BITS]; 
                             score_acc[g] <= score_acc[g] + SCORE_BITS'(product);
                         end
                     end

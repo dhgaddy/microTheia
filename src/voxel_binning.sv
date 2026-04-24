@@ -112,6 +112,12 @@ module voxel_binning #(
     logic                    rmw_pending;
     logic [MEM_ADDR_BITS-1:0] rmw_addr;
 
+    // Event held while timestamp-driven rollover/readout/clear catches up.
+    logic                         pending_event_valid;
+    logic [$clog2(GRID_SIZE)-1:0] pending_event_x;
+    logic [$clog2(GRID_SIZE)-1:0] pending_event_y;
+    logic [33:0]                  pending_event_ts;
+
     // Readout pipeline (ST_READOUT)
     logic rd_draining;   // extra drain cycle after last read issued
 
@@ -125,8 +131,17 @@ module voxel_binning #(
     logic [BIN_BITS:0]         rd_bin_calc;
     logic [BIN_BITS-1:0]       rd_bin_idx;
     logic [CELL_BITS-1:0]      event_cell_idx;
+    logic                      acc_event_valid;
+    logic [$clog2(GRID_SIZE)-1:0] acc_event_x;
+    logic [$clog2(GRID_SIZE)-1:0] acc_event_y;
+    logic [33:0]                  acc_event_ts;
 
     always_comb begin
+        acc_event_valid = pending_event_valid || event_valid;
+        acc_event_x     = pending_event_valid ? pending_event_x  : event_x;
+        acc_event_y     = pending_event_valid ? pending_event_y  : event_y;
+        acc_event_ts    = pending_event_valid ? pending_event_ts : ts_in;
+
         wr_bin_plus_1 = wr_bin_idx + 1'b1;
         next_wr_bin   = (wr_bin_plus_1 >= NUM_BINS)
                         ? BIN_BITS'(wr_bin_plus_1 - NUM_BINS)
@@ -146,7 +161,7 @@ module voxel_binning #(
                       ? BIN_BITS'(rd_bin_calc - NUM_BINS)
                       : BIN_BITS'(rd_bin_calc);
 
-        event_cell_idx = CELL_BITS'(event_y * GRID_SIZE + event_x);
+        event_cell_idx = CELL_BITS'(acc_event_y * GRID_SIZE + acc_event_x);
     end
 
     // ------------------------------------------------------------------
@@ -155,9 +170,10 @@ module voxel_binning #(
     logic do_rollover;
 
     always_comb begin
-        do_rollover = force_rollover_i ||
-                      (event_valid && ts_initialized &&
-                       ((ts_in - bin_start_ts) >= BIN_DURATION_TS));
+        do_rollover = !rmw_pending &&
+                      (force_rollover_i ||
+                       (acc_event_valid && ts_initialized &&
+                        ((acc_event_ts - bin_start_ts) >= BIN_DURATION_TS)));
     end
 
     // ------------------------------------------------------------------
@@ -182,7 +198,7 @@ module voxel_binning #(
         case (state)
             ST_ACCUM: begin
                 // RMW read: issue when event arrives and no writeback is pending
-                sram_rd_valid = event_valid && !rmw_pending;
+                sram_rd_valid = acc_event_valid && !rmw_pending && !do_rollover;
                 sram_rd_addr  = MEM_ADDR_BITS'(wr_bin_idx * CELLS_PER_BIN + event_cell_idx);
                 // RMW writeback: one cycle after the read
                 sram_wr_valid = rmw_pending;
@@ -211,7 +227,7 @@ module voxel_binning #(
     // ------------------------------------------------------------------
     // event_ready: block during RMW writeback cycle
     // ------------------------------------------------------------------
-    assign event_ready = (state == ST_ACCUM) && !rmw_pending;
+    assign event_ready = (state == ST_ACCUM) && !rmw_pending && !pending_event_valid;
 
     // ------------------------------------------------------------------
     // Readout output pipeline (1-cycle delay to align with SRAM latency)
@@ -255,6 +271,10 @@ module voxel_binning #(
             readout_start  <= 1'b0;
             rmw_pending    <= 1'b0;
             rmw_addr       <= '0;
+            pending_event_valid <= 1'b0;
+            pending_event_x     <= '0;
+            pending_event_y     <= '0;
+            pending_event_ts    <= '0;
             rd_draining    <= 1'b0;
         end else begin
             readout_start <= 1'b0;
@@ -263,11 +283,13 @@ module voxel_binning #(
                 // ----------------------------------------------------------
                 ST_ACCUM: begin
                     // RMW pipeline
-                    if (event_valid && !rmw_pending) begin
+                    if (acc_event_valid && !rmw_pending && !do_rollover) begin
                         // Cycle N: SRAM read issued (see sram_rd_valid above)
                         rmw_addr    <= MEM_ADDR_BITS'(wr_bin_idx * CELLS_PER_BIN
                                                       + event_cell_idx);
                         rmw_pending <= 1'b1;
+                        if (pending_event_valid)
+                            pending_event_valid <= 1'b0;
                     end
                     if (rmw_pending) begin
                         // Cycle N+1: SRAM write issued (see sram_wr_valid above)
@@ -275,10 +297,16 @@ module voxel_binning #(
                     end
 
                     // Latch bin start on the first CD event; roll on timestamp boundary.
-                    if (event_valid && !ts_initialized) begin
+                    if (acc_event_valid && !ts_initialized) begin
                         ts_initialized <= 1'b1;
-                        bin_start_ts   <= ts_in;
+                        bin_start_ts   <= acc_event_ts;
                     end else if (do_rollover) begin
+                        if (event_valid && !pending_event_valid) begin
+                            pending_event_valid <= 1'b1;
+                            pending_event_x     <= event_x;
+                            pending_event_y     <= event_y;
+                            pending_event_ts    <= ts_in;
+                        end
                         if (ts_initialized)
                             bin_start_ts <= bin_start_ts + BIN_DURATION_TS;
                         clear_bin_idx  <= next_wr_bin;

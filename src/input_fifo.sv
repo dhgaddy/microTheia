@@ -68,6 +68,13 @@ module input_fifo #(
         .rd_data_o  (ram_rd_data)
     );
 
+    logic [FIFO_DEPTH_LOG2-1:0] wr_ptr_n;
+    logic [FIFO_DEPTH_LOG2-1:0] rd_ptr_n;
+    logic [FIFO_DEPTH_LOG2:0]   tail_count_n;
+    logic [DATA_WIDTH-1:0]      out_data_n;
+    logic                       out_valid_n;
+    logic                       rd_pending_n;
+
     always_ff @(posedge clk_i) begin
         if (reset_i) begin
             wr_ptr      <= '0;
@@ -77,13 +84,7 @@ module input_fifo #(
             out_valid_r <= 1'b0;
             rd_pending  <= 1'b0;
         end else begin
-            logic [FIFO_DEPTH_LOG2-1:0] wr_ptr_n;
-            logic [FIFO_DEPTH_LOG2-1:0] rd_ptr_n;
-            logic [FIFO_DEPTH_LOG2:0]   tail_count_n;
-            logic [DATA_WIDTH-1:0]      out_data_n;
-            logic                       out_valid_n;
-            logic                       rd_pending_n;
-
+            
             wr_ptr_n     = wr_ptr;
             rd_ptr_n     = rd_ptr;
             tail_count_n = tail_count;

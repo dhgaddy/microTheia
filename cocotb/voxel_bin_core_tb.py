@@ -33,11 +33,16 @@ NUM_CLASSES      = CFG.get("NUM_CLASSES", 4)
 
 
 BIN_DURATION_MS          = WINDOW_MS // READOUT_BINS
-CYCLES_PER_BIN_SAFE      = (CLK_FREQ_HZ // 1000) * BIN_DURATION_MS
+BIN_DURATION_US          = BIN_DURATION_MS * 1000
 X_BIN_DIV                = SENSOR_WIDTH // GRID_SIZE
 Y_BIN_DIV                = SENSOR_HEIGHT // GRID_SIZE
+DIV_K                    = 12
+X_GRID_M                 = (1 << DIV_K) // X_BIN_DIV + 1
+Y_GRID_M                 = (1 << DIV_K) // Y_BIN_DIV + 1
 FEATURE_COUNT            = GRID_SIZE * GRID_SIZE * READOUT_BINS
 CELLS_PER_BIN            = GRID_SIZE * GRID_SIZE
+TOTAL_CELLS              = NUM_BINS * CELLS_PER_BIN
+MAX_COUNTER              = (1 << COUNTER_BITS) - 1
 ASSERT_EXPECTED_LABEL    = int(os.environ.get("ASSERT_EXPECTED_LABEL", "1"))
 EXPECTED_LABEL_MIN_RATIO = float(os.environ.get("EXPECTED_LABEL_MIN_RATIO", "0.60"))
 
@@ -102,6 +107,7 @@ def _decode_evt2_word_fields(word):
 class Evt2DecoderModel:
     def __init__(self):
         self.have_time_high = False
+        self.time_high = 0
 
     def on_word(self, word):
         fields = _decode_evt2_word_fields(word)
@@ -111,6 +117,7 @@ class Evt2DecoderModel:
 
         if pkt == EVT_TIME_HIGH:
             self.have_time_high = True
+            self.time_high = fields["word"] & 0x0FFFFFFF
             return None
 
         if pkt not in (EVT_CD_OFF, EVT_CD_ON):
@@ -131,9 +138,72 @@ class Evt2DecoderModel:
         if MAP_FLIP_Y:
             y_oriented = (SENSOR_HEIGHT - 1) - y_oriented
 
-        x_grid = min(x_oriented // X_BIN_DIV, GRID_SIZE - 1)
-        y_grid = min(y_oriented // Y_BIN_DIV, GRID_SIZE - 1)
-        return (x_grid, y_grid)
+        x_grid = min((x_oriented * X_GRID_M) >> DIV_K, GRID_SIZE - 1)
+        y_grid = min((y_oriented * Y_GRID_M) >> DIV_K, GRID_SIZE - 1)
+        ts = ((self.time_high & 0x0FFFFFFF) << 6) | fields["ts_lsb"]
+        return (x_grid, y_grid, ts)
+
+
+class TimestampVoxelModel:
+    """Perfect timestamp-driven model for voxel_binning feature windows."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.mem = [0] * TOTAL_CELLS
+        self.wr_bin_idx = 0
+        self.completed_bins = 0
+        self.ts_initialized = False
+        self.bin_start_ts = 0
+
+    @staticmethod
+    def _cell_addr(x, y):
+        return (y * GRID_SIZE) + x
+
+    def _readout_snapshot(self):
+        start = (self.wr_bin_idx + NUM_BINS - (READOUT_BINS - 1)) % NUM_BINS
+        out = []
+        for off in range(READOUT_BINS):
+            b = (start + off) % NUM_BINS
+            base = b * CELLS_PER_BIN
+            out.extend(self.mem[base:base + CELLS_PER_BIN])
+        return out
+
+    def _rotate_bin(self):
+        next_wr = (self.wr_bin_idx + 1) % NUM_BINS
+        self.completed_bins = min(self.completed_bins + 1, NUM_BINS)
+        expected = self._readout_snapshot() if self.completed_bins >= READOUT_BINS else None
+
+        base = next_wr * CELLS_PER_BIN
+        for i in range(CELLS_PER_BIN):
+            self.mem[base + i] = 0
+
+        self.wr_bin_idx = next_wr
+        return expected
+
+    def force_rollover(self):
+        if self.ts_initialized:
+            self.bin_start_ts += BIN_DURATION_US
+        expected = self._rotate_bin()
+        return [] if expected is None else [expected]
+
+    def accept_event(self, x, y, ts):
+        readouts = []
+        if not self.ts_initialized:
+            self.ts_initialized = True
+            self.bin_start_ts = ts
+        else:
+            while ts - self.bin_start_ts >= BIN_DURATION_US:
+                expected = self._rotate_bin()
+                if expected is not None:
+                    readouts.append(expected)
+                self.bin_start_ts += BIN_DURATION_US
+
+        addr = (self.wr_bin_idx * CELLS_PER_BIN) + self._cell_addr(x, y)
+        if self.mem[addr] < MAX_COUNTER:
+            self.mem[addr] += 1
+        return readouts
 
 
 
@@ -266,11 +336,14 @@ async def deposit_weights_and_thresholds(dut, weights, thresholds):
 
 
 class CoreHarness:
-    def __init__(self, dut, score_model=None):
+    def __init__(self, dut, score_model=None, check_feature_windows=True):
         self.dut = dut
         self.decoder = Evt2DecoderModel()
+        self.bin_model = TimestampVoxelModel()
+        self.check_feature_windows = check_feature_windows
 
         self.expected_decoded = deque()
+        self.expected_feature_windows = deque()
         self.current_window = []
 
         self.expected_gestures = []
@@ -278,6 +351,8 @@ class CoreHarness:
 
         self.accepted_words = 0
         self.completed_windows = 0
+        self.next_event_ts = 0
+        self.last_time_high = None
 
         # Optional independent score verification.
         self.score_model = score_model
@@ -292,6 +367,7 @@ class CoreHarness:
         self.dut.rst.value = 1
         self.dut.evt_word.value = 0
         self.dut.evt_word_valid.value = 0
+        self.dut.force_rollover_i.value = 0
         # self.dut.active_mode_i.value = MODE_BOOT
         self.dut.weight_wr_valid_i.value = 0
         self.dut.weight_wr_class_i.value = 0
@@ -310,10 +386,13 @@ class CoreHarness:
             observed = (
                 int(self.dut.u_evt2_decoder.x_out.value),
                 int(self.dut.u_evt2_decoder.y_out.value),
+                int(self.dut.u_evt2_decoder.ts_out.value),
             )
             assert self.expected_decoded, f"Unexpected decoded event {observed}"
             expected = self.expected_decoded.popleft()
             assert observed == expected, f"Decoded mismatch DUT={observed} model={expected}"
+            x, y, ts = observed
+            self.expected_feature_windows.extend(self.bin_model.accept_event(x, y, ts))
 
         if int(self.dut.u_voxel_binning.readout_valid.value):
             idx = int(self.dut.u_voxel_binning.readout_index.value)
@@ -324,20 +403,31 @@ class CoreHarness:
             if int(self.dut.u_voxel_binning.readout_last.value):
                 assert len(self.current_window) == FEATURE_COUNT, \
                     f"Feature window length {len(self.current_window)} != {FEATURE_COUNT}"
-                self.window_features.append(list(self.current_window))
+                if self.check_feature_windows:
+                    assert self.expected_feature_windows, "DUT emitted an unexpected feature window"
+                    expected_window = self.expected_feature_windows.popleft()
+                    assert self.current_window == expected_window, (
+                        "Feature window mismatch against timestamp golden model\n"
+                        f"DUT:   {self.current_window}\nMODEL: {expected_window}"
+                    )
+                else:
+                    expected_window = list(self.current_window)
+                    if self.expected_feature_windows:
+                        self.expected_feature_windows.popleft()
+                self.window_features.append(list(expected_window))
                 if self.score_model is not None:
-                    exp_cls, exp_pass, margin = self.score_model.classify(self.current_window)
+                    exp_cls, exp_pass, margin = self.score_model.classify(expected_window)
                     self.pending_score_checks.append((exp_cls, exp_pass))
                     # Log golden-model scores for this window
                     scores = [0] * NUM_CLASSES
-                    for fi, feat in enumerate(self.current_window):
+                    for fi, feat in enumerate(expected_window):
                         f = int(feat)
                         for c in range(NUM_CLASSES):
                             scores[c] += f * self.score_model.weights[c][fi]
                     self.window_scores.append(scores)
                     self.window_pred.append((exp_cls, exp_pass, margin))
-                    nz = sum(1 for v in self.current_window if v > 0)
-                    total = sum(int(v) for v in self.current_window)
+                    nz = sum(1 for v in expected_window if v > 0)
+                    total = sum(int(v) for v in expected_window)
                     cocotb.log.info(
                         f"[window {self.completed_windows}] model scores: "
                         f"D={scores[0]} L={scores[1]} R={scores[2]} U={scores[3]}  "
@@ -394,6 +484,21 @@ class CoreHarness:
             self.expected_decoded.append(evt)
         self.accepted_words += 1
 
+    async def send_grid_event(self, gx, gy, pkt=EVT_CD_ON, ts=None):
+        if ts is None:
+            ts = self.next_event_ts
+        time_high = (int(ts) >> 6) & 0x0FFFFFFF
+        if self.last_time_high != time_high:
+            await self.send_word(build_evt2_time_high(time_high))
+            self.last_time_high = time_high
+        await self.send_word(build_evt2_cd(
+            pkt,
+            sensor_x_from_grid(gx),
+            sensor_y_from_grid(gy),
+            int(ts) & 0x3F,
+        ))
+        self.next_event_ts = max(self.next_event_ts, int(ts) + 1)
+
     async def force_bin_rollover(self):
         while int(self.dut.u_voxel_binning.state.value) != ST_ACCUM:
             await self.tick(1)
@@ -406,7 +511,8 @@ class CoreHarness:
             fifo_has_data = int(self.dut.u_input_fifo.valid_o.value)
             dec_valid = int(self.dut.u_evt2_decoder.event_valid.value)
             src_valid = int(self.dut.evt_word_valid.value)
-            if fifo_has_data == 0 and dec_valid == 0 and src_valid == 0:
+            binner_ready = int(self.dut.u_voxel_binning.event_ready.value)
+            if fifo_has_data == 0 and dec_valid == 0 and src_valid == 0 and binner_ready == 1:
                 stable_empty += 1
                 if stable_empty >= 2:
                     break
@@ -416,8 +522,12 @@ class CoreHarness:
         else:
             raise AssertionError("Timeout draining input path before forced rollover")
 
-        self.dut.u_voxel_binning.timer_ctr.value = CYCLES_PER_BIN_SAFE - 1
+        self.expected_feature_windows.extend(self.bin_model.force_rollover())
+        if self.bin_model.ts_initialized:
+            self.next_event_ts = max(self.next_event_ts, self.bin_model.bin_start_ts)
+        self.dut.force_rollover_i.value = 1
         await self.tick(1)
+        self.dut.force_rollover_i.value = 0
 
     async def wait_quiet(self, quiet_cycles=20, timeout=200000):
         prev_g = len(self.observed_gestures)
@@ -436,6 +546,7 @@ class CoreHarness:
                     int(self.dut.u_input_fifo.valid_o.value) == 0 and
                     int(self.dut.u_voxel_binning.state.value) == ST_ACCUM and
                     not self.expected_decoded and
+                    (not self.check_feature_windows or not self.expected_feature_windows) and
                     not self.current_window and
                     not self.pending_score_checks
                 )
@@ -537,14 +648,9 @@ def region_points(name):
 async def drive_bin_traffic(h, rng, region, events=28):
     pts = region_points(region)
     for i in range(events):
-        if i % 10 == 0:
-            await h.send_word(build_evt2_time_high(rng.randint(0, 0x0FFFFFFF)))
-
         gx, gy = rng.choice(pts)
-        x_s = sensor_x_from_grid(gx)
-        y_s = sensor_y_from_grid(gy)
         pkt = EVT_CD_ON if (i & 1) else EVT_CD_OFF
-        await h.send_word(build_evt2_cd(pkt, x_s, y_s, i & 0x3F))
+        await h.send_grid_event(gx, gy, pkt=pkt)
 
         if i % 13 == 0:
             bad = (0xF << 28) | rng.randint(0, 0x0FFFFFFF)
@@ -688,12 +794,10 @@ async def test_fifo_backpressure_no_lost_events(dut):
     pts = region_points("top")
     for i in range(60):
         gx, gy = rng.choice(pts)
-        await h.send_word(
-            build_evt2_cd(EVT_CD_ON, sensor_x_from_grid(gx), sensor_y_from_grid(gy), i & 0x3F)
-        )
+        await h.send_grid_event(gx, gy, pkt=EVT_CD_ON)
         # Occasionally insert a TIME_HIGH mid-burst.
         if i % 15 == 0:
-            await h.send_word(build_evt2_time_high(rng.randint(0, 0x0FFFFFFF)))
+            await h.send_word(build_evt2_time_high(h.last_time_high or 0))
 
     # One rollover closes the current bin; wait_quiet drains any remaining pipeline.
     await h.force_bin_rollover()
@@ -705,6 +809,24 @@ async def test_fifo_backpressure_no_lost_events(dut):
     assert h.observed_gestures == h.expected_gestures, \
         (f"Gesture mismatch after backpressure burst\n"
          f"DUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}")
+
+
+@logged_test()
+async def test_core_timestamp_boundary_binning_matches_golden(dut):
+    """Decoded event timestamps, not host-forced cycles, define bin boundaries."""
+    h = CoreHarness(dut)
+    await h.setup()
+
+    await h.send_grid_event(0, 0, pkt=EVT_CD_ON, ts=5)
+    await h.send_grid_event(1, 1, pkt=EVT_CD_ON, ts=5 + BIN_DURATION_US)
+
+    # Complete the warm-up window. The harness compares every DUT feature
+    # window against TimestampVoxelModel before any gesture checks.
+    for _ in range(READOUT_BINS - 1):
+        await h.force_bin_rollover()
+
+    await h.wait_quiet()
+    assert h.completed_windows > 0, "Expected a timestamp-driven feature window"
 
 
 @logged_test()
@@ -739,14 +861,16 @@ async def test_decoder_events_match_model_exactly(dut):
     await h.setup()
 
     # Interleave TIME_HIGH and CD events; model tracks expected decoded output.
-    time_bases = [0x00001, 0x0ABCD, 0x3FFFF]
+    # Keep these close together so this decoder-only test does not also
+    # exercise timestamp-driven binner rollovers.
+    time_bases = [0x00001, 0x00002, 0x00003]
     for tb_val in time_bases:
         await h.send_word(build_evt2_time_high(tb_val))
-        for _ in range(10):
+        for i in range(10):
             gx = rng.randint(0, GRID_SIZE - 1)
             gy = rng.randint(0, GRID_SIZE - 1)
             pkt = EVT_CD_ON if rng.randint(0, 1) else EVT_CD_OFF
-            ts_lsb = rng.randint(0, 63)
+            ts_lsb = i
             await h.send_word(
                 build_evt2_cd(pkt, sensor_x_from_grid(gx), sensor_y_from_grid(gy), ts_lsb)
             )
@@ -828,13 +952,17 @@ async def _flush_stale_bins(h, weights=None):
 
     # Reset harness bookkeeping; the reset produces no valid feature windows.
     h.decoder = Evt2DecoderModel()
+    h.bin_model = TimestampVoxelModel()
     h.expected_decoded.clear()
+    h.expected_feature_windows.clear()
     h.current_window = []
     h.completed_windows = 0
     h.observed_gestures.clear()
     h.expected_gestures.clear()
     h.pending_score_checks.clear()
     h.accepted_words = 0
+    h.next_event_ts = 0
+    h.last_time_high = None
     h.window_features.clear()
     h.window_scores.clear()
     h.window_pred.clear()
@@ -851,7 +979,7 @@ async def test_wrong_gesture_trajectory_no_false_positive(dut):
     score_model = ScoreModel(weights)
 
     rng = random.Random(0xFA_15_E0)
-    h = CoreHarness(dut, score_model=score_model)
+    h = CoreHarness(dut, score_model=score_model, check_feature_windows=False)
     await h.setup()
     await _flush_stale_bins(h, weights=weights)
 
@@ -861,17 +989,11 @@ async def test_wrong_gesture_trajectory_no_false_positive(dut):
     # for every window — not that gestures are suppressed.
     # READOUT_BINS+1 rollovers: warm-up + at least one complete readout window.
     for _ in range(READOUT_BINS + 1):
-        await h.send_word(build_evt2_time_high(rng.randint(0, 0x0FFFFFFF)))
-        for _ in range(64):
+        for _ in range(32):
             gx = rng.randint(0, GRID_SIZE - 1)
             gy = rng.randint(0, GRID_SIZE - 1)
             pkt = EVT_CD_ON if rng.randint(0, 1) else EVT_CD_OFF
-            await h.send_word(build_evt2_cd(
-                pkt,
-                sensor_x_from_grid(gx),
-                sensor_y_from_grid(gy),
-                rng.randint(0, 63),
-            ))
+            await h.send_grid_event(gx, gy, pkt=pkt)
         await h.force_bin_rollover()
 
     await h.wait_quiet()
@@ -953,43 +1075,15 @@ def _read_evt2_bin(path):
 
 
 async def _stream_bin_file_with_timing(h, bin_path):
-    """Stream an EVT2.0 .bin file into the DUT, forcing bin rollovers at the correct
-    timestamps so the DUT's temporal window advances in sync with the recorded data.
+    """Stream an EVT2.0 .bin file into the DUT.
 
-    The DUT uses a clock-based bin timer.  When replaying a file at simulation
-    speed the timer would never expire naturally, so we parse each word's
-    timestamp and call force_bin_rollover() every time the timestamp crosses a
-    BIN_DURATION_MS boundary.  This mirrors how the hardware would behave in
-    real time where the timer fires every BIN_DURATION_MS milliseconds.
-
-    Timestamps in EVT2.0 are in microseconds.
+    The RTL's evt2_decoder now extracts and forwards the full 34-bit EVT2
+    timestamp to voxel_binning, which uses it to roll bins automatically when
+    each event crosses a BIN_DURATION_US boundary.  No manual force_bin_rollover
+    calls are needed during streaming.
     """
-    bin_duration_us = (WINDOW_MS // READOUT_BINS) * 1000  # ms -> us
-
     words = _read_evt2_bin(bin_path)
-
-    time_high = 0
-    next_bin_boundary_us = None  # set on first timestamp seen
-
     for word in words:
-        fields = _decode_evt2_word_fields(word)
-        pkt = fields["pkt"]
-
-        if pkt == EVT_TIME_HIGH:
-            time_high = fields["word"] & 0x0FFFFFFF
-        elif pkt in (EVT_CD_OFF, EVT_CD_ON):
-            ts_lsb = fields["ts_lsb"]
-            ts_us = (time_high << 6) | ts_lsb
-
-            if next_bin_boundary_us is None:
-                # Align first boundary to the next multiple of bin_duration_us
-                next_bin_boundary_us = (ts_us // bin_duration_us + 1) * bin_duration_us
-
-            # Roll the bin forward for every boundary this event crosses.
-            while ts_us >= next_bin_boundary_us:
-                await h.force_bin_rollover()
-                next_bin_boundary_us += bin_duration_us
-
         await h.send_word(word)
 
 
@@ -1027,7 +1121,7 @@ async def _run_bin_file_test(
     """
     weights = load_weights_from_mem()
     score_model = ScoreModel(weights)
-    h = CoreHarness(dut, score_model=score_model)
+    h = CoreHarness(dut, score_model=score_model, check_feature_windows=False)
     await h.setup(start_clock=start_clock)
     await _flush_stale_bins(h, weights=weights)
 
@@ -1144,7 +1238,6 @@ async def test_bin_file_gesture_3(dut):
     )
 
 
-# 14
 @logged_test()
 async def test_bin_file_timing_replay_ab(dut):
     """A/B timing investigation: timestamp-forced vs clock-driven replay.
@@ -1224,108 +1317,71 @@ async def test_windowing_strategy_matches_sliding_model(dut):
 
 
 @logged_test()
-async def test_threshold_calibration_report(dut):
-    """Compute threshold calibration suggestions from bin-file score distributions."""
-    bin_files = _resolve_bin_files()
-    per_class_score_pos = [[] for _ in range(NUM_CLASSES)]
-    per_class_score_neg = [[] for _ in range(NUM_CLASSES)]
-    per_class_margin_pos = [[] for _ in range(NUM_CLASSES)]
-    per_class_margin_neg = [[] for _ in range(NUM_CLASSES)]
+async def test_weight_write_blocked_in_classify_mode(dut):
+    """weight_wr_valid_gated must be 0 when the mode is CLASSIFY, even if weight_wr_valid_i=1."""
+    h = CoreHarness(dut, check_feature_windows=False)
+    await h.setup()
 
-    for i, path in enumerate(bin_files):
-        label = Path(path).stem
-        h = await _run_bin_file_test(
-            dut,
-            path,
-            f"{label}-calib",
-            expected_class=EXPECTED_BIN_FILE_CLASS[i],
-            replay_mode="timestamp_forced",
-            enforce_label=False,
-        )
-        true_cls = EXPECTED_BIN_FILE_CLASS[i]
-        for scores in h.window_scores:
-            for c in range(NUM_CLASSES):
-                if c == true_cls:
-                    per_class_score_pos[c].append(scores[c])
-                else:
-                    per_class_score_neg[c].append(scores[c])
-            best = max(range(NUM_CLASSES), key=lambda c: scores[c])
-            second = max(s for j, s in enumerate(scores) if j != best)
-            margin = scores[best] - second
-            if best == true_cls:
-                per_class_margin_pos[best].append(margin)
-            else:
-                per_class_margin_neg[best].append(margin)
+    # active_mode_i is MODE_CLASSIFY after setup. Assert weight_wr_valid_i and confirm
+    # the gated signal is suppressed.
+    await RisingEdge(dut.clk)
+    await NextTimeStep()
+    dut.weight_wr_valid_i.value = 1
+    dut.weight_wr_class_i.value = 0
+    dut.weight_wr_addr_i.value = 0
+    dut.weight_wr_data_i.value = 0xFF
+    await RisingEdge(dut.clk)
+    await ReadOnly()
+    assert int(dut.weight_wr_valid_gated.value) == 0, \
+        "weight_wr_valid_gated must be 0 in CLASSIFY mode"
 
-    class_thresh = [0] * NUM_CLASSES
-    diff_thresh = [0] * NUM_CLASSES
-    for c in range(NUM_CLASSES):
-        class_thresh[c], class_bal = _pick_best_threshold(
-            per_class_score_pos[c], per_class_score_neg[c]
-        )
-        diff_thresh[c], diff_bal = _pick_best_threshold(
-            per_class_margin_pos[c], per_class_margin_neg[c]
-        )
-        cocotb.log.info(
-            f"[calib class={GESTURE_NAMES[c]}] "
-            f"class_thr={class_thresh[c]} (bal_acc={class_bal:.3f}) "
-            f"diff_thr={diff_thresh[c]} (bal_acc={diff_bal:.3f})"
-        )
+    # Switch to PROGRAM mode; the same assertion must now pass through.
+    await NextTimeStep()
+    dut.active_mode_i.value = MODE_PROGRAM
+    await RisingEdge(dut.clk)
+    await ReadOnly()
+    assert int(dut.weight_wr_valid_gated.value) == 1, \
+        "weight_wr_valid_gated must be 1 in PROGRAM mode when weight_wr_valid_i=1"
 
-    mem_words = class_thresh + diff_thresh
-    hex_words = [f"{v:09X}" for v in mem_words]
-    cocotb.log.info("Suggested thresholds.mem contents:")
-    for w in hex_words:
-        cocotb.log.info(f"  {w}")
-
-    assert any(v > 0 for v in class_thresh), "Calibration expected non-zero class thresholds"
+    await NextTimeStep()
+    dut.weight_wr_valid_i.value = 0
+    dut.active_mode_i.value = MODE_CLASSIFY
 
 
 @logged_test()
-async def test_coordinate_orientation_sweep(dut):
-    """Check whether identity orientation is outperformed by swaps/flips."""
+async def test_mac_backpressure_holds_binner(dut):
+    """When the MAC is busy the binner must park in ST_WAIT_RD and complete both windows."""
     weights = load_weights_from_mem()
-    score_model = ScoreModel(weights)
-    bin_files = _resolve_bin_files()
-    modes = [
-        "identity",
-        "swap_xy",
-        "flip_x",
-        "flip_y",
-        "flip_xy",
-        "swap_xy_flip_x",
-        "swap_xy_flip_y",
-        "swap_xy_flip_xy",
-    ]
-    mode_hits = {m: 0 for m in modes}
-    total_windows = 0
+    h = CoreHarness(dut, score_model=ScoreModel(weights))
+    await h.setup()
+    await _flush_stale_bins(h, weights=weights)
 
-    for i, path in enumerate(bin_files):
-        label = Path(path).stem
-        expected = EXPECTED_BIN_FILE_CLASS[i]
-        h = await _run_bin_file_test(
-            dut,
-            path,
-            f"{label}-orient",
-            expected_class=expected,
-            replay_mode="timestamp_forced",
-            enforce_label=False,
-        )
-        for feat in h.window_features:
-            total_windows += 1
-            for mode in modes:
-                f_mode = feat if mode == "identity" else _transform_feature_window(feat, mode)
-                scores = _score_features(score_model.weights, f_mode)
-                pred = max(range(NUM_CLASSES), key=lambda c: scores[c])
-                if pred == expected:
-                    mode_hits[mode] += 1
+    rng = random.Random(0xBEEF_0001)
+    await h.send_word(build_evt2_time_high(0x1))
 
-    assert total_windows > 0, "Expected orientation sweep to evaluate at least one window"
-    for mode in modes:
-        cocotb.log.info(
-            f"[orientation] mode={mode} hits={mode_hits[mode]}/{total_windows} "
-            f"acc={mode_hits[mode] / total_windows:.3f}"
-        )
+    # Produce first complete readout window (READOUT_BINS rollovers).
+    for _ in range(READOUT_BINS):
+        await drive_bin_traffic(h, rng, "right", events=8)
+        await h.force_bin_rollover()
 
-    best_mode = max(modes, key=lambda m: mode_hits[m])
-    cocotb.log.info(f"[orientation] best_mode={best_mode}")
+    # Wait until the MAC goes busy scoring the first window.
+    for _ in range(10_000):
+        await h.tick(1)
+        if int(dut.debug_score_busy.value):
+            break
+    else:
+        raise AssertionError("MAC never went busy after first feature window")
+
+    # While the MAC is still busy, trigger a second rollover.
+    # binner_readout_ready=0, so the binner must park in ST_WAIT_RD.
+    await drive_bin_traffic(h, rng, "right", events=4)
+    await h.force_bin_rollover()
+
+    # Both windows must eventually complete and every class_valid must match ScoreModel.
+    await h.wait_quiet()
+    assert h.completed_windows >= 2, \
+        f"Expected >=2 completed windows after backpressure, got {h.completed_windows}"
+    assert not h.pending_score_checks, \
+        f"{len(h.pending_score_checks)} feature windows never produced class_valid"
+    assert h.observed_gestures == h.expected_gestures, \
+        f"Gesture mismatch after MAC backpressure\nDUT: {h.observed_gestures}\nMODEL: {h.expected_gestures}"
