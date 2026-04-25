@@ -163,6 +163,13 @@ Run `pip install -r scripts/requirements.txt` for RTL simulation, or `pip instal
 ## Third Party
 - https://github.com/google/globalfoundries-pdk-ip-gf180mcu_fd_ip_sram
 
+This project uses an SPI module from:
+
+- Jan Schiefer, "verilog_spi"
+  https://github.com/janschiefer/verilog_spi
+
+Licensed under the GNU LGPL v2.1.
+
 ## Precheck
 
 To check whether our design is suitable for manufacturing, run the [gf180mcu-precheck](https://github.com/wafer-space/gf180mcu-precheck) with the layout.

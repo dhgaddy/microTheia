@@ -1,0 +1,3 @@
+[submodule "src/verilog_spi"]
+	path = src/verilog_spi
+	url = https://github.com/janschiefer/verilog_spi
