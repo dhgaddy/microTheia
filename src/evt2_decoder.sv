@@ -24,26 +24,39 @@ module evt2_decoder #(
     output logic [$clog2(GRID_SIZE)-1:0] x_out,
     output logic [$clog2(GRID_SIZE)-1:0] y_out,
     output logic                         event_valid,
+    output logic                         evt_reads_done,
+    output logic [7:0]                   weight_addr_o,
+    output logic [7:0]                   weight_data_o,
+    output logic [3:0]                   weight_sram_addr_o,
+    output logic [35:0]                  thresh_data_o,
+    output logic [2:0]                   thresh_addr_o,
     output logic [33:0]                  ts_out,       // full 34-bit timestamp of last CD event
     output logic [11:0]                  decoder_dbg,  //debug bus
     output logic [31:0]                  decoder_output_dbg
+    
 );
 
     localparam int GRID_BITS = $clog2(GRID_SIZE);
 
-    localparam logic [3:0] EVT_CD_OFF    = 4'h0;
-    localparam logic [3:0] EVT_CD_ON     = 4'h1;
-    localparam logic [3:0] EVT_TIME_HIGH = 4'h8;
-    localparam int SENSOR_W_M1           = SENSOR_WIDTH  - 1;
-    localparam int SENSOR_H_M1           = SENSOR_HEIGHT - 1;
-    localparam int X_BIN_DIV             = (SENSOR_WIDTH  / GRID_SIZE);
-    localparam int Y_BIN_DIV             = (SENSOR_HEIGHT / GRID_SIZE);
+    localparam logic [3:0] EVT_CD_OFF     = 4'h0;
+    localparam logic [3:0] EVT_CD_ON      = 4'h1;
+    //Weight: [4 bit type address], [8 bit weight], [9 bit address], [4 bit sram address], [7 don't care]
+    localparam logic [3:0] EVT_WEIGHT     = 4'h2;
+    //Thresh: [4 bit type address], [18 bit upper/lower bits of threshold data], [3 bit threshold address], [7 don't care]
+    localparam logic [3:0] EVT_THRESH_U   = 4'h3;
+    localparam logic [3:0] EVT_THRESH_L   = 4'h4;
+    localparam logic [3:0] EVT_TIME_HIGH  = 4'h8;
+    localparam logic [3:0] EVT_READS_DONE = 4'hf;
+    localparam int SENSOR_W_M1            = SENSOR_WIDTH  - 1;
+    localparam int SENSOR_H_M1            = SENSOR_HEIGHT - 1;
+    localparam int X_BIN_DIV              = (SENSOR_WIDTH  / GRID_SIZE);
+    localparam int Y_BIN_DIV              = (SENSOR_HEIGHT / GRID_SIZE);
     // Reciprocal-multiply constants: floor(v/D) = (v * M) >> 12 for v < SENSOR_DIM.
     // M = floor(2^12 / D) + 1 gives exact results; clamp to GRID_SIZE-1 handles edge.
-    localparam int DIV_K                 = 12;
+    localparam int DIV_K                  = 12;
 
-    localparam int X_M                   = (1 << DIV_K) / X_BIN_DIV + 1;
-    localparam int Y_M                   = (1 << DIV_K) / Y_BIN_DIV + 1;
+    localparam int X_M                    = (1 << DIV_K) / X_BIN_DIV + 1;
+    localparam int Y_M                    = (1 << DIV_K) / Y_BIN_DIV + 1;
 
     wire [31:0] evt_word = SWAP_INPUT_BYTES
                          ? {data_in[7:0], data_in[15:8], data_in[23:16], data_in[31:24]}
@@ -67,6 +80,8 @@ module evt2_decoder #(
     logic [GRID_BITS-1:0] y_grid;
     logic [10+DIV_K:0]    x_prod_c, y_prod_c;
     logic [GRID_BITS:0]   x_grid_raw, y_grid_raw;
+
+    logic [17:0]          thresh_reg;
 
     always_comb begin
         if (x_raw >= SENSOR_WIDTH)
@@ -119,12 +134,19 @@ module evt2_decoder #(
 
     always_ff @(posedge clk) begin
         if (rst) begin
-            have_time_high <= 1'b0;
-            time_high_reg  <= '0;
-            x_out          <= '0;
-            y_out          <= '0;
-            ts_out         <= '0;
-            event_valid    <= 1'b0;
+            have_time_high     <= 1'b0;
+            time_high_reg      <= '0;
+            x_out              <= '0;
+            y_out              <= '0;
+            ts_out             <= '0;
+            event_valid        <= 1'b0;
+            evt_reads_done     <= 1'b0;
+            thresh_reg         <= '0;
+            weight_addr_o      <= '0;
+            weight_data_o      <= '0;
+            weight_sram_addr_o <= '0;
+            thresh_data_o      <= '0;
+            thresh_addr_o      <= '0;
         end else begin
             event_valid <= 1'b0;
 
@@ -143,6 +165,27 @@ module evt2_decoder #(
                             ts_out      <= {time_high_reg, evt_word[27:22]};
                             event_valid <= 1'b1;
                         end
+                    end
+
+                    EVT_WEIGHT: begin
+                        weight_data_o      <= evt_Word[27:20];
+                        weight_addr_o      <= evt_word[19:11];
+                        weight_sram_addr_o <= evt_word[10:7];
+                        event_valid        <= 1'b1;
+                    end
+                    
+                    EVT_THRESH_U: begin
+                        thresh_reg <= evt_word[27:10];
+                    end
+
+                    EVT_THRESH_L: begin
+                        thresh_data_o <= {thresh_reg, evt_word[27:10]};
+                        thresh_addr_o <= evt_word[9:7];
+                        event_valid   <= 1'b1;
+                    end
+
+                    EVT_READS_DONE: begin
+                        evt_reads_done <= 1'b1;
                     end
 
                     default: begin
