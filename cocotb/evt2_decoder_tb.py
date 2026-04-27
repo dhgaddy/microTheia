@@ -378,3 +378,124 @@ async def test_grid_coordinate_upper_boundaries(dut):
 
         assert got_next == exp_next, \
             f"x_sensor={x_next} mapped to {got_next}, expected {exp_next}"
+
+"""New Tests"""
+
+def make_word(pkt, payload=0):
+    return (pkt << 28) | payload
+
+
+async def reset_dut(dut):
+    dut.rst.value = 1
+    dut.data_valid.value = 0
+    dut.event_ready_i.value = 1
+    dut.evt_ld_en.value = 0
+    await RisingEdge(dut.clk)
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
+
+async def send_word(dut, word):
+    dut.data_in.value = word
+    dut.data_valid.value = 1
+    await RisingEdge(dut.clk)
+    dut.data_valid.value = 0
+    await RisingEdge(dut.clk)
+
+
+@logged_test()
+async def test_weight_packet(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    await reset_dut(dut)
+
+    dut.evt_ld_en.value = 1
+
+    weight = 0xAB
+    addr   = 0x12
+    sram   = 0x5
+
+    payload = (weight << 20) | (addr << 11) | (sram << 7)
+    word = make_word(0x2, payload)
+
+    await send_word(dut, word)
+
+    assert dut.event_valid.value == 1
+    assert dut.weight_data_o.value == weight
+    assert dut.weight_addr_o.value == addr
+    assert dut.weight_sram_addr_o.value == sram
+
+
+@logged_test()
+async def test_weight_requires_ld_en(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    await reset_dut(dut)
+
+    dut.evt_ld_en.value = 0
+
+    word = make_word(0x2, 0xFFFFFFFF)
+    await send_word(dut, word)
+
+    assert dut.event_valid.value == 0
+
+
+@logged_test()
+async def test_threshold_upper_lower(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    await reset_dut(dut)
+
+    dut.evt_ld_en.value = 1
+
+    upper = 0x2AAAA
+    lower = 0x15555
+    addr  = 0x3
+
+    upper_payload = upper << 10
+    lower_payload = (lower << 10) | (addr << 7)
+
+    await send_word(dut, make_word(0x3, upper_payload))  # U
+    await send_word(dut, make_word(0x4, lower_payload))  # L
+
+    expected = (upper << 18) | lower
+
+    assert dut.event_valid.value == 1
+    assert dut.thresh_data_o.value == expected
+    assert dut.thresh_addr_o.value == addr
+
+
+@logged_test()
+async def test_threshold_requires_ld_en(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    await reset_dut(dut)
+
+    dut.evt_ld_en.value = 0
+
+    await send_word(dut, make_word(0x3, 0xFFFFFFFF))
+    await send_word(dut, make_word(0x4, 0xFFFFFFFF))
+
+    assert dut.event_valid.value == 0
+
+
+@logged_test()
+async def test_reads_done_pulse(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    await reset_dut(dut)
+
+    await send_word(dut, make_word(0xF, 0))
+
+    assert dut.evt_reads_done.value == 1
+
+    await RisingEdge(dut.clk)
+    assert dut.evt_reads_done.value == 0
+
+
+@logged_test()
+async def test_debug_page(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    await reset_dut(dut)
+
+    page = 0xA
+    payload = page << 24
+
+    await send_word(dut, make_word(0xE, payload))
+
+    assert dut.debug_page_sel.value == page
