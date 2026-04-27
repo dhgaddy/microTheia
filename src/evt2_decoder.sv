@@ -174,7 +174,7 @@ module evt2_decoder #(
 
                     EVT_WEIGHT: begin
                         if (evt_ld_en) begin
-                            weight_data_o      <= evt_Word[27:20];
+                            weight_data_o      <= evt_word[27:20];
                             weight_addr_o      <= evt_word[19:11];
                             weight_sram_addr_o <= evt_word[10:7];
                             event_valid        <= 1'b1;

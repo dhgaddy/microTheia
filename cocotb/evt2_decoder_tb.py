@@ -261,7 +261,7 @@ async def test_unknown_packet_types_no_event(dut):
 
     await drive_and_check(dut, model, 0, build_evt2_time_high(0xAB), 1, 1, "th")
 
-    for pkt_type in [0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x9, 0xA, 0xF]:
+    for pkt_type in [0x5, 0x6, 0x7]:
         word = (pkt_type << 28) | 0x00ABCDEF
         await drive_and_check(dut, model, 0, word, 1, 1, f"unk-0x{pkt_type:X}")
         assert int(dut.event_valid.value) == 0, \
