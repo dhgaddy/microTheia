@@ -1,0 +1,2 @@
+width_p = 8
+depth_p = 2048
