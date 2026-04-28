@@ -33,6 +33,7 @@ class InputFifoModel:
         self.out_data = 0
         self.out_valid = 0
         self.rd_pending = 0
+        self.read_deferred = 0
         self.last_rd_data = 0
         self.ram = [0] * FIFO_DEPTH
 
@@ -64,6 +65,7 @@ class InputFifoModel:
             self.out_data = 0
             self.out_valid = 0
             self.rd_pending = 0
+            self.read_deferred = 0
             self.last_rd_data = 0
         else:
             wr_ptr_n = self.wr_ptr
@@ -72,6 +74,7 @@ class InputFifoModel:
             out_data_n = self.out_data
             out_valid_n = self.out_valid
             rd_pending_n = self.rd_pending
+            read_deferred_n = self.read_deferred
             last_rd_data_n = self.last_rd_data
 
             if self.rd_pending:
@@ -79,13 +82,26 @@ class InputFifoModel:
                 out_valid_n = 1
                 rd_pending_n = 0
 
+            # Deferred read: fires when the SRAM bus is free.
+            if self.read_deferred and not write_to_ram:
+                rd_pending_n = 1
+                last_rd_data_n = self.ram[self.rd_ptr & ADDR_MASK]
+                rd_ptr_n = (rd_ptr_n + 1) & ADDR_MASK
+                tail_count_n -= 1
+                read_deferred_n = 0
+
             if rd_en:
                 if self.tail_count != 0:
                     out_valid_n = 0
-                    rd_pending_n = 1
-                    last_rd_data_n = self.ram[self.rd_ptr & ADDR_MASK]
-                    rd_ptr_n = (rd_ptr_n + 1) & ADDR_MASK
-                    tail_count_n -= 1
+                    if not write_to_ram:
+                        # SRAM free — issue read immediately.
+                        rd_pending_n = 1
+                        last_rd_data_n = self.ram[self.rd_ptr & ADDR_MASK]
+                        rd_ptr_n = (rd_ptr_n + 1) & ADDR_MASK
+                        tail_count_n -= 1
+                    else:
+                        # SRAM busy writing — defer the read by one cycle.
+                        read_deferred_n = 1
                 elif wr_en:
                     out_data_n = data_i & ((1 << DATA_WIDTH) - 1)
                     out_valid_n = 1
@@ -106,13 +122,14 @@ class InputFifoModel:
             self.out_data = out_data_n
             self.out_valid = out_valid_n
             self.rd_pending = rd_pending_n
+            self.read_deferred = read_deferred_n
             self.last_rd_data = last_rd_data_n
 
         return self.outputs()
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk_i, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk_i, 10, unit="ns").start())
     dut.reset_i.value = 1
     dut.valid_i.value = 0
     dut.data_i.value = 0
@@ -365,13 +382,19 @@ async def test_rd_pending_then_push(dut):
     await drive_and_check(dut, model, 0, 1, 0xBBBB_0002, 0, "push-B")
 
     # Simultaneously pop A (ready_i=1) and push C (valid_i=1):
-    # - rd_en fires -> tail_count=1>0 so rd_pending=1, last_rd_data=B
-    # - C cannot bypass (rd_pending=1) -> goes to RAM tail
+    # - write_to_ram=1 (C goes to RAM) AND pop with tail_count=1>0
+    # - SRAM bus conflict: read is deferred by one cycle (read_deferred=1, rd_pending=0)
+    # - C cannot bypass (out_valid=1 and tail_count>0) -> goes to RAM tail
     await drive_and_check(dut, model, 0, 1, 0xCCCC_0003, 1, "pop-A-push-C")
-    # valid_o must be 0 while rd_pending resolves.
-    assert int(dut.valid_o.value) == 0, "valid_o should be 0 while rd_pending"
+    # valid_o must be 0 — the deferred read hasn't fired yet.
+    assert int(dut.valid_o.value) == 0, "valid_o should be 0 while read_deferred pending"
 
-    # Next cycle: rd_pending resolves -> B appears at output.
+    # Next cycle: read_deferred fires -> SRAM read issued, rd_pending=1.
+    # valid_o is still 0 (rd_pending hasn't resolved yet).
+    await drive_and_check(dut, model, 0, 0, 0, 0, "deferred-fire")
+    assert int(dut.valid_o.value) == 0, "valid_o should be 0 while rd_pending resolves"
+
+    # One more cycle: rd_pending resolves -> B appears at output.
     await drive_and_check(dut, model, 0, 0, 0, 0, "resolve-B")
     assert int(dut.valid_o.value) == 1, "B should appear after rd_pending resolves"
     assert int(dut.data_o.value) == 0xBBBB_0002, \
