@@ -144,7 +144,7 @@ sim: ## Run RTL simulation with cocotb
 		fi; \
 		rm -rf cocotb/sim_build/$$d; \
 		\
-		SRCS="src/gf180_sram_1r1w.sv src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/deprecated/uart_*.sv src/chip_flash_fsm.sv src/deprecated/gray2bin.sv src/deprecated/bin2gray.sv src/deprecated/counter.sv src/deprecated/delaybuffer.sv src/deprecated/fifo_1r1w_cdc.sv src/deprecated/ram_1r1w_sync.sv src/deprecated/reg_cdc_sram_buffer.sv src/deprecated/spi_control.sv src/selectable_debug.sv src/spi_wrapper.sv src/verilog_spi/*.v"; \
+		SRCS="src/gf180_sram_1r1w.sv src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/chip_flash_fsm.sv src/selectable_debug.sv src/spi_wrapper.sv src/verilog_spi/*.v"; \
 		\
 		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
 		export SIM_CONFIG=$(CONFIG_FILE); \
@@ -169,14 +169,10 @@ sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=gf180_sram_1r1w CONFIG=gf180_sram_1r1w
 	$(MAKE) sim DUT=input_fifo
 	$(MAKE) sim DUT=evt2_decoder
-# 	$(MAKE) sim DUT=uart_rx
-# 	$(MAKE) sim DUT=uart_tx
-# 	$(MAKE) sim DUT=uart_debug
 	$(MAKE) sim DUT=voxel_gesture_classifier
 	$(MAKE) sim DUT=voxel_mac_engine
 	$(MAKE) sim DUT=voxel_binning
 	$(MAKE) sim DUT=voxel_bin_core
-# 	$(MAKE) sim DUT=voxel_bin_top
 .PHONY: sim-all
 
 sim-gl: ## Run gate-level simulation with cocotb (after copy-final)
