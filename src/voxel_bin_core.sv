@@ -112,7 +112,7 @@ module voxel_bin_core #(
         //EVT2Decoder Wires
     logic                           evt_reads_done;
     logic [WEIGHT_BITS-1:0]         dec_weight_data_o;
-    logic [8:0]                     dec_weight_addr_o;
+    logic [10:0]                     dec_weight_addr_o;
     logic [3:0]                     dec_weight_sram_addr_o;
     logic                           dec_weight_event_valid;
     logic [SCORE_BITS-1:0]          dec_thresh_data_o;
