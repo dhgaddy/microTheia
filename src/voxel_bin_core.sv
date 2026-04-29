@@ -68,13 +68,13 @@ module voxel_bin_core #(
     logic                           evt_reads_done;
     logic [WEIGHT_BITS-1:0]         dec_weight_data_o;
     logic [10:0]                    dec_weight_addr_o;
-    logic [3:0]                     dec_weight_sram_addr_o;
+    logic [1:0]                     dec_weight_sram_addr_o;
     logic                           dec_weight_event_valid;
     logic [SCORE_BITS-1:0]          dec_thresh_data_o;
     logic [2:0]                     dec_thresh_addr_o;
-    logic [5:0]                     dec_thresh_5xaddr_o;
+    logic [2:0]                     dec_thresh_5xaddr_o;
     logic                           dec_thresh_event_valid;
-    assign dec_thresh_5xaddr_o = dec_thresh_addr_o * 5;
+    assign dec_thresh_5xaddr_o = dec_thresh_addr_o;
     
 
     logic [($clog2(GRID_SIZE))-1:0] dec_x16;
@@ -137,6 +137,9 @@ module voxel_bin_core #(
     assign weight_wr_valid_gated = dec_weight_event_valid && evt_ld_en; //enables srams to be written to when in load state and the READ_DONE word not sent
     assign thresh_wr_valid_gated = dec_thresh_event_valid && evt_ld_en;
 
+    // FIFO ready (driven by input_fifo.ready_o)
+    logic        evt_word_ready;
+
     // Debug Bus Wires
     logic [31:0] debug_bus;
     logic [10:0] class_dbg;
@@ -145,9 +148,20 @@ module voxel_bin_core #(
     logic [11:0] decoder_dbg;
     logic [31:0] decoder_output_dbg;
     logic [3:0]  debug_page_sel;
-    logic [3:0] in_fifo_dbg;
+    logic [3:0]  in_fifo_dbg;
     logic [15:0] vox_core_debug;
     logic [31:0] score_A, score_B, score_C, score_D;
+
+    // Per-signal debug latches (driven by assigns below)
+    logic        debug_fifo_empty;
+    logic        debug_fifo_full;
+    logic        debug_temporal_phase;
+    logic        debug_class_valid;
+    logic        debug_class_pass;
+    logic        debug_feature_window_ready;
+    logic        debug_capture_active;
+    logic        debug_score_busy;
+    logic [7:0]  debug_event_count;
 
     // mac_start fires when a feature window is ready and the engine is idle
     assign mac_start = feature_window_ready && !mac_busy;
@@ -207,7 +221,7 @@ module voxel_bin_core #(
     // ------------------------------------------------------------------    
     chip_flash_fsm controller_fsm (
         .clk               (clk),
-        .rst_n             (rst),
+        .rst_n             (~rst),
         .boot_req_i        (boot_req_o), //output from decoder BOOT_REQ word
         .reload_req_i      (reload_req_o), //output from decoder RELOAD_REQ word
         .debug_req_i       (debug_req_o), //output from decoder DEBUG_REQ word
