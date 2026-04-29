@@ -58,6 +58,10 @@ module voxel_bin_core #(
     logic        fifo_out_valid;
     logic        fifo_out_ready;
     logic [31:0] fifo_out_data;
+
+    // Internal FIFO ready signal
+    logic evt_word_ready;
+    logic [7:0] debug_event_count;
     
     //FSM wires
     logic boot_req_o;
