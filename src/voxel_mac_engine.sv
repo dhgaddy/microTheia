@@ -7,8 +7,8 @@ module voxel_mac_engine #(
     parameter int COUNTER_BITS  = 16,
     parameter int WEIGHT_BITS   = 8,
     parameter int NUM_CLASSES   = 4,
-    parameter int SCORE_BITS    = COUNTER_BITS + WEIGHT_BITS + $clog2(FEATURE_COUNT) + 1
-)(
+    parameter int SCORE_BITS    = COUNTER_BITS + WEIGHT_BITS + $clog2(FEATURE_COUNT) + 1 // localparam
+) (
     input  logic clk,
     input  logic rst,
 
