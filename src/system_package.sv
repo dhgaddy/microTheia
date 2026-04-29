@@ -18,41 +18,41 @@ module system_package #(
     parameter int SENSOR_WIDTH         = 320,
     parameter int SENSOR_HEIGHT        = 320,
     parameter int WEIGHT_BITS          = 8,
-    parameter int POR_CYCLES           = 1024,
     parameter int NUM_CLASSES          = 4,
-    parameter int SOFT_RESET_CYCLES    = 64,
     // SCORE_BITS must match voxel_bin_core's formula: COUNTER_BITS+WEIGHT_BITS+clog2(FC)+1
     parameter int SCORE_BITS           = COUNTER_BITS + WEIGHT_BITS +
                                          $clog2(READOUT_BINS * GRID_SIZE * GRID_SIZE) + 1
 )(
     input  logic clk,
-    input  logic reset,
+    input  logic rst,
     input  logic MOSI, //master out slave in (from off chip to in chip)
     input  logic SCLK, //no CDC or DLL needed if SCLK sufficiently slower than clk. apparently chip clock must be 4x fast minimum (32 MHz chip, 8 MHz sclk should work)
     input  logic CS, // aka SS, signals a transaction is occuring or not
     output logic MISO, //master in slave out (from in chip to off chip)
     output logic [31:0] debug_bus,
-    output logic spi_ready //signal that the spi frontend module has succesfully initialized and is ready to begin operation. NOTE: reset must go high to initialize spi module
+    output logic spi_ready //signal that the spi frontend module has succesfully initialized and is ready to begin operation. NOTE: rst must go high to initialize spi module
 );
 
     logic [DATA_WIDTH-1:0] evt_word;
-    logic                  evt_valid;
+    logic                  evt_word_valid;
+    logic                  evt_word_ready;
 
     logic [1:0] gesture;
     logic       gesture_valid;
     logic       gesture_confidence;
+
     //replaced spi module and control logic with wrapper to simplify use
     spi_wrapper #(
         .DATA_WIDTH(DATA_WIDTH)
     ) u_spi_wrapper (
         .clk                (clk),
-        .reset              (reset),
+        .rst                (rst),
         .SCLK               (SCLK),
         .CS                 (CS),
         .MOSI               (MOSI),
         .MISO               (MISO),
         .evt_word           (evt_word),
-        .evt_valid          (evt_valid),
+        .evt_word_valid     (evt_word_valid),
         .gesture            (gesture),
         .gesture_valid      (gesture_valid),
         .gesture_confidence (gesture_confidence),
@@ -75,9 +75,9 @@ module system_package #(
         .SCORE_BITS       (SCORE_BITS)
     ) u_core ( //I am excluding several ports that need to be removed from module rather than listing them here and tieing them off.
         .clk                        (clk),
-        .rst                        (reset),
+        .rst                        (rst),
         .evt_word                   (evt_word),
-        .evt_word_valid             (evt_valid),
+        .evt_word_valid             (evt_word_valid),
         .gesture                    (gesture), //2 bits to support 4 classes/gestures
         .gesture_valid              (gesture_valid), //1 bit
         .gesture_confidence         (gesture_confidence), // 1 bit 
