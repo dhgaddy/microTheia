@@ -31,7 +31,6 @@ SENSOR_HEIGHT    = CFG.get("SENSOR_HEIGHT", SENSOR_WIDTH)
 COUNTER_BITS     = CFG.get("COUNTER_BITS", 4)
 NUM_CLASSES      = CFG.get("NUM_CLASSES", 4)
 
-
 BIN_DURATION_MS          = WINDOW_MS // READOUT_BINS
 BIN_DURATION_US          = BIN_DURATION_MS * 1000
 X_BIN_DIV                = SENSOR_WIDTH // GRID_SIZE
@@ -54,18 +53,39 @@ EXPECTED_BIN_FILE_CLASS = {
     3: 3,  # wave_up_*
 }
 
-EVT_CD_OFF = 0x0
-EVT_CD_ON = 0x1
+EVT_CD_OFF    = 0x0
+EVT_CD_ON     = 0x1
 EVT_TIME_HIGH = 0x8
 
 ST_ACCUM = 0
 
+# FSM state encodings (mirror RTL typedef)
+ST_BOOT  = 0
+ST_LOAD  = 1
+ST_RUN   = 2
+ST_DEBUG = 3
 
-# Mode encoding mirrors the RTL typedef
-MODE_BOOT     = 0b00
-MODE_PROGRAM  = 0b01
-MODE_CLASSIFY = 0b10
-MODE_DEBUG    = 0b11
+# Load sub-state encodings
+LD_IDLE     = 0
+LD_WAIT_PWR = 1
+LD_OPEN     = 2
+LD_WAIT     = 3
+LD_DONE     = 4
+LD_FAIL     = 5
+
+# Must match chip_flash_fsm parameter PWR_WAIT_CYCLES
+PWR_WAIT_CYCLES = 1024
+
+# Special control words (pkt_type in bits [31:28])
+BOOT_REQ_WORD       = 0xC0000000
+RELOAD_REQ_WORD     = 0xB0000000
+DEBUG_REQ_WORD      = 0xA0000000
+EVT_READS_DONE_WORD = 0xF0000000
+
+
+# ---------------------------------------------------------------------------
+# EVT2 word builders
+# ---------------------------------------------------------------------------
 
 def build_evt2_time_high(payload):
     return (EVT_TIME_HIGH << 28) | (payload & 0x0FFFFFFF)
@@ -74,6 +94,22 @@ def build_evt2_time_high(payload):
 def build_evt2_cd(pkt_type, x_sensor, y_sensor, ts_lsb):
     return ((pkt_type & 0xF) << 28) | ((ts_lsb & 0x3F) << 22) | \
         ((x_sensor & 0x7FF) << 11) | (y_sensor & 0x7FF)
+
+
+def build_weight_word(weight_data, weight_addr, sram_addr):
+    """EVT_WEIGHT = 0x2: [31:28]=type [27:20]=data [19:9]=addr [8:7]=sram_sel"""
+    return (0x2 << 28) | ((weight_data & 0xFF) << 20) | \
+           ((weight_addr & 0x7FF) << 9) | ((sram_addr & 0x3) << 7)
+
+
+def build_thresh_upper_word(upper18):
+    """EVT_THRESH_U = 0x3: [31:28]=type [27:10]=upper 18 bits of threshold"""
+    return (0x3 << 28) | ((upper18 & 0x3FFFF) << 10)
+
+
+def build_thresh_lower_word(lower18, addr):
+    """EVT_THRESH_L = 0x4: [31:28]=type [27:10]=lower 18 bits [9:7]=thresh_addr"""
+    return (0x4 << 28) | ((lower18 & 0x3FFFF) << 10) | ((addr & 0x7) << 7)
 
 
 def sensor_x_from_grid(g):
@@ -94,7 +130,6 @@ def _decode_evt2_word_fields(word):
             ((word & 0x00FF0000) >> 8) |
             ((word & 0xFF000000) >> 24)
         )
-
     return {
         "word": word,
         "pkt": (word >> 28) & 0xF,
@@ -103,6 +138,78 @@ def _decode_evt2_word_fields(word):
         "y_raw": word & 0x7FF,
     }
 
+
+# ---------------------------------------------------------------------------
+# FSM boot helpers (bypass harness bookkeeping — send directly to DUT ports)
+# ---------------------------------------------------------------------------
+
+async def _send_raw_word(dut, word):
+    """Push one word into the FIFO, respecting backpressure."""
+    while int(dut.evt_word_ready.value) == 0:
+        await RisingEdge(dut.clk)
+    dut.evt_word.value = word
+    dut.evt_word_valid.value = 1
+    await RisingEdge(dut.clk)
+    dut.evt_word_valid.value = 0
+
+
+async def _wait_for_evt_ld_en(dut, timeout=PWR_WAIT_CYCLES + 50):
+    for _ in range(timeout):
+        await RisingEdge(dut.clk)
+        if int(dut.evt_ld_en.value) == 1:
+            return
+    raise AssertionError("evt_ld_en never asserted — FSM did not reach LD_OPEN")
+
+
+async def _wait_for_st_run(dut, timeout=512):
+    for _ in range(timeout):
+        await RisingEdge(dut.clk)
+        if int(dut.core_rst_o.value) == 0:
+            return
+    raise AssertionError("core_rst_o never deasserted — FSM did not reach ST_RUN")
+
+
+async def _minimal_boot(dut):
+    """Send BOOT_REQ + EVT_READS_DONE to move FSM to ST_RUN with zero weights."""
+    await _send_raw_word(dut, BOOT_REQ_WORD)
+    await _wait_for_evt_ld_en(dut)
+    await _send_raw_word(dut, EVT_READS_DONE_WORD)
+    await _wait_for_st_run(dut)
+
+
+async def deposit_weights_and_thresholds(dut, weights, thresholds):
+    """Load weights and thresholds via EVT2 event stream (BOOT_REQ path).
+
+    Sends BOOT_REQ, waits for evt_ld_en, streams all weight and threshold
+    event words, then sends EVT_READS_DONE and waits for ST_RUN.
+
+    weights:    list of NUM_CLASSES lists, each of length FEATURE_COUNT.
+    thresholds: list of 2*NUM_CLASSES ints.
+    """
+    await _send_raw_word(dut, BOOT_REQ_WORD)
+    await _wait_for_evt_ld_en(dut)
+
+    for c in range(NUM_CLASSES):
+        for addr in range(FEATURE_COUNT):
+            await _send_raw_word(dut, build_weight_word(int(weights[c][addr]), addr, c))
+
+    for addr in range(2 * NUM_CLASSES):
+        val = int(thresholds[addr])
+        upper18 = (val >> 18) & 0x3FFFF
+        lower18 = val & 0x3FFFF
+        await _send_raw_word(dut, build_thresh_upper_word(upper18))
+        await _send_raw_word(dut, build_thresh_lower_word(lower18, addr))
+
+    await _send_raw_word(dut, EVT_READS_DONE_WORD)
+
+    # After the push loop the FIFO has at most 256 words pending; all drain
+    # before the FSM sees EVT_READS_DONE and transitions to ST_RUN.
+    await _wait_for_st_run(dut, timeout=512)
+
+
+# ---------------------------------------------------------------------------
+# Software models
+# ---------------------------------------------------------------------------
 
 class Evt2DecoderModel:
     def __init__(self):
@@ -206,12 +313,9 @@ class TimestampVoxelModel:
         return readouts
 
 
-
 def load_thresholds():
     """Load class and diff thresholds from thresholds.mem (hex, $readmemh format).
-    Returns a list of 2*NUM_CLASSES integers:
-      [0..NUM_CLASSES-1]          = CLASS_THRESHOLD per class
-      [NUM_CLASSES..2*NUM_CLASSES-1] = DIFF_THRESHOLD per class
+    Returns a list of 2*NUM_CLASSES integers.
     """
     repo_root = Path(__file__).resolve().parents[1]
     thresh_path = repo_root / "weights" / "thresholds.mem"
@@ -225,13 +329,12 @@ def load_thresholds():
             vals.append(int(line, 16))
         except ValueError:
             vals.append(0)
-    # Pad to 2*NUM_CLASSES if file is short.
     while len(vals) < 2 * NUM_CLASSES:
         vals.append(0)
     return vals
 
 
-_thresholds = None  # Loaded once at first ScoreModel construction.
+_thresholds = None
 
 
 class ScoreModel:
@@ -265,21 +368,11 @@ class ScoreModel:
 
         best_class, best, second = self._argmax_with_second(scores)
         margin = best - second
-        # class_pass mirrors RTL: max_score > CLASS_THRESHOLD[max_class]
         class_pass = int(best > self.class_thresholds[best_class])
         return best_class, class_pass, margin
 
 
 def load_weights_from_mem():
-    """Load pre-generated quantized weights from the per-class .mem files.
-
-    Each file contains FEATURE_COUNT hex byte values (one per line) already
-    ordered to match the hardware readout address space:
-      addr = bin * GRID_SIZE * GRID_SIZE + y * GRID_SIZE + x
-    where bin=0 is the oldest bin, y is row (outer), x is column (inner).
-
-    Returns a list of NUM_CLASSES lists, each of length FEATURE_COUNT.
-    """
     repo_root = Path(__file__).resolve().parents[1]
     mem_keys = ["WEIGHT_MEM_C0", "WEIGHT_MEM_C1", "WEIGHT_MEM_C2", "WEIGHT_MEM_C3"]
     mem_defaults = [f"weights/{FEATURE_COUNT}weights_q8_c{c}.mem" for c in range(NUM_CLASSES)]
@@ -303,37 +396,9 @@ def load_weights_from_mem():
     return weights
 
 
-async def deposit_weights_and_thresholds(dut, weights, thresholds):
-    """
-    Load weights and thresholds into the DUT SRAMs via the runtime write ports.
-
-    Must be called after reset is deasserted (SRAM CEN is high during reset).
-    weights:    list of NUM_CLASSES lists, each of length FEATURE_COUNT.
-    thresholds: list of 2*NUM_CLASSES ints (class thresholds then diff thresholds).
-    """
-    dut.active_mode_i.value = MODE_PROGRAM
-
-    # Write weights one address per cycle for each class.
-    for c in range(NUM_CLASSES):
-        for addr in range(FEATURE_COUNT):
-            dut.weight_wr_valid_i.value = 1
-            dut.weight_wr_class_i.value = c
-            dut.weight_wr_addr_i.value = addr
-            dut.weight_wr_data_i.value = int(weights[c][addr])
-            await RisingEdge(dut.clk)
-    dut.weight_wr_valid_i.value = 0
-
-    # Write thresholds: addr 0..NUM_CLASSES-1 = class thresholds,
-    #                   NUM_CLASSES..2*NUM_CLASSES-1 = diff thresholds.
-    for addr in range(2 * NUM_CLASSES):
-        dut.thresh_wr_valid_i.value = 1
-        dut.thresh_wr_addr_i.value = addr
-        dut.thresh_wr_data_i.value = int(thresholds[addr])
-        await RisingEdge(dut.clk)
-    dut.thresh_wr_valid_i.value = 0
-
-    dut.active_mode_i.value = MODE_CLASSIFY 
-
+# ---------------------------------------------------------------------------
+# CoreHarness
+# ---------------------------------------------------------------------------
 
 class CoreHarness:
     def __init__(self, dut, score_model=None, check_feature_windows=True):
@@ -354,32 +419,28 @@ class CoreHarness:
         self.next_event_ts = 0
         self.last_time_high = None
 
-        # Optional independent score verification.
         self.score_model = score_model
-        self.pending_score_checks = deque()  # (exp_class, exp_pass) from ScoreModel
-        self.window_features = []            # list[list[int]] per completed window
-        self.window_scores = []              # list[list[int]] per completed window
-        self.window_pred = []                # list[(best_class, pass, margin)] per window
+        self.pending_score_checks = deque()
+        self.window_features = []
+        self.window_scores = []
+        self.window_pred = []
 
     async def setup(self, start_clock=True):
         if start_clock:
-            cocotb.start_soon(Clock(self.dut.clk, 10, unit="ns").start())
+            cocotb.start_soon(Clock(self.dut.clk, 10, units="ns").start())
         self.dut.rst.value = 1
         self.dut.evt_word.value = 0
         self.dut.evt_word_valid.value = 0
         self.dut.force_rollover_i.value = 0
-        # self.dut.active_mode_i.value = MODE_BOOT
-        self.dut.weight_wr_valid_i.value = 0
-        self.dut.weight_wr_class_i.value = 0
-        self.dut.weight_wr_addr_i.value = 0
-        self.dut.weight_wr_data_i.value = 0
-        self.dut.thresh_wr_valid_i.value = 0
-        self.dut.thresh_wr_addr_i.value = 0
-        self.dut.thresh_wr_data_i.value = 0
         await ClockCycles(self.dut.clk, 8)
         self.dut.rst.value = 0
-        self.dut.active_mode_i.value = MODE_CLASSIFY
         await self.tick(4)
+        # Minimal boot: move FSM from ST_BOOT → ST_RUN with zero weights so
+        # the MAC engine is ungated and tests can observe class_valid/gesture_valid.
+        await _minimal_boot(self.dut)
+        # The 2 boot words (BOOT_REQ + EVT_READS_DONE) were accepted by the FIFO
+        # and counted by debug_event_count. Reset the harness word counter to match.
+        self.accepted_words = int(self.dut.debug_event_count.value)
 
     def _sample_cycle(self):
         if int(self.dut.u_evt2_decoder.event_valid.value):
@@ -418,7 +479,6 @@ class CoreHarness:
                 if self.score_model is not None:
                     exp_cls, exp_pass, margin = self.score_model.classify(expected_window)
                     self.pending_score_checks.append((exp_cls, exp_pass))
-                    # Log golden-model scores for this window
                     scores = [0] * NUM_CLASSES
                     for fi, feat in enumerate(expected_window):
                         f = int(feat)
@@ -450,7 +510,6 @@ class CoreHarness:
                     f"ScoreModel pass mismatch: DUT={class_pass} model={exp_pass}"
                 )
 
-            # No persistence: every passing window fires gesture_valid immediately.
             if class_pass:
                 self.expected_gestures.append((
                     class_id,
@@ -503,9 +562,6 @@ class CoreHarness:
         while int(self.dut.u_voxel_binning.state.value) != ST_ACCUM:
             await self.tick(1)
 
-        # Drain queued words so this forced rollover closes a fully-ingested bin.
-        # Without this, repeated immediate rollovers can starve decoding and leave
-        # large portions of traffic stuck in the input FIFO.
         stable_empty = 0
         for _ in range(200000):
             fifo_has_data = int(self.dut.u_input_fifo.valid_o.value)
@@ -568,10 +624,6 @@ def _majority_with_ratio(class_ids):
 
 
 def _transform_feature_window(window, mode):
-    """Remap feature-vector cells to emulate coordinate convention changes.
-
-    Feature layout is [bin][y][x], where addr = bin*CELLS + y*GRID_SIZE + x.
-    """
     out = [0] * len(window)
     for b in range(READOUT_BINS):
         base = b * CELLS_PER_BIN
@@ -600,11 +652,9 @@ def _score_features(weights, features):
 
 
 def _pick_best_threshold(pos_scores, neg_scores):
-    """Choose threshold maximizing balanced accuracy for score > threshold."""
     candidates = sorted(set(pos_scores + neg_scores))
     if not candidates:
         return 0, 0.0
-    # Include values just below the first candidate and at exact candidates.
     test_vals = [max(0, candidates[0] - 1)] + candidates
     best_thr = 0
     best_bal = -1.0
@@ -657,6 +707,53 @@ async def drive_bin_traffic(h, rng, region, events=28):
             await h.send_word(bad)
 
 
+# ---------------------------------------------------------------------------
+# Flush helper (reset + reload weights)
+# ---------------------------------------------------------------------------
+
+async def _flush_stale_bins(h, weights=None):
+    """Hard-reset the DUT, boot via event stream, optionally reload weights."""
+    h.dut.rst.value = 1
+    h.dut.evt_word_valid.value = 0
+    await ClockCycles(h.dut.clk, 16)
+    h.dut.rst.value = 0
+
+    for _ in range(10_000):
+        await RisingEdge(h.dut.clk)
+        if int(h.dut.u_voxel_binning.state.value) == ST_ACCUM:
+            break
+    else:
+        raise AssertionError("Binner did not return to ST_ACCUM after flush reset")
+
+    await ClockCycles(h.dut.clk, 8)
+
+    if weights is not None:
+        thresholds = load_thresholds()
+        await deposit_weights_and_thresholds(h.dut, weights, thresholds)
+    else:
+        await _minimal_boot(h.dut)
+
+    h.decoder = Evt2DecoderModel()
+    h.bin_model = TimestampVoxelModel()
+    h.expected_decoded.clear()
+    h.expected_feature_windows.clear()
+    h.current_window = []
+    h.completed_windows = 0
+    h.observed_gestures.clear()
+    h.expected_gestures.clear()
+    h.pending_score_checks.clear()
+    h.accepted_words = 0
+    h.next_event_ts = 0
+    h.last_time_high = None
+    h.window_features.clear()
+    h.window_scores.clear()
+    h.window_pred.clear()
+
+
+# ---------------------------------------------------------------------------
+# Existing core pipeline tests
+# ---------------------------------------------------------------------------
+
 @logged_test()
 async def test_voxel_bin_core_end_to_end_golden(dut):
     rng = random.Random(0xC011E0)
@@ -684,26 +781,20 @@ async def test_voxel_bin_core_end_to_end_golden(dut):
     assert h.observed_gestures == h.expected_gestures, \
         f"Gesture stream mismatch\nDUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
 
-    # debug_event_count is 8-bit saturating wrap counter of accepted words.
-    assert int(dut.debug_event_count.value) == (h.accepted_words & 0xFF), \
+    # debug_event_count wraps at 8 bits; baseline was set after setup() boot words.
+    expected_count = (h.accepted_words) & 0xFF
+    assert int(dut.debug_event_count.value) == expected_count, \
         "debug_event_count mismatch"
 
 
 @logged_test()
 async def test_empty_window_produces_no_gesture(dut):
-    """No CD events -> all-zero features -> all scores zero -> no gesture fires.
-
-    This validates the zero-input boundary case: all scores are zero so
-    max_score = 0, which fails the CLASS_THRESHOLD=0 check (strict >),
-    and gesture_valid never asserts.
-    """
+    """No CD events -> all-zero features -> all scores zero -> no gesture fires."""
     h = CoreHarness(dut)
     await h.setup()
 
-    # Prime decoder with a TIME_HIGH so CD events would be accepted, but send none.
     await h.send_word(build_evt2_time_high(0x1000))
 
-    # Rotate exactly READOUT_BINS bins to produce one complete readout window.
     for _ in range(READOUT_BINS):
         await h.force_bin_rollover()
 
@@ -718,12 +809,11 @@ async def test_empty_window_produces_no_gesture(dut):
 
 @logged_test()
 async def test_reset_mid_pipeline_recovers_cleanly(dut):
-    """Assert rst while the binner/scorer pipeline is active; verify clean restart."""
+    """Assert rst while pipeline is active; verify clean restart."""
     rng = random.Random(0xDEAD_F00D)
     h = CoreHarness(dut)
     await h.setup()
 
-    # Start feeding events and force one bin rotation.
     await h.send_word(build_evt2_time_high(0xABCDE))
     pts = region_points("left")
     for _ in range(15):
@@ -733,13 +823,13 @@ async def test_reset_mid_pipeline_recovers_cleanly(dut):
         )
     await h.force_bin_rollover()
 
-    # Assert reset while the pipeline may still be draining.
     dut.rst.value = 1
     await ClockCycles(dut.clk, 8)
     dut.rst.value = 0
-    dut.active_mode_i.value = MODE_CLASSIFY
 
-    # Wait for the binner to return to ST_ACCUM (it clears one bin after reset).
+    # After reset the FSM is in ST_BOOT; core_rst_o=1 holds MAC in reset.
+    # No boot sequence needed here since this test only checks for absence of
+    # spurious gestures and that the FIFO is ready to accept new data.
     for _ in range(20_000):
         await RisingEdge(dut.clk)
         if int(dut.u_voxel_binning.state.value) == ST_ACCUM:
@@ -747,24 +837,24 @@ async def test_reset_mid_pipeline_recovers_cleanly(dut):
     else:
         raise AssertionError("Binner did not return to ST_ACCUM after reset")
 
-    # No spurious gesture_valid should fire in the cycles following reset.
     for _ in range(500):
         await RisingEdge(dut.clk)
         assert int(dut.gesture_valid.value) == 0, \
             "Spurious gesture_valid asserted after reset"
 
-    # The FIFO must be ready to accept new data.
     assert int(dut.evt_word_ready.value) == 1, \
         "evt_word_ready not asserted after reset"
 
 
 @logged_test()
 async def test_debug_event_count_tracks_accepted_words(dut):
-    """debug_event_count must equal (accepted_words mod 256)."""
+    """debug_event_count must track accepted words relative to setup baseline."""
     h = CoreHarness(dut)
     await h.setup()
 
-    # Send a mix of TIME_HIGH and CD words.
+    # accepted_words was seeded from debug_event_count after setup boot words.
+    baseline = h.accepted_words
+
     for i in range(260):
         if i % 8 == 0:
             await h.send_word(build_evt2_time_high(i & 0x0FFFFFFF))
@@ -777,9 +867,13 @@ async def test_debug_event_count_tracks_accepted_words(dut):
 
     await h.wait_quiet(quiet_cycles=20)
 
-    assert int(dut.debug_event_count.value) == (h.accepted_words & 0xFF), \
-        (f"debug_event_count DUT={int(dut.debug_event_count.value)} "
-         f"expected={h.accepted_words & 0xFF}")
+    # h.accepted_words already includes the boot-word baseline set in setup(),
+    # so the total DUT count equals h.accepted_words (mod 256).
+    expected = h.accepted_words & 0xFF
+    assert int(dut.debug_event_count.value) == expected, (
+        f"debug_event_count DUT={int(dut.debug_event_count.value)} "
+        f"expected={expected} (accepted_words={h.accepted_words})"
+    )
 
 
 @logged_test()
@@ -795,13 +889,10 @@ async def test_fifo_backpressure_no_lost_events(dut):
     for i in range(60):
         gx, gy = rng.choice(pts)
         await h.send_grid_event(gx, gy, pkt=EVT_CD_ON)
-        # Occasionally insert a TIME_HIGH mid-burst.
         if i % 15 == 0:
             await h.send_word(build_evt2_time_high(h.last_time_high or 0))
 
-    # One rollover closes the current bin; wait_quiet drains any remaining pipeline.
     await h.force_bin_rollover()
-
     await h.wait_quiet()
 
     assert not h.expected_decoded, \
@@ -820,8 +911,6 @@ async def test_core_timestamp_boundary_binning_matches_golden(dut):
     await h.send_grid_event(0, 0, pkt=EVT_CD_ON, ts=5)
     await h.send_grid_event(1, 1, pkt=EVT_CD_ON, ts=5 + BIN_DURATION_US)
 
-    # Complete the warm-up window. The harness compares every DUT feature
-    # window against TimestampVoxelModel before any gesture checks.
     for _ in range(READOUT_BINS - 1):
         await h.force_bin_rollover()
 
@@ -838,9 +927,6 @@ async def test_sustained_region_fires_gesture(dut):
 
     await h.send_word(build_evt2_time_high(0x1))
 
-    # Drive "bottom" region across enough bins for at least two complete readout windows.
-    # READOUT_BINS bins warm up the ring; each additional rollover triggers one more window.
-    # With no persistence, every passing window fires gesture_valid immediately.
     for _ in range(READOUT_BINS + 2):
         await drive_bin_traffic(h, rng, "bottom", events=32)
         await h.force_bin_rollover()
@@ -860,9 +946,6 @@ async def test_decoder_events_match_model_exactly(dut):
     h = CoreHarness(dut)
     await h.setup()
 
-    # Interleave TIME_HIGH and CD events; model tracks expected decoded output.
-    # Keep these close together so this decoder-only test does not also
-    # exercise timestamp-driven binner rollovers.
     time_bases = [0x00001, 0x00002, 0x00003]
     for tb_val in time_bases:
         await h.send_word(build_evt2_time_high(tb_val))
@@ -875,7 +958,6 @@ async def test_decoder_events_match_model_exactly(dut):
                 build_evt2_cd(pkt, sensor_x_from_grid(gx), sensor_y_from_grid(gy), ts_lsb)
             )
 
-    # Force one rollover so the pipeline drains any pending decoded events.
     await h.force_bin_rollover()
     await h.wait_quiet(quiet_cycles=20)
 
@@ -888,12 +970,11 @@ async def test_score_model_validates_classifications(dut):
 
     rng = random.Random(0xBEEF_CAFE)
     h = CoreHarness(dut, score_model=score_model)
-    await h.setup()
+    await h.setup(start_clock=True)
     await _flush_stale_bins(h, weights=weights)
 
     await h.send_word(build_evt2_time_high(0xABCDE))
 
-    # Drive a varied sequence of regions so multiple distinct feature windows are generated.
     script = [
         "bottom", "bottom", "top", "top",
         "right", "right", "left", "left",
@@ -906,75 +987,15 @@ async def test_score_model_validates_classifications(dut):
     await h.wait_quiet()
 
     assert h.completed_windows > 0, "No completed windows observed"
-    # All class_valid outputs were independently checked against ScoreModel inline.
     assert not h.pending_score_checks, \
         f"{len(h.pending_score_checks)} feature windows never produced a class_valid"
-
     assert not h.expected_decoded, \
         (f"{len(h.expected_decoded)} decoded events unmatched by DUT")
 
 
-# ---------------------------------------------------------------------------
-# Gesture classification end-to-end tests
-# ---------------------------------------------------------------------------
-
-async def _flush_stale_bins(h, weights=None):
-    """
-    Hard-reset the DUT then wait for the binner to return to ST_ACCUM.
-
-    This is the only reliable way to clear all pipeline state between tests that
-    share a single simulation instance.  After reset the weight and threshold
-    SRAMs are all-zero; if weights is provided they are re-loaded via the
-    runtime write ports (and thresholds are loaded from thresholds.mem).
-    """
-    # Assert hardware reset.
-    h.dut.rst.value = 1
-    h.dut.evt_word_valid.value = 0
-    # h.dut.active_mode_i.value = MODE_BOOT
-    await ClockCycles(h.dut.clk, 16)
-    h.dut.rst.value = 0
-
-    # Wait until voxel_binning returns to ST_ACCUM (clears bin 0 after reset).
-    for _ in range(10_000):
-        await RisingEdge(h.dut.clk)
-        if int(h.dut.u_voxel_binning.state.value) == ST_ACCUM:
-            break
-    else:
-        raise AssertionError("Binner did not return to ST_ACCUM after flush reset")
-
-    # A few extra cycles to let decoder and fifo settle.
-    await ClockCycles(h.dut.clk, 8)
-
-    # Re-load weights and thresholds into SRAMs after reset (SRAMs start at 0).
-    if weights is not None:
-        thresholds = load_thresholds()
-        await deposit_weights_and_thresholds(h.dut, weights, thresholds)
-
-    # Reset harness bookkeeping; the reset produces no valid feature windows.
-    h.decoder = Evt2DecoderModel()
-    h.bin_model = TimestampVoxelModel()
-    h.expected_decoded.clear()
-    h.expected_feature_windows.clear()
-    h.current_window = []
-    h.completed_windows = 0
-    h.observed_gestures.clear()
-    h.expected_gestures.clear()
-    h.pending_score_checks.clear()
-    h.accepted_words = 0
-    h.next_event_ts = 0
-    h.last_time_high = None
-    h.window_features.clear()
-    h.window_scores.clear()
-    h.window_pred.clear()
-
-
 @logged_test()
 async def test_wrong_gesture_trajectory_no_false_positive(dut):
-    """
-    Drive uniform random events spread across all cells/bins and verify DUT matches model.
-    With CLASS_THRESHOLD=0 the winning class still fires gesture_valid (score > 0),
-    but DUT and ScoreModel must agree on the class and pass status for every window.
-    """
+    """Uniform random events: DUT and ScoreModel must agree on every classification."""
     weights = load_weights_from_mem()
     score_model = ScoreModel(weights)
 
@@ -983,11 +1004,6 @@ async def test_wrong_gesture_trajectory_no_false_positive(dut):
     await h.setup()
     await _flush_stale_bins(h, weights=weights)
 
-    # Uniform random events: every cell hit equally -> scores proportional to total weight sums.
-    # With CLASS_THRESHOLD=0, class_pass=1 whenever the winning score > 0 (always true here).
-    # The test verifies DUT and ScoreModel agree on class_id, class_pass, and gesture_valid
-    # for every window — not that gestures are suppressed.
-    # READOUT_BINS+1 rollovers: warm-up + at least one complete readout window.
     for _ in range(READOUT_BINS + 1):
         for _ in range(32):
             gx = rng.randint(0, GRID_SIZE - 1)
@@ -1001,8 +1017,6 @@ async def test_wrong_gesture_trajectory_no_false_positive(dut):
     assert h.completed_windows > 0, "No feature windows completed"
     assert not h.pending_score_checks, \
         f"{len(h.pending_score_checks)} score checks never consumed"
-
-    # Model and DUT must agree (both should produce zero or identical gesture_valid outputs)
     assert h.observed_gestures == h.expected_gestures, \
         f"DUT/model mismatch on uniform input\nDUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
 
@@ -1011,16 +1025,10 @@ async def test_wrong_gesture_trajectory_no_false_positive(dut):
 # EVT2 .bin file streaming tests
 # ---------------------------------------------------------------------------
 
-# Default set of 4 .bin files to stream into the DUT.
-# Override by setting the GESTURE_BIN_FILES env variable to a colon-separated
-# list of 4 absolute or repo-relative paths, e.g.:
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-def _default_bin_paths():
-    """Return default gesture clip paths.
 
-    Prefer the current test-set location, but keep a fallback to the legacy root
-    location so older checkouts continue to run.
-    """
+
+def _default_bin_paths():
     test_set = _REPO_ROOT / "EVT2_gesture_set" / "test_set"
     if test_set.exists():
         return [
@@ -1040,12 +1048,8 @@ def _default_bin_paths():
 
 _DEFAULT_BIN_FILES = _default_bin_paths()
 
-def _resolve_bin_files():
-    """Return the 4 .bin file paths to use for the streaming tests.
 
-    If the GESTURE_BIN_FILES environment variable is set it must contain exactly
-    4 colon-separated paths (absolute or relative to the repo root).  
-    """
+def _resolve_bin_files():
     env = os.environ.get("GESTURE_BIN_FILES", "")
     if env.strip():
         parts = [p.strip() for p in env.split(":") if p.strip()]
@@ -1064,39 +1068,18 @@ def _resolve_bin_files():
 
 
 def _read_evt2_bin(path):
-    """Read a raw EVT2.0 binary file and return a list of 32-bit words.
-
-    The file contains little-endian 32-bit words with no text header.
-    Incomplete trailing bytes are silently dropped.
-    """
     data = Path(path).read_bytes()
     n_words = len(data) // 4
     return list(struct.unpack_from(f"<{n_words}I", data, 0))
 
 
 async def _stream_bin_file_with_timing(h, bin_path):
-    """Stream an EVT2.0 .bin file into the DUT.
-
-    The RTL's evt2_decoder now extracts and forwards the full 34-bit EVT2
-    timestamp to voxel_binning, which uses it to roll bins automatically when
-    each event crosses a BIN_DURATION_US boundary.  No manual force_bin_rollover
-    calls are needed during streaming.
-    """
     words = _read_evt2_bin(bin_path)
     for word in words:
         await h.send_word(word)
 
 
 async def _stream_bin_file_clock_driven(h, bin_path):
-    """Replay EVT2 words without timestamp-forced bin rollovers.
-
-    Unlike timestamp-forced mode, this path does not force bin rollover from timestamps.
-    Bin advancement comes only from the DUT's timer behavior and any explicit final flush.
-
-    With CYCLES_PER_BIN=0 the DUT timer never fires, so real-time inter-event delays
-    serve no purpose and are omitted to keep harness sampling per-word (correct) and
-    simulation time bounded.
-    """
     words = _read_evt2_bin(bin_path)
     for word in words:
         await h.send_word(word)
@@ -1105,20 +1088,6 @@ async def _stream_bin_file_clock_driven(h, bin_path):
 async def _run_bin_file_test(
     dut, bin_path, label, expected_class=None, replay_mode="timestamp_forced", enforce_label=None, start_clock=True
 ):
-    """Core logic shared by all four bin-file tests.
-
-    Streams the entire .bin file into the DUT with timestamp-driven bin
-    rollovers so the temporal window advances correctly.  Verifies that
-    every DUT classification matches the software golden model (ScoreModel).
-
-    Parameters
-    ----------
-    dut : cocotb DUT handle
-    bin_path : path-like
-        EVT2.0 binary file to stream.
-    label : str
-        Human-readable name used in log messages (e.g. "money-wave-down").
-    """
     weights = load_weights_from_mem()
     score_model = ScoreModel(weights)
     h = CoreHarness(dut, score_model=score_model, check_feature_windows=False)
@@ -1133,7 +1102,6 @@ async def _run_bin_file_test(
     else:
         raise ValueError(f"Unknown replay_mode={replay_mode}")
 
-    # Flush the final partial bin so the last events are scored.
     for _ in range(READOUT_BINS):
         await h.force_bin_rollover()
 
@@ -1200,9 +1168,7 @@ async def test_bin_file_gesture_0(dut):
     bin_files = _resolve_bin_files()
     path = bin_files[0]
     label = Path(path).stem
-    await _run_bin_file_test(
-        dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[0]
-    )
+    await _run_bin_file_test(dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[0])
 
 
 @logged_test()
@@ -1211,9 +1177,7 @@ async def test_bin_file_gesture_1(dut):
     bin_files = _resolve_bin_files()
     path = bin_files[1]
     label = Path(path).stem
-    await _run_bin_file_test(
-        dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[1]
-    )
+    await _run_bin_file_test(dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[1])
 
 
 @logged_test()
@@ -1222,9 +1186,7 @@ async def test_bin_file_gesture_2(dut):
     bin_files = _resolve_bin_files()
     path = bin_files[2]
     label = Path(path).stem
-    await _run_bin_file_test(
-        dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[2]
-    )
+    await _run_bin_file_test(dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[2])
 
 
 @logged_test()
@@ -1233,40 +1195,23 @@ async def test_bin_file_gesture_3(dut):
     bin_files = _resolve_bin_files()
     path = bin_files[3]
     label = Path(path).stem
-    await _run_bin_file_test(
-        dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[3]
-    )
+    await _run_bin_file_test(dut, path, label, expected_class=EXPECTED_BIN_FILE_CLASS[3])
 
 
 @logged_test()
 async def test_bin_file_timing_replay_ab(dut):
-    """A/B timing investigation: timestamp-forced vs clock-driven replay.
-
-    This is a diagnostics-oriented test. It logs output differences and requires both
-    modes to produce valid windows and model/DUT agreement.
-    """
+    """A/B timing investigation: timestamp-forced vs clock-driven replay."""
     bin_files = _resolve_bin_files()
     for i, path in enumerate(bin_files):
         label = Path(path).stem
         expected = EXPECTED_BIN_FILE_CLASS[i]
-        # Start the clock only on the very first call; it persists for all subsequent runs.
         h_forced = await _run_bin_file_test(
-            dut,
-            path,
-            f"{label}-forced",
-            expected_class=expected,
-            replay_mode="timestamp_forced",
-            enforce_label=False,
-            start_clock=(i == 0),
+            dut, path, f"{label}-forced", expected_class=expected,
+            replay_mode="timestamp_forced", enforce_label=False, start_clock=(i == 0),
         )
         h_clock = await _run_bin_file_test(
-            dut,
-            path,
-            f"{label}-clock",
-            expected_class=expected,
-            replay_mode="clock_driven",
-            enforce_label=False,
-            start_clock=False,
+            dut, path, f"{label}-clock", expected_class=expected,
+            replay_mode="clock_driven", enforce_label=False, start_clock=False,
         )
 
         forced_classes = [g for g, _ in h_forced.observed_gestures]
@@ -1300,7 +1245,6 @@ async def test_windowing_strategy_matches_sliding_model(dut):
     await _flush_stale_bins(h, weights=weights)
     await h.send_word(build_evt2_time_high(0x45678))
 
-    # Generate more than READOUT_BINS rollovers to observe overlapping windows.
     script = ["left", "right", "top", "bottom"] * 4
     for region in script[: READOUT_BINS + 3]:
         await drive_bin_traffic(h, rng, region, events=28)
@@ -1317,38 +1261,6 @@ async def test_windowing_strategy_matches_sliding_model(dut):
 
 
 @logged_test()
-async def test_weight_write_blocked_in_classify_mode(dut):
-    """weight_wr_valid_gated must be 0 when the mode is CLASSIFY, even if weight_wr_valid_i=1."""
-    h = CoreHarness(dut, check_feature_windows=False)
-    await h.setup()
-
-    # active_mode_i is MODE_CLASSIFY after setup. Assert weight_wr_valid_i and confirm
-    # the gated signal is suppressed.
-    await RisingEdge(dut.clk)
-    await NextTimeStep()
-    dut.weight_wr_valid_i.value = 1
-    dut.weight_wr_class_i.value = 0
-    dut.weight_wr_addr_i.value = 0
-    dut.weight_wr_data_i.value = 0xFF
-    await RisingEdge(dut.clk)
-    await ReadOnly()
-    assert int(dut.weight_wr_valid_gated.value) == 0, \
-        "weight_wr_valid_gated must be 0 in CLASSIFY mode"
-
-    # Switch to PROGRAM mode; the same assertion must now pass through.
-    await NextTimeStep()
-    dut.active_mode_i.value = MODE_PROGRAM
-    await RisingEdge(dut.clk)
-    await ReadOnly()
-    assert int(dut.weight_wr_valid_gated.value) == 1, \
-        "weight_wr_valid_gated must be 1 in PROGRAM mode when weight_wr_valid_i=1"
-
-    await NextTimeStep()
-    dut.weight_wr_valid_i.value = 0
-    dut.active_mode_i.value = MODE_CLASSIFY
-
-
-@logged_test()
 async def test_mac_backpressure_holds_binner(dut):
     """When the MAC is busy the binner must park in ST_WAIT_RD and complete both windows."""
     weights = load_weights_from_mem()
@@ -1359,12 +1271,10 @@ async def test_mac_backpressure_holds_binner(dut):
     rng = random.Random(0xBEEF_0001)
     await h.send_word(build_evt2_time_high(0x1))
 
-    # Produce first complete readout window (READOUT_BINS rollovers).
     for _ in range(READOUT_BINS):
         await drive_bin_traffic(h, rng, "right", events=8)
         await h.force_bin_rollover()
 
-    # Wait until the MAC goes busy scoring the first window.
     for _ in range(10_000):
         await h.tick(1)
         if int(dut.debug_score_busy.value):
@@ -1372,12 +1282,9 @@ async def test_mac_backpressure_holds_binner(dut):
     else:
         raise AssertionError("MAC never went busy after first feature window")
 
-    # While the MAC is still busy, trigger a second rollover.
-    # binner_readout_ready=0, so the binner must park in ST_WAIT_RD.
     await drive_bin_traffic(h, rng, "right", events=4)
     await h.force_bin_rollover()
 
-    # Both windows must eventually complete and every class_valid must match ScoreModel.
     await h.wait_quiet()
     assert h.completed_windows >= 2, \
         f"Expected >=2 completed windows after backpressure, got {h.completed_windows}"
@@ -1385,3 +1292,462 @@ async def test_mac_backpressure_holds_binner(dut):
         f"{len(h.pending_score_checks)} feature windows never produced class_valid"
     assert h.observed_gestures == h.expected_gestures, \
         f"Gesture mismatch after MAC backpressure\nDUT: {h.observed_gestures}\nMODEL: {h.expected_gestures}"
+
+
+# ---------------------------------------------------------------------------
+# chip_flash_fsm integration tests
+# ---------------------------------------------------------------------------
+
+@logged_test()
+async def test_fsm_boots_from_st_boot_to_st_run(dut):
+    """After reset FSM is in ST_BOOT with core_rst_o=1; after BOOT_REQ+done it reaches ST_RUN."""
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    dut.rst.value = 1
+    dut.evt_word.value = 0
+    dut.evt_word_valid.value = 0
+    dut.force_rollover_i.value = 0
+    await ClockCycles(dut.clk, 8)
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 4)
+
+    # FSM should be in ST_BOOT immediately after reset
+    await ReadOnly()
+    assert int(dut.controller_fsm.main_state.value) == ST_BOOT, \
+        f"Expected ST_BOOT after reset, got {int(dut.controller_fsm.main_state.value)}"
+    assert int(dut.core_rst_o.value) == 1, "core_rst_o must be 1 in ST_BOOT"
+    assert int(dut.evt_ld_en.value) == 0, "evt_ld_en must be 0 in ST_BOOT"
+    assert int(dut.boot_done_o.value) == 0, "boot_done_o must be 0 in ST_BOOT"
+
+    # Exit ReadOnly phase before driving any signals.
+    await NextTimeStep()
+
+    # Boot sequence: BOOT_REQ → wait for LD_OPEN → EVT_READS_DONE → ST_RUN
+    await _send_raw_word(dut, BOOT_REQ_WORD)
+
+    # FSM should move to ST_LOAD within a few cycles (decoder pipeline + 1 FSM cycle)
+    for _ in range(10):
+        await RisingEdge(dut.clk)
+        if int(dut.controller_fsm.main_state.value) == ST_LOAD:
+            break
+    else:
+        raise AssertionError("FSM did not enter ST_LOAD after BOOT_REQ")
+
+    assert int(dut.core_rst_o.value) == 1, "core_rst_o must remain 1 during ST_LOAD"
+
+    # Wait for evt_ld_en to assert (after PWR_WAIT_CYCLES in LD_WAIT_PWR)
+    await _wait_for_evt_ld_en(dut)
+    assert int(dut.controller_fsm.load_state.value) in (LD_OPEN, LD_WAIT), \
+        f"Expected load_state LD_OPEN/LD_WAIT when evt_ld_en=1, got {int(dut.controller_fsm.load_state.value)}"
+
+    # Close boot window with EVT_READS_DONE
+    await _send_raw_word(dut, EVT_READS_DONE_WORD)
+    await _wait_for_st_run(dut)
+
+    await ReadOnly()
+    assert int(dut.controller_fsm.main_state.value) == ST_RUN, \
+        f"Expected ST_RUN after boot, got {int(dut.controller_fsm.main_state.value)}"
+    assert int(dut.core_rst_o.value) == 0, "core_rst_o must be 0 in ST_RUN"
+    assert int(dut.evt_ld_en.value) == 0, "evt_ld_en must be 0 in ST_RUN"
+    assert int(dut.boot_done_o.value) == 1, "boot_done_o must be 1 in ST_RUN"
+
+
+@logged_test()
+async def test_evt_ld_en_only_asserts_during_load_window(dut):
+    """evt_ld_en is 0 in ST_BOOT, 1 during LD_OPEN/LD_WAIT, and 0 again in ST_RUN."""
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    dut.rst.value = 1
+    dut.evt_word.value = 0
+    dut.evt_word_valid.value = 0
+    dut.force_rollover_i.value = 0
+    await ClockCycles(dut.clk, 8)
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 4)
+
+    # Must be 0 before any boot
+    assert int(dut.evt_ld_en.value) == 0, "evt_ld_en must be 0 before boot"
+
+    await _send_raw_word(dut, BOOT_REQ_WORD)
+
+    # Must remain 0 during LD_WAIT_PWR
+    for _ in range(PWR_WAIT_CYCLES - 10):
+        await RisingEdge(dut.clk)
+        assert int(dut.evt_ld_en.value) == 0, \
+            "evt_ld_en must not assert before LD_OPEN"
+
+    # Must assert at LD_OPEN
+    await _wait_for_evt_ld_en(dut, timeout=20)
+    assert int(dut.evt_ld_en.value) == 1, "evt_ld_en must be 1 at LD_OPEN"
+
+    # Send EVT_READS_DONE to close the window
+    await _send_raw_word(dut, EVT_READS_DONE_WORD)
+    await _wait_for_st_run(dut)
+
+    # Must be 0 again in ST_RUN
+    await RisingEdge(dut.clk)
+    await ReadOnly()
+    assert int(dut.evt_ld_en.value) == 0, "evt_ld_en must be 0 in ST_RUN"
+
+
+@logged_test()
+async def test_weight_writes_blocked_outside_load_window(dut):
+    """Weight event words are silently discarded when evt_ld_en=0 (ST_BOOT and ST_RUN)."""
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    dut.rst.value = 1
+    dut.evt_word.value = 0
+    dut.evt_word_valid.value = 0
+    dut.force_rollover_i.value = 0
+    await ClockCycles(dut.clk, 8)
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 4)
+
+    # ST_BOOT: weight word should be blocked (evt_ld_en=0).
+    # Drive valid for one cycle then deassert; give decoder 2 cycles to process.
+    w = build_weight_word(0xFF, 0, 0)
+    dut.evt_word.value = w
+    dut.evt_word_valid.value = 1
+    await RisingEdge(dut.clk)
+    dut.evt_word_valid.value = 0
+    await ClockCycles(dut.clk, 2)
+    await ReadOnly()
+    assert int(dut.weight_wr_valid_gated.value) == 0, \
+        "weight_wr_valid_gated must be 0 in ST_BOOT"
+    await NextTimeStep()
+
+    # Minimal boot to reach ST_RUN
+    await _minimal_boot(dut)
+    await ClockCycles(dut.clk, 4)
+
+    # ST_RUN: weight word should also be blocked.
+    dut.evt_word.value = w
+    dut.evt_word_valid.value = 1
+    await RisingEdge(dut.clk)
+    dut.evt_word_valid.value = 0
+    # Give FIFO → decoder pipeline 2 cycles to process the word.
+    await ClockCycles(dut.clk, 2)
+    await ReadOnly()
+    assert int(dut.weight_wr_valid_gated.value) == 0, \
+        "weight_wr_valid_gated must be 0 in ST_RUN (evt_ld_en=0)"
+    await NextTimeStep()
+
+
+@logged_test()
+async def test_weight_writes_accepted_during_load_window(dut):
+    """Weight event words decoded while evt_ld_en=1 must assert weight_wr_valid_gated."""
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    dut.rst.value = 1
+    dut.evt_word.value = 0
+    dut.evt_word_valid.value = 0
+    dut.force_rollover_i.value = 0
+    await ClockCycles(dut.clk, 8)
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 4)
+
+    # Enter load window
+    await _send_raw_word(dut, BOOT_REQ_WORD)
+    await _wait_for_evt_ld_en(dut)
+
+    # Send one weight word and verify gated signal asserts
+    w = build_weight_word(0xAB, 0, 0)
+    await _send_raw_word(dut, w)
+
+    # The word must propagate through FIFO → decoder in a few cycles
+    gated_seen = False
+    for _ in range(20):
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if int(dut.weight_wr_valid_gated.value) == 1:
+            gated_seen = True
+            break
+    assert gated_seen, "weight_wr_valid_gated never asserted during load window"
+
+    # Exit ReadOnly phase (loop may have broken out of await ReadOnly()) before driving.
+    await NextTimeStep()
+
+    # Close the window cleanly
+    await _send_raw_word(dut, EVT_READS_DONE_WORD)
+    await _wait_for_st_run(dut)
+
+
+@logged_test()
+async def test_no_gesture_before_boot_completes(dut):
+    """Events and rollovers fed before boot must not produce gesture_valid (MAC in reset)."""
+    rng = random.Random(0xABCD_EF01)
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    dut.rst.value = 1
+    dut.evt_word.value = 0
+    dut.evt_word_valid.value = 0
+    dut.force_rollover_i.value = 0
+    await ClockCycles(dut.clk, 8)
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 4)
+
+    # Send event data while FSM is still in ST_BOOT (no boot sequence sent)
+    th_word = build_evt2_time_high(0x100)
+    await _send_raw_word(dut, th_word)
+
+    pts = region_points("bottom")
+    for _ in range(20):
+        gx, gy = rng.choice(pts)
+        w = build_evt2_cd(EVT_CD_ON, sensor_x_from_grid(gx), sensor_y_from_grid(gy), 0)
+        await _send_raw_word(dut, w)
+
+    # Force several rollovers to produce feature windows while in ST_BOOT
+    for _ in range(READOUT_BINS + 2):
+        dut.force_rollover_i.value = 1
+        await RisingEdge(dut.clk)
+        dut.force_rollover_i.value = 0
+        await ClockCycles(dut.clk, 5)
+
+    # Wait for pipeline to settle
+    await ClockCycles(dut.clk, 200)
+
+    # No gesture should have fired — core_rst_o=1 holds the MAC in reset
+    assert int(dut.gesture_valid.value) == 0, \
+        "gesture_valid fired before boot completed — core_rst_o did not gate MAC"
+    assert int(dut.core_rst_o.value) == 1, \
+        "core_rst_o must remain 1 before boot completes"
+
+
+@logged_test()
+async def test_debug_req_during_load_clears_evt_ld_en(dut):
+    """If debug_req fires while in LD_OPEN/LD_WAIT, evt_ld_en must deassert immediately.
+
+    This is a regression test for the bug where ST_LOAD's debug_req branch did not
+    clear evt_ld_en, allowing SRAM writes to leak into ST_DEBUG.
+    """
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    dut.rst.value = 1
+    dut.evt_word.value = 0
+    dut.evt_word_valid.value = 0
+    dut.force_rollover_i.value = 0
+    await ClockCycles(dut.clk, 8)
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 4)
+
+    # Open the load window
+    await _send_raw_word(dut, BOOT_REQ_WORD)
+    await _wait_for_evt_ld_en(dut)
+    assert int(dut.evt_ld_en.value) == 1, "Precondition: evt_ld_en must be 1"
+
+    # Inject DEBUG_REQ — should interrupt ST_LOAD and clear evt_ld_en
+    await _send_raw_word(dut, DEBUG_REQ_WORD)
+
+    # evt_ld_en must deassert within a few cycles of the FSM seeing debug_req_i
+    ld_en_cleared = False
+    for _ in range(20):
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if int(dut.evt_ld_en.value) == 0:
+            ld_en_cleared = True
+            break
+    assert ld_en_cleared, "evt_ld_en not cleared after debug_req interrupted load"
+
+    # FSM should be in ST_DEBUG
+    assert int(dut.controller_fsm.main_state.value) == ST_DEBUG, \
+        f"Expected ST_DEBUG after debug_req, got {int(dut.controller_fsm.main_state.value)}"
+    assert int(dut.core_rst_o.value) == 1, "core_rst_o must be 1 in ST_DEBUG"
+
+    # Exit ReadOnly phase before driving signals.
+    await NextTimeStep()
+
+    # Weight write words while in ST_DEBUG with evt_ld_en=0 must be blocked
+    w = build_weight_word(0xFF, 0, 0)
+    await _send_raw_word(dut, w)
+    for _ in range(10):
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        assert int(dut.weight_wr_valid_gated.value) == 0, \
+            "weight_wr_valid_gated must be 0 in ST_DEBUG (evt_ld_en cleared)"
+
+
+@logged_test()
+async def test_debug_req_from_boot_then_reload(dut):
+    """DEBUG_REQ from ST_BOOT → ST_DEBUG → boot_req restarts load → reaches ST_RUN."""
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    dut.rst.value = 1
+    dut.evt_word.value = 0
+    dut.evt_word_valid.value = 0
+    dut.force_rollover_i.value = 0
+    await ClockCycles(dut.clk, 8)
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 4)
+
+    # Go directly to ST_DEBUG from ST_BOOT
+    await _send_raw_word(dut, DEBUG_REQ_WORD)
+
+    for _ in range(10):
+        await RisingEdge(dut.clk)
+        if int(dut.controller_fsm.main_state.value) == ST_DEBUG:
+            break
+    else:
+        raise AssertionError("FSM did not enter ST_DEBUG")
+
+    assert int(dut.core_rst_o.value) == 1, "core_rst_o must be 1 in ST_DEBUG"
+    assert int(dut.evt_ld_en.value) == 0, "evt_ld_en must be 0 in ST_DEBUG"
+
+    # Exit DEBUG with BOOT_REQ (debug_req_i already deasserted — it was a one-cycle pulse)
+    await _send_raw_word(dut, BOOT_REQ_WORD)
+
+    for _ in range(10):
+        await RisingEdge(dut.clk)
+        if int(dut.controller_fsm.main_state.value) == ST_LOAD:
+            break
+    else:
+        raise AssertionError("FSM did not return to ST_LOAD from ST_DEBUG")
+
+    # Complete boot and verify ST_RUN reached
+    await _wait_for_evt_ld_en(dut)
+    await _send_raw_word(dut, EVT_READS_DONE_WORD)
+    await _wait_for_st_run(dut)
+
+    assert int(dut.controller_fsm.main_state.value) == ST_RUN, \
+        "FSM did not reach ST_RUN after debug→boot sequence"
+    assert int(dut.boot_done_o.value) == 1
+
+
+@logged_test()
+async def test_reload_req_from_run_state(dut):
+    """RELOAD_REQ while in ST_RUN must re-enter ST_LOAD and eventually reach ST_RUN."""
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    dut.rst.value = 1
+    dut.evt_word.value = 0
+    dut.evt_word_valid.value = 0
+    dut.force_rollover_i.value = 0
+    await ClockCycles(dut.clk, 8)
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 4)
+
+    # Boot to ST_RUN
+    await _minimal_boot(dut)
+    assert int(dut.controller_fsm.main_state.value) == ST_RUN, "Precondition: must be in ST_RUN"
+
+    # Reload
+    await _send_raw_word(dut, RELOAD_REQ_WORD)
+
+    for _ in range(10):
+        await RisingEdge(dut.clk)
+        if int(dut.controller_fsm.main_state.value) == ST_LOAD:
+            break
+    else:
+        raise AssertionError("FSM did not enter ST_LOAD on RELOAD_REQ")
+
+    # core_rst_o is registered: ST_RUN sets it to 0 at the same posedge that transitions
+    # main_state to ST_LOAD. ST_LOAD's body sets it to 1 only at the *next* posedge.
+    await RisingEdge(dut.clk)
+    assert int(dut.core_rst_o.value) == 1, "core_rst_o must be 1 during reload"
+    assert int(dut.boot_done_o.value) == 0, "boot_done_o must deassert during reload"
+    assert int(dut.evt_ld_en.value) == 0, "evt_ld_en must be 0 at start of reload"
+
+    # Complete reload
+    await _wait_for_evt_ld_en(dut)
+    await _send_raw_word(dut, EVT_READS_DONE_WORD)
+    await _wait_for_st_run(dut)
+
+    assert int(dut.controller_fsm.main_state.value) == ST_RUN, \
+        "FSM must return to ST_RUN after reload"
+    assert int(dut.boot_done_o.value) == 1
+    assert int(dut.evt_ld_en.value) == 0
+
+
+@logged_test()
+async def test_fsm_state_debug_signals_through_boot(dut):
+    """main_state_dbg_o and load_state_dbg_o must reflect the correct encoding at each stage."""
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    dut.rst.value = 1
+    dut.evt_word.value = 0
+    dut.evt_word_valid.value = 0
+    dut.force_rollover_i.value = 0
+    await ClockCycles(dut.clk, 8)
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 4)
+    await ReadOnly()
+
+    assert int(dut.main_state_dbg_o.value) == ST_BOOT, \
+        f"main_state_dbg_o should be ST_BOOT(0), got {int(dut.main_state_dbg_o.value)}"
+    assert int(dut.load_state_dbg_o.value) == LD_IDLE, \
+        f"load_state_dbg_o should be LD_IDLE(0), got {int(dut.load_state_dbg_o.value)}"
+
+    # Exit ReadOnly phase before driving signals.
+    await NextTimeStep()
+
+    await _send_raw_word(dut, BOOT_REQ_WORD)
+
+    # Confirm ST_LOAD is reflected in the debug output
+    for _ in range(10):
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if int(dut.main_state_dbg_o.value) == ST_LOAD:
+            break
+    else:
+        raise AssertionError("main_state_dbg_o never showed ST_LOAD")
+
+    # Exit ReadOnly before the next loop's first iteration reads a signal.
+    await NextTimeStep()
+
+    # Wait for LD_WAIT_PWR to appear in load_state_dbg_o
+    found_wait_pwr = False
+    for _ in range(PWR_WAIT_CYCLES + 5):
+        val = int(dut.load_state_dbg_o.value)
+        if val == LD_WAIT_PWR:
+            found_wait_pwr = True
+        if val == LD_OPEN:
+            break
+        await RisingEdge(dut.clk)
+    assert found_wait_pwr, "load_state_dbg_o never showed LD_WAIT_PWR"
+
+    # evt_ld_en asserts → load_state_dbg_o should be LD_OPEN then LD_WAIT
+    await _wait_for_evt_ld_en(dut, timeout=5)
+
+    await _send_raw_word(dut, EVT_READS_DONE_WORD)
+    await _wait_for_st_run(dut)
+
+    await RisingEdge(dut.clk)
+    await ReadOnly()
+    assert int(dut.main_state_dbg_o.value) == ST_RUN, \
+        f"main_state_dbg_o should be ST_RUN(2), got {int(dut.main_state_dbg_o.value)}"
+    assert int(dut.load_state_dbg_o.value) == LD_IDLE, \
+        f"load_state_dbg_o should be LD_IDLE(0) in ST_RUN, got {int(dut.load_state_dbg_o.value)}"
+
+
+@logged_test()
+async def test_boot_with_weights_enables_correct_classification(dut):
+    """Full event-stream weight load → classification produces expected class per ScoreModel."""
+    weights = load_weights_from_mem()
+    thresholds = load_thresholds()
+    score_model = ScoreModel(weights)
+
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    dut.rst.value = 1
+    dut.evt_word.value = 0
+    dut.evt_word_valid.value = 0
+    dut.force_rollover_i.value = 0
+    await ClockCycles(dut.clk, 8)
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 8)
+
+    # Load weights via boot sequence through the event stream
+    await deposit_weights_and_thresholds(dut, weights, thresholds)
+
+    assert int(dut.core_rst_o.value) == 0, "core_rst_o must be 0 after boot with weights"
+    assert int(dut.controller_fsm.main_state.value) == ST_RUN
+
+    # Now exercise the full pipeline with the harness (clock already running)
+    rng = random.Random(0x1357_9BDF)
+    h = CoreHarness(dut, score_model=score_model, check_feature_windows=False)
+    # Sync harness accepted_words with current debug_event_count (boot words already counted)
+    h.accepted_words = int(dut.debug_event_count.value)
+
+    await h.send_word(build_evt2_time_high(0x500))
+    for _ in range(READOUT_BINS + 2):
+        await drive_bin_traffic(h, rng, "bottom", events=20)
+        await h.force_bin_rollover()
+
+    await h.wait_quiet()
+
+    assert h.completed_windows > 0, "No feature windows completed"
+    assert not h.pending_score_checks, \
+        f"{len(h.pending_score_checks)} windows never produced class_valid"
+    assert h.observed_gestures == h.expected_gestures, (
+        f"DUT/model mismatch after event-stream weight load\n"
+        f"DUT:   {h.observed_gestures}\nMODEL: {h.expected_gestures}"
+    )

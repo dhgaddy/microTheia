@@ -75,6 +75,7 @@ module chip_flash_fsm #(
                     if (debug_req_i) begin
                         main_state <= ST_DEBUG;
                         load_state <= LD_IDLE;
+                        evt_ld_en  <= 1'b0;
                     end else begin
                         unique case (load_state)
                             LD_IDLE: begin
@@ -130,6 +131,7 @@ module chip_flash_fsm #(
                     if (debug_req_i) begin
                         main_state <= ST_DEBUG;
                         load_state <= LD_IDLE;
+                        evt_ld_en  <= 1'b0;
                     end else if (reload_req_i) begin
                         main_state        <= ST_LOAD;
                         load_state        <= LD_WAIT_PWR;
