@@ -9,6 +9,8 @@ module evt2_decoder #(
     parameter int SENSOR_WIDTH      = 320,
     parameter int SENSOR_HEIGHT     = 320,
     parameter int GRID_SIZE         = 16,
+    parameter int SCORE_BITS        = 36,
+    parameter int WEIGHT_BITS       = 8,
     parameter bit REQUIRE_TIME_HIGH = 1'b1,
     parameter bit SWAP_INPUT_BYTES  = 1'b0,
     parameter bit MAP_SWAP_XY       = 1'b0,
@@ -26,11 +28,13 @@ module evt2_decoder #(
     output logic [$clog2(GRID_SIZE)-1:0] y_out,
     output logic                         event_valid,
     output logic                         evt_reads_done,
-    output logic [7:0]                   weight_addr_o,
-    output logic [7:0]                   weight_data_o,
+    output logic [8:0]                   weight_addr_o,
+    output logic [WEIGHT_BITS-1:0]       weight_data_o,
     output logic [3:0]                   weight_sram_addr_o,
-    output logic [35:0]                  thresh_data_o,
+    output logic                         weight_event_valid,
+    output logic [SCORE_BITS-1:0]        thresh_data_o,
     output logic [2:0]                   thresh_addr_o,
+    output logic                         thresh_event_valid,
     output logic [33:0]                  ts_out,       // full 34-bit timestamp of last CD event
     output logic [11:0]                  decoder_dbg,  //debug bus
     output logic [31:0]                  decoder_output_dbg,
@@ -139,6 +143,8 @@ module evt2_decoder #(
             y_out              <= '0;
             ts_out             <= '0;
             event_valid        <= 1'b0;
+            weight_event_valid <= 1'b0;
+            thresh_event_valid <= 1'b0;
             evt_reads_done     <= 1'b0;
             thresh_reg         <= '0;
             weight_addr_o      <= '0;
@@ -148,8 +154,10 @@ module evt2_decoder #(
             thresh_addr_o      <= '0;
             debug_page_sel     <= '0;
         end else begin
-            event_valid    <= 1'b0;
-            evt_reads_done <= 1'b0;
+            event_valid        <= 1'b0;
+            weight_event_valid <= 1'b0;
+            thresh_event_valid <= 1'b0;
+            evt_reads_done     <= 1'b0;
 
             if (data_valid && data_ready) begin
                 case (pkt_type)
@@ -173,7 +181,7 @@ module evt2_decoder #(
                             weight_data_o      <= evt_word[27:20];
                             weight_addr_o      <= evt_word[19:11];
                             weight_sram_addr_o <= evt_word[10:7];
-                            event_valid        <= 1'b1;
+                            weight_event_valid <= 1'b1;
                         end
                     end
                     
@@ -185,9 +193,9 @@ module evt2_decoder #(
 
                     EVT_THRESH_L: begin
                         if (evt_ld_en) begin
-                            thresh_data_o <= {thresh_reg, evt_word[27:10]};
-                            thresh_addr_o <= evt_word[9:7];
-                            event_valid   <= 1'b1;
+                            thresh_data_o        <= {thresh_reg, evt_word[27:10]};
+                            thresh_addr_o        <= evt_word[9:7];
+                            thresh_event_valid   <= 1'b1;
                         end
                     end
 
@@ -199,7 +207,9 @@ module evt2_decoder #(
                         debug_page_sel <= evt_word[27:24];
                     end
                     default: begin
-                        event_valid <= 1'b0;
+                        event_valid        <= 1'b0;
+                        thresh_event_valid <= 1'b0;
+                        weight_event_valid <= 1'b0;
                     end
                 endcase
             end

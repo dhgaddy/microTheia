@@ -411,7 +411,7 @@ async def test_weight_packet(dut):
     dut.evt_ld_en.value = 1
 
     weight = 0xAB
-    addr   = 0x12
+    addr   = 0x1F2
     sram   = 0x5
 
     payload = (weight << 20) | (addr << 11) | (sram << 7)
@@ -419,7 +419,8 @@ async def test_weight_packet(dut):
 
     await send_word(dut, word)
 
-    assert dut.event_valid.value == 1
+    assert dut.weight_event_valid.value == 1
+    assert dut.event_valid.value == 0
     assert dut.weight_data_o.value == weight
     assert dut.weight_addr_o.value == addr
     assert dut.weight_sram_addr_o.value == sram
@@ -435,7 +436,7 @@ async def test_weight_requires_ld_en(dut):
     word = make_word(0x2, 0xFFFFFFFF)
     await send_word(dut, word)
 
-    assert dut.event_valid.value == 0
+    assert dut.weight_event_valid.value == 0
 
 
 @logged_test()
@@ -457,7 +458,8 @@ async def test_threshold_upper_lower(dut):
 
     expected = (upper << 18) | lower
 
-    assert dut.event_valid.value == 1
+    assert dut.thresh_event_valid.value == 1
+    assert dut.event_valid.value == 0
     assert dut.thresh_data_o.value == expected
     assert dut.thresh_addr_o.value == addr
 
@@ -472,7 +474,7 @@ async def test_threshold_requires_ld_en(dut):
     await send_word(dut, make_word(0x3, 0xFFFFFFFF))
     await send_word(dut, make_word(0x4, 0xFFFFFFFF))
 
-    assert dut.event_valid.value == 0
+    assert dut.thresh_event_valid.value == 0
 
 
 @logged_test()
