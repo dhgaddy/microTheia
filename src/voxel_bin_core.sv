@@ -35,12 +35,12 @@ module voxel_bin_core #(
     input  logic       rst,
 
     // Mode control
-    input  logic [2:0] active_mode_i, // 00=BOOT, 01=PROGRAM, 10=CLASSIFY, 11=DEBUG
+    input  logic [2:0] active_mode_i, // 00=BOOT, 01=PROGRAM, 10=CLASSIFY, 11=DEBUG//
 
     // Event stream in
     input  logic [31:0] evt_word,
     input  logic        evt_word_valid,
-    output logic        evt_word_ready,
+    output logic        evt_word_ready,//
 
     // Gesture outputs
     output logic [1:0]  gesture,
@@ -49,15 +49,15 @@ module voxel_bin_core #(
 
     // Weight SRAM write port — loads weights into the per-class SRAMs at runtime.
     // Do not assert weight_wr_valid_i while the MAC engine is running (mac_busy).
-    input  logic                                                weight_wr_valid_i,
-    input  logic [1:0]                                          weight_wr_class_i,
-    input  logic [$clog2(READOUT_BINS*GRID_SIZE*GRID_SIZE)-1:0] weight_wr_addr_i,
-    input  logic [WEIGHT_BITS-1:0]                              weight_wr_data_i,
+    input  logic                                                weight_wr_valid_i,//
+    input  logic [1:0]                                          weight_wr_class_i,//
+    input  logic [$clog2(READOUT_BINS*GRID_SIZE*GRID_SIZE)-1:0] weight_wr_addr_i,//
+    input  logic [WEIGHT_BITS-1:0]                              weight_wr_data_i,//
 
     // Threshold SRAM write port — addr 0-3 = class thresholds, 4-7 = diff thresholds.
-    input  logic                  thresh_wr_valid_i,
-    input  logic [2:0]            thresh_wr_addr_i,
-    input  logic [SCORE_BITS-1:0] thresh_wr_data_i,
+    input  logic                  thresh_wr_valid_i,//
+    input  logic [2:0]            thresh_wr_addr_i,//
+    input  logic [SCORE_BITS-1:0] thresh_wr_data_i,//
 
     // Debug outputs
     output logic [7:0] debug_event_count,
@@ -75,20 +75,16 @@ module voxel_bin_core #(
 
     //debug mux output
 
-    output logic [31:0] debug_mux,
-
-    //debug mux input
-
-    input logic [3:0] debug_select
+    output logic [31:0] debug_mux
 );
 
     // Mode constants
-    typedef enum logic [1:0] {
-        MODE_BOOT     = 2'b00,
-        MODE_LOAD     = 2'b01,
-        MODE_CLASSIFY = 2'b10,
-        MODE_DEBUG    = 2'b11
-    } state_t;
+    typedef enum logic [1:0] {//
+        MODE_BOOT     = 2'b00,//
+        MODE_LOAD     = 2'b01,//
+        MODE_CLASSIFY = 2'b10,//
+        MODE_DEBUG    = 2'b11//
+    } state_t;//
 
     // Classification constants
     localparam int FEATURE_COUNT    = READOUT_BINS * GRID_SIZE * GRID_SIZE;
@@ -96,30 +92,42 @@ module voxel_bin_core #(
     localparam int WEIGHT_ADDR_BITS = $clog2(FEATURE_COUNT);
 
     // Mode-derived enable signals
-    logic mode_load;
-    logic mode_classify;
+    logic mode_load;//
+    logic mode_classify;//
  
-    assign mode_load     = (active_mode_i == MODE_LOAD);
-    assign mode_classify = (active_mode_i == MODE_CLASSIFY);
+    assign mode_load     = (active_mode_i == MODE_LOAD);//
+    assign mode_classify = (active_mode_i == MODE_CLASSIFY);//
  
-    // Gated SRAM write valids that only pass through in PROGRAM mode
-    logic weight_wr_valid_gated;
-    logic thresh_wr_valid_gated;
- 
-    assign weight_wr_valid_gated = weight_wr_valid_i && mode_load;
-    assign thresh_wr_valid_gated = thresh_wr_valid_i && mode_load;
+    
 
     // Internal wires
+        //Input FIFO wires
     logic        fifo_out_valid;
     logic        fifo_out_ready;
     logic [31:0] fifo_out_data;
+        //FSM wires
+    logic boot_req_o;
+    logic reload_req_o;
+    logic debug_req_o;
+        //EVT2Decoder Wires
+    logic                           evt_reads_done;
+    logic [WEIGHT_BITS-1:0]         dec_weight_data_o;
+    logic [10:0]                    dec_weight_addr_o;
+    logic [3:0]                     dec_weight_sram_addr_o;
+    logic                           dec_weight_event_valid;
+    logic [SCORE_BITS-1:0]          dec_thresh_data_o;
+    logic [2:0]                     dec_thresh_addr_o;
+    logic [5:0]                     dec_thresh_5xaddr_o;
+    logic                           dec_thresh_event_valid;
+    assign dec_thresh_5xaddr_o = dec_thresh_addr_o * 5;
+    
 
     logic [($clog2(GRID_SIZE))-1:0] dec_x16;
     logic [($clog2(GRID_SIZE))-1:0] dec_y16;
     logic [33:0]                    dec_ts_out;
     logic                           dec_event_valid;
     logic                           dec_data_ready;
-
+        //VoxelBinning Wires
     logic                    binner_event_ready;
     logic                    binner_readout_ready;
     logic                    binner_readout_start;
@@ -127,7 +135,7 @@ module voxel_bin_core #(
     logic [COUNTER_BITS-1:0] binner_readout_data;
     logic [FEATURE_BITS-1:0] binner_readout_index;
     logic                    binner_readout_last;
-
+        //Feature RAM Wires
     logic capture_active;
     logic feature_window_ready;
 
@@ -138,7 +146,8 @@ module voxel_bin_core #(
     logic [WEIGHT_ADDR_BITS-1:0] weight_rd_addr;
     logic                        weight_rd_valid;
     logic [WEIGHT_BITS-1:0]      weight_rd_raw [0:NUM_CLASSES-1];
-
+    
+        //MAC Wires
     logic                               mac_start;
     logic                               mac_busy;
     logic                               mac_rd_en;
@@ -146,7 +155,7 @@ module voxel_bin_core #(
     logic [NUM_CLASSES*WEIGHT_BITS-1:0] mac_weight_flat;
     logic [NUM_CLASSES*SCORE_BITS-1:0]  mac_scores_flat;
     logic                               mac_scores_valid;
-
+        //Gesture Classififer Wires
     logic [1:0] class_gesture;
     logic       class_valid;
     logic       class_pass;
@@ -154,14 +163,30 @@ module voxel_bin_core #(
     logic                  thresh_rd_valid;
     logic [2:0]            thresh_rd_addr;
     logic [SCORE_BITS-1:0] thresh_data;
+    
+        //Controller Wires
+    logic                  evt_ld_en;
+    logic                  core_rst;
+    logic                  boot_done_o;
+    logic                  boot_fail_o;
+    logic [3:0]            main_state_dbg_o;
+    logic [5:0]            load_state_dbg_o;
 
-    //debug busses
+        // Gated SRAM write valids that only pass through in PROGRAM mode
+    logic weight_wr_valid_gated;
+    logic thresh_wr_valid_gated;
+ 
+    assign weight_wr_valid_gated = dec_weight_event_valid && evt_ld_en; //enables srams to be written to when in load state and the READ_DONE word not sent
+    assign thresh_wr_valid_gated = dec_thresh_event_valid && evt_ld_en;
+
+        //Debug Bus Wires
     logic [31:0] debug_bus;
     logic [10:0] class_dbg;
     logic [14:0] mac_dbg;
     logic [30:0] vox_bin_dbg;
     logic [11:0] decoder_dbg;
     logic [31:0] decoder_output_dbg;
+    logic [3:0]  debug_page_sel;
     logic [3:0] in_fifo_dbg;
     logic [15:0] vox_core_debug;
     logic [31:0] score_A, score_B, score_C, score_D;
@@ -218,6 +243,27 @@ module voxel_bin_core #(
         end
     end
 
+
+    // ------------------------------------------------------------------
+    // Controller FSM
+    // ------------------------------------------------------------------    
+    chip_flash_fsm controller_fsm (
+        .clk               (clk),
+        .rst_n             (rst),
+        .boot_req_i        (boot_req_o), //output from decoder BOOT_REQ word
+        .reload_req_i      (reload_req_o), //output from decoder RELOAD_REQ word
+        .debug_req_i       (debug_req_o), //output from decoder DEBUG_REQ word
+        .evt_reads_done    (evt_reads_done), //output from decoder READ_DONE word
+        .evt_ld_bypass     (1'b0), //bypass signal for not loading any weights into the SRAMs, probably keep at 0 for all intensive purposes
+
+        .evt_ld_en         (evt_ld_en), //Output in load state that allows 
+        .core_rst_o        (core_rst_o), //unused output that is on when not in run state
+        .boot_done_o       (boot_done_o), //debug signal for the boot process finishing
+        .boot_fail_o       (boot_fail_o), //debug signal for being in the boot fail load state
+        .main_state_dbg_o  (main_state_dbg_o), //next two lines self explanatory
+        .load_state_dbg_o  (load_state_dbg_o)
+    );
+
     // ------------------------------------------------------------------
     // Input FIFO
     // ------------------------------------------------------------------
@@ -249,18 +295,31 @@ module voxel_bin_core #(
         .MAP_FLIP_X       (MAP_FLIP_X),
         .MAP_FLIP_Y       (MAP_FLIP_Y)
     ) u_evt2_decoder (
-        .clk               (clk),
-        .rst               (rst),
-        .data_in           (fifo_out_data),
-        .data_valid        (fifo_out_valid),
-        .event_ready_i     (binner_event_ready),
-        .data_ready        (dec_data_ready),
-        .x_out             (dec_x16),
-        .y_out             (dec_y16),
-        .ts_out            (dec_ts_out),
-        .event_valid       (dec_event_valid),
-        .decoder_dbg       (decoder_dbg),
-        .decoder_output_dbg(decoder_output_dbg)
+        .clk                (clk),
+        .rst                (rst),
+        .data_in            (fifo_out_data),
+        .data_valid         (fifo_out_valid),
+        .event_ready_i      (binner_event_ready),
+        .evt_ld_en          (evt_ld_en),
+        .data_ready         (dec_data_ready),
+        .x_out              (dec_x16),
+        .y_out              (dec_y16),
+        .event_valid        (dec_event_valid),
+        .evt_reads_done     (evt_reads_done),
+        .weight_addr_o      (dec_weight_addr_o),
+        .weight_data_o      (dec_weight_data_o),
+        .weight_sram_addr_o (dec_weight_sram_addr_o),
+        .weight_event_valid (dec_weight_event_valid),
+        .thresh_data_o      (dec_thresh_data_o),
+        .thresh_addr_o      (dec_thresh_addr_o),
+        .thresh_event_valid (dec_thresh_event_valid),
+        .ts_out             (dec_ts_out),
+        .debug_req_o        (debug_req_o),
+        .reload_req_o       (reload_req_o),
+        .boot_req_o         (boot_req_o),
+        .decoder_dbg        (decoder_dbg),
+        .decoder_output_dbg (decoder_output_dbg),
+        .debug_page_sel     (debug_page_sel)
     );
 
     // ------------------------------------------------------------------
@@ -319,9 +378,9 @@ module voxel_bin_core #(
             ) u_weight_ram (
                 .clk_i      (clk),
                 .reset_i    (rst),
-                .wr_valid_i (weight_wr_valid_gated && (weight_wr_class_i == 2'(g))),
-                .wr_data_i  (weight_wr_data_i),
-                .wr_addr_i  (weight_wr_addr_i),
+                .wr_valid_i (weight_wr_valid_gated && (dec_weight_sram_addr_o == 2'(g))),
+                .wr_data_i  (dec_weight_data_o),
+                .wr_addr_i  (dec_weight_addr_o),
                 .rd_valid_i (weight_rd_valid),
                 .rd_addr_i  (weight_rd_addr),
                 .rd_data_o  (weight_rd_raw[g])
@@ -339,8 +398,8 @@ module voxel_bin_core #(
         .clk_i      (clk),
         .reset_i    (rst),
         .wr_valid_i (thresh_wr_valid_gated),
-        .wr_data_i  (thresh_wr_data_i),
-        .wr_addr_i  (thresh_wr_addr_i),
+        .wr_data_i  (dec_thresh_data_o),
+        .wr_addr_i  (dec_thresh_5xaddr_o),
         .rd_valid_i (thresh_rd_valid),
         .rd_addr_i  (thresh_rd_addr),
         .rd_data_o  (thresh_data)

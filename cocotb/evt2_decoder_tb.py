@@ -411,15 +411,16 @@ async def test_weight_packet(dut):
     dut.evt_ld_en.value = 1
 
     weight = 0xAB
-    addr   = 0x12
-    sram   = 0x5
+    addr   = 0x7F2
+    sram   = 0x2
 
-    payload = (weight << 20) | (addr << 11) | (sram << 7)
+    payload = (weight << 20) | (addr << 9) | (sram << 7)
     word = make_word(0x2, payload)
 
     await send_word(dut, word)
 
-    assert dut.event_valid.value == 1
+    assert dut.weight_event_valid.value == 1
+    assert dut.event_valid.value == 0
     assert dut.weight_data_o.value == weight
     assert dut.weight_addr_o.value == addr
     assert dut.weight_sram_addr_o.value == sram
@@ -435,7 +436,7 @@ async def test_weight_requires_ld_en(dut):
     word = make_word(0x2, 0xFFFFFFFF)
     await send_word(dut, word)
 
-    assert dut.event_valid.value == 0
+    assert dut.weight_event_valid.value == 0
 
 
 @logged_test()
@@ -457,7 +458,8 @@ async def test_threshold_upper_lower(dut):
 
     expected = (upper << 18) | lower
 
-    assert dut.event_valid.value == 1
+    assert dut.thresh_event_valid.value == 1
+    assert dut.event_valid.value == 0
     assert dut.thresh_data_o.value == expected
     assert dut.thresh_addr_o.value == addr
 
@@ -472,7 +474,7 @@ async def test_threshold_requires_ld_en(dut):
     await send_word(dut, make_word(0x3, 0xFFFFFFFF))
     await send_word(dut, make_word(0x4, 0xFFFFFFFF))
 
-    assert dut.event_valid.value == 0
+    assert dut.thresh_event_valid.value == 0
 
 
 @logged_test()
@@ -499,3 +501,42 @@ async def test_debug_page(dut):
     await send_word(dut, make_word(0xE, payload))
 
     assert dut.debug_page_sel.value == page
+
+@logged_test()
+async def test_boot_req_pulse(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    await reset_dut(dut)
+
+    # send BOOT_REQ packet (assuming type 0xB — adjust if different)
+    await send_word(dut, make_word(0xC, 0))
+
+    assert dut.boot_req_o.value == 1
+
+    await RisingEdge(dut.clk)
+    assert dut.boot_req_o.value == 0
+
+@logged_test()
+async def test_reload_req_pulse(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    await reset_dut(dut)
+
+    # send RELOAD_REQ packet (assuming type 0xC — adjust if different)
+    await send_word(dut, make_word(0xB, 0))
+
+    assert dut.reload_req_o.value == 1
+
+    await RisingEdge(dut.clk)
+    assert dut.reload_req_o.value == 0
+
+@logged_test()
+async def test_debug_req_pulse(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    await reset_dut(dut)
+
+    # send DEBUG_REQ packet (assuming type 0xD — adjust if different)
+    await send_word(dut, make_word(0xA, 0))
+
+    assert dut.debug_req_o.value == 1
+
+    await RisingEdge(dut.clk)
+    assert dut.debug_req_o.value == 0
