@@ -50,6 +50,10 @@ module voxel_bin_core #(
     localparam int FEATURE_COUNT    = READOUT_BINS * GRID_SIZE * GRID_SIZE;
     localparam int FEATURE_BITS     = $clog2(FEATURE_COUNT);
 
+    localparam int MAP_SWAP_XY = 0;
+    localparam int MAP_FLIP_X  = 0;
+    localparam int MAP_FLIP_Y  = 0;
+
     // Internal wires
     logic        fifo_out_valid;
     logic        fifo_out_ready;
@@ -246,6 +250,7 @@ module voxel_bin_core #(
         .SCORE_BITS       (SCORE_BITS), 
         .WEIGHT_BITS      (WEIGHT_BITS),
         .REQUIRE_TIME_HIGH(REQUIRE_TIME_HIGH),
+        .MAP_SWAP_XY      (MAP_SWAP_XY)
         .MAP_FLIP_X       (MAP_FLIP_X),
         .MAP_FLIP_Y       (MAP_FLIP_Y)
     ) u_evt2_decoder (
