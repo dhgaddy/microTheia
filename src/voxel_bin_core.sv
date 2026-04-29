@@ -258,12 +258,13 @@ module voxel_bin_core #(
 
         .evt_ld_en         (evt_ld_en), //Output in load state that allows 
         .core_rst_o        (core_rst_o), //unused output that is on when not in run state
-        .boot_done_o       (boot_done_o), //debug signal for the boot process finishing
-        .boot_fail_o       (boot_fail_o), //debug signal for being in the boot fail load state
-        .main_state_dbg_o  (main_state_dbg_o), //next two lines self explanatory
-        .load_state_dbg_o  (load_state_dbg_o)
+        .boot_done_o       (boot_done_o), //debug signal for the boot process finishing   - 1 bit
+        .boot_fail_o       (boot_fail_o), //debug signal for being in the boot fail load state - 1 bit
+        .main_state_dbg_o  (main_state_dbg_o), //next two lines self explanatory - 4 bits
+        .load_state_dbg_o  (load_state_dbg_o) // 6 bits
     );
-
+    logic [11:0] fsm_debug_bus; //12 bits  main_state_dbg_o [11:6] load_state_dbg_o [5:2] boot_fail_o [1] boot_done_o [0]
+    assign fsm_debug_bus = {main_state_dbg_o, load_state_dbg_o, boot_fail_o, boot_done_o};
     // ------------------------------------------------------------------
     // Input FIFO
     // ------------------------------------------------------------------
@@ -416,7 +417,7 @@ module voxel_bin_core #(
         .SCORE_BITS   (SCORE_BITS)
     ) u_voxel_mac_engine (
         .clk              (clk),
-        .rst              (rst),
+        .rst              (rst|core_rst_o), //gate mac engine using signal from FSM in addition to rst
         .start            (mac_start),
         .busy             (mac_busy),
         .rd_en            (mac_rd_en),
@@ -471,7 +472,7 @@ module voxel_bin_core #(
         .fifo_in(evt_word),
         .fifo_out(fifo_out_data),
         //input [31:0] control_dbg,
-        .debug_select(debug_select) 
+        .debug_select(debug_page_sel) 
     );
 
 assign debug_mux = debug_bus;
