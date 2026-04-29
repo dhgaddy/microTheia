@@ -182,7 +182,7 @@ always_comb begin
                 selected_debug = {vox_core_debug, in_fifo_dbg, decoder_dbg};
             end
             PAGE_3: begin
-                debug_bus = {20'b0, fsm_debug_bus}
+                selected_debug = {20'b0, fsm_debug_bus};
             end
             
             PAGE_4: begin
