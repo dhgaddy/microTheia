@@ -112,7 +112,7 @@ module voxel_bin_core #(
         //EVT2Decoder Wires
     logic                           evt_reads_done;
     logic [WEIGHT_BITS-1:0]         dec_weight_data_o;
-    logic [10:0]                     dec_weight_addr_o;
+    logic [10:0]                    dec_weight_addr_o;
     logic [3:0]                     dec_weight_sram_addr_o;
     logic                           dec_weight_event_valid;
     logic [SCORE_BITS-1:0]          dec_thresh_data_o;
@@ -176,8 +176,8 @@ module voxel_bin_core #(
     logic weight_wr_valid_gated;
     logic thresh_wr_valid_gated;
  
-    assign weight_wr_valid_gated = dec_weight_event_valid && core_rst_o;
-    assign thresh_wr_valid_gated = dec_thresh_event_valid && core_rst_o;
+    assign weight_wr_valid_gated = dec_weight_event_valid && evt_ld_en; //enables srams to be written to when in load state and the READ_DONE word not sent
+    assign thresh_wr_valid_gated = dec_thresh_event_valid && evt_ld_en;
 
         //Debug Bus Wires
     logic [31:0] debug_bus;
@@ -250,17 +250,17 @@ module voxel_bin_core #(
     chip_flash_fsm controller_fsm (
         .clk               (clk),
         .rst_n             (rst),
-        .boot_req_i        (boot_req_o),
-        .reload_req_i      (reload_req_o),
-        .debug_req_i       (debug_req_o),
-        .evt_reads_done    (evt_reads_done),
-        .evt_ld_bypass     (1'b0),
+        .boot_req_i        (boot_req_o), //output from decoder BOOT_REQ word
+        .reload_req_i      (reload_req_o), //output from decoder RELOAD_REQ word
+        .debug_req_i       (debug_req_o), //output from decoder DEBUG_REQ word
+        .evt_reads_done    (evt_reads_done), //output from decoder READ_DONE word
+        .evt_ld_bypass     (1'b0), //bypass signal for not loading any weights into the SRAMs, probably keep at 0 for all intensive purposes
 
-        .evt_ld_en         (evt_ld_en),
-        .core_rst_o        (core_rst_o),
-        .boot_done_o       (boot_done_o),
-        .boot_fail_o       (boot_fail_o),
-        .main_state_dbg_o  (main_state_dbg_o),
+        .evt_ld_en         (evt_ld_en), //Output in load state that allows 
+        .core_rst_o        (core_rst_o), //unused output that is on when not in run state
+        .boot_done_o       (boot_done_o), //debug signal for the boot process finishing
+        .boot_fail_o       (boot_fail_o), //debug signal for being in the boot fail load state
+        .main_state_dbg_o  (main_state_dbg_o), //next two lines self explanatory
         .load_state_dbg_o  (load_state_dbg_o)
     );
 
