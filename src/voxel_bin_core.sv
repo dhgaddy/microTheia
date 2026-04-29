@@ -250,7 +250,7 @@ module voxel_bin_core #(
         .SCORE_BITS       (SCORE_BITS), 
         .WEIGHT_BITS      (WEIGHT_BITS),
         .REQUIRE_TIME_HIGH(REQUIRE_TIME_HIGH),
-        .MAP_SWAP_XY      (MAP_SWAP_XY)
+        .MAP_SWAP_XY      (MAP_SWAP_XY),
         .MAP_FLIP_X       (MAP_FLIP_X),
         .MAP_FLIP_Y       (MAP_FLIP_Y)
     ) u_evt2_decoder (
