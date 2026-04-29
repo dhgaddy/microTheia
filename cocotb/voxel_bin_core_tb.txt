@@ -3,329 +3,408 @@
 ====================================================
 make[1]: Entering directory '/mnt/c/Users/jason/Documents/group-g-dalton'
 mkdir -p cocotb/sim_build/voxel_bin_core
-/usr/bin/iverilog -o cocotb/sim_build/voxel_bin_core/sim.vvp -s voxel_bin_core -g2012 -Pvoxel_bin_core.CLK_FREQ_HZ=12000000 -Pvoxel_bin_core.WINDOW_MS=1000 -Pvoxel_bin_core.GRID_SIZE=16 -Pvoxel_bin_core.NUM_BINS=8 -Pvoxel_bin_core.READOUT_BINS=8 -Pvoxel_bin_core.COUNTER_BITS=16 -Pvoxel_bin_core.FIFO_DEPTH=256 -Pvoxel_bin_core.DATA_WIDTH=32 -Pvoxel_bin_core.SENSOR_WIDTH=320 -Pvoxel_bin_core.SENSOR_HEIGHT=320 -Pvoxel_bin_core.REQUIRE_TIME_HIGH=1 -Pvoxel_bin_core.SWAP_INPUT_BYTES=0 -Pvoxel_bin_core.MAP_SWAP_XY=0 -Pvoxel_bin_core.MAP_FLIP_X=0 -Pvoxel_bin_core.MAP_FLIP_Y=0 -Pvoxel_bin_core.WEIGHT_BITS=8 -Pvoxel_bin_core.NUM_CLASSES=4 -Pvoxel_bin_core.SCORE_BITS=36 -f cocotb/sim_build/voxel_bin_core/cmds.f -s cocotb_iverilog_dump  src/gf180_sram_1r1w.sv src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/chip_flash_fsm.sv src/selectable_debug.sv src/spi_wrapper.sv src/verilog_spi/*.v cocotb/sim_build/voxel_bin_core/cocotb_iverilog_dump.v
+/usr/bin/iverilog -o cocotb/sim_build/voxel_bin_core/sim.vvp -s voxel_bin_core -g2012 -Pvoxel_bin_core.CLK_FREQ_HZ=12000000 -Pvoxel_bin_core.WINDOW_MS=1000 -Pvoxel_bin_core.GRID_SIZE=16 -Pvoxel_bin_core.NUM_BINS=8 -Pvoxel_bin_core.READOUT_BINS=8 -Pvoxel_bin_core.COUNTER_BITS=16 -Pvoxel_bin_core.FIFO_DEPTH=256 -Pvoxel_bin_core.DATA_WIDTH=32 -Pvoxel_bin_core.SENSOR_WIDTH=320 -Pvoxel_bin_core.SENSOR_HEIGHT=320 -Pvoxel_bin_core.REQUIRE_TIME_HIGH=1 -Pvoxel_bin_core.WEIGHT_BITS=8 -Pvoxel_bin_core.NUM_CLASSES=4 -Pvoxel_bin_core.SCORE_BITS=36 -f cocotb/sim_build/voxel_bin_core/cmds.f -s cocotb_iverilog_dump  src/chip_core_b.sv src/chip_core.sv src/chip_flash_fsm.sv src/evt2_decoder.sv src/gf180_sram_1r1w.sv src/input_fifo.sv src/selectable_debug.sv src/spi_wrapper.sv src/system_package.sv src/voxel_bin_core.sv src/voxel_binning.sv src/voxel_gesture_classifier.sv src/voxel_mac_engine.sv  cocotb/sim_build/voxel_bin_core/cocotb_iverilog_dump.v
 rm -f results.xml
 COCOTB_TEST_MODULES=voxel_bin_core_tb COCOTB_TESTCASE= COCOTB_TEST_FILTER= COCOTB_TOPLEVEL=voxel_bin_core TOPLEVEL_LANG=verilog \
          /usr/bin/vvp -M /home/jasonwaseq/.local/lib/python3.12/site-packages/cocotb/libs -m libcocotbvpi_icarus   cocotb/sim_build/voxel_bin_core/sim.vvp -fst  
      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:93   in _embed_init_python              Using Python 3.12.4 interpreter at /usr/bin/python3
      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:79   in gpi_print_registered_impl       VPI registered
      0.00ns INFO     cocotb                             Running on Icarus Verilog version 12.0 (stable)
-     0.00ns INFO     cocotb                             Seeding Python random module with 1777413090
+     0.00ns INFO     cocotb                             Seeding Python random module with 1777490075
      0.00ns INFO     cocotb                             Initialized cocotb v2.0.1 from /home/jasonwaseq/.local/lib/python3.12/site-packages/cocotb
      0.00ns INFO     cocotb.regression                  pytest not found, install it to enable better AssertionError messages
      0.00ns INFO     cocotb                             Running tests
-     0.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_voxel_bin_core_end_to_end_golden (1/18)
+     0.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_voxel_bin_core_end_to_end_golden (1/27)
 [TEST START] test_voxel_bin_core_end_to_end_golden
-[TEST PASS] test_voxel_bin_core_end_to_end_golden @ 233225.000 ns
-233225.00ns INFO     cocotb.regression                  voxel_bin_core_tb.test_voxel_bin_core_end_to_end_golden passed
-233225.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_empty_window_produces_no_gesture (2/18)
+     0.00ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/voxel_bin_core_tb.py:430: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                          cocotb.start_soon(Clock(self.dut.clk, 10, units="ns").start())
+[TEST PASS] test_voxel_bin_core_end_to_end_golden @ 241345.000 ns
+241345.00ns INFO     cocotb.regression                  voxel_bin_core_tb.test_voxel_bin_core_end_to_end_golden passed
+241345.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_empty_window_produces_no_gesture (2/27)
                                                             No CD events -> all-zero features -> all scores zero -> no gesture fires.
 [TEST START] test_empty_window_produces_no_gesture
-[TEST PASS] test_empty_window_produces_no_gesture @ 294950.001 ns
-294950.00ns INFO     cocotb.regression                  voxel_bin_core_tb.test_empty_window_produces_no_gesture passed
-294950.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_reset_mid_pipeline_recovers_cleanly (3/18)
-                                                            Assert rst while the binner/scorer pipeline is active; verify clean restart.
+[TEST PASS] test_empty_window_produces_no_gesture @ 310910.001 ns
+310910.00ns INFO     cocotb.regression                  voxel_bin_core_tb.test_empty_window_produces_no_gesture passed
+310910.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_reset_mid_pipeline_recovers_cleanly (3/27)
+                                                            Assert rst while pipeline is active; verify clean restart.
 [TEST START] test_reset_mid_pipeline_recovers_cleanly
-[TEST PASS] test_reset_mid_pipeline_recovers_cleanly @ 305710.002 ns
-305710.00ns INFO     cocotb.regression                  voxel_bin_core_tb.test_reset_mid_pipeline_recovers_cleanly passed
-305710.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_debug_event_count_tracks_accepted_words (4/18)
-                                                            debug_event_count must equal (accepted_words mod 256).
+[TEST PASS] test_reset_mid_pipeline_recovers_cleanly @ 329580.002 ns
+329580.00ns INFO     cocotb.regression                  voxel_bin_core_tb.test_reset_mid_pipeline_recovers_cleanly passed
+329580.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_debug_event_count_tracks_accepted_words (4/27)
+                                                            debug_event_count must track accepted words relative to setup baseline.
 [TEST START] test_debug_event_count_tracks_accepted_words
-[TEST PASS] test_debug_event_count_tracks_accepted_words @ 315515.003 ns
-315515.00ns INFO     cocotb.regression                  voxel_bin_core_tb.test_debug_event_count_tracks_accepted_words passed
-315515.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_fifo_backpressure_no_lost_events (5/18)
+[TEST PASS] test_debug_event_count_tracks_accepted_words @ 349685.003 ns
+349685.00ns INFO     cocotb.regression                  voxel_bin_core_tb.test_debug_event_count_tracks_accepted_words passed
+349685.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_fifo_backpressure_no_lost_events (5/27)
                                                             Burst of events: even if FIFO momentarily fills, no accepted events are lost.
 [TEST START] test_fifo_backpressure_no_lost_events
-[TEST PASS] test_fifo_backpressure_no_lost_events @ 322580.004 ns
-322580.00ns INFO     cocotb.regression                  voxel_bin_core_tb.test_fifo_backpressure_no_lost_events passed
-322580.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_core_timestamp_boundary_binning_matches_golden (6/18)
+[TEST PASS] test_fifo_backpressure_no_lost_events @ 365180.004 ns
+365180.00ns INFO     cocotb.regression                  voxel_bin_core_tb.test_fifo_backpressure_no_lost_events passed
+365180.00ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_core_timestamp_boundary_binning_matches_golden (6/27)
                                                             Decoded event timestamps, not host-forced cycles, define bin boundaries.
 [TEST START] test_core_timestamp_boundary_binning_matches_golden
-[TEST PASS] test_core_timestamp_boundary_binning_matches_golden @ 384365.005 ns
-384365.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_core_timestamp_boundary_binning_matches_golden passed
-384365.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_sustained_region_fires_gesture (7/18)
+[TEST PASS] test_core_timestamp_boundary_binning_matches_golden @ 434795.005 ns
+434795.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_core_timestamp_boundary_binning_matches_golden passed
+434795.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_sustained_region_fires_gesture (7/27)
                                                             Drive a single spatial region for many bins; gesture_valid must fire on every passing window.
 [TEST START] test_sustained_region_fires_gesture
-[TEST PASS] test_sustained_region_fires_gesture @ 536060.006 ns
-536060.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_sustained_region_fires_gesture passed
-536060.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_decoder_events_match_model_exactly (8/18)
+[TEST PASS] test_sustained_region_fires_gesture @ 594630.006 ns
+594630.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_sustained_region_fires_gesture passed
+594630.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_decoder_events_match_model_exactly (8/27)
                                                             Verify that every decoded (x, y, polarity, timestamp) tuple matches the model.
 [TEST START] test_decoder_events_match_model_exactly
-[TEST PASS] test_decoder_events_match_model_exactly @ 542205.007 ns
-542205.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_decoder_events_match_model_exactly passed
-542205.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_score_model_validates_classifications (9/18)
+[TEST PASS] test_decoder_events_match_model_exactly @ 608855.007 ns
+608855.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_decoder_events_match_model_exactly passed
+608855.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_score_model_validates_classifications (9/27)
                                                             ScoreModel independently verifies every DUT class_gesture/class_pass output.
 [TEST START] test_score_model_validates_classifications
-673465.01ns INFO     test                               [window 0] model scores: D=1213 L=958 R=879 U=839  winner=Down margin=255  nonzero_features=150/2048 total_count=240
-714475.01ns INFO     test                               [window 1] model scores: D=1194 L=1151 R=1405 U=534  winner=Right margin=211  nonzero_features=152/2048 total_count=240
-755485.01ns INFO     test                               [window 2] model scores: D=857 L=1092 R=848 U=829  winner=Left margin=235  nonzero_features=159/2048 total_count=240
-796495.01ns INFO     test                               [window 3] model scores: D=1390 L=640 R=1204 U=1036  winner=Down margin=186  nonzero_features=150/2048 total_count=240
-837505.01ns INFO     test                               [window 4] model scores: D=1371 L=1149 R=1267 U=793  winner=Down margin=104  nonzero_features=151/2048 total_count=240
-[TEST PASS] test_score_model_validates_classifications @ 858080.008 ns
-858080.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_score_model_validates_classifications passed
-858080.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_wrong_gesture_trajectory_no_false_positive (10/18)
-                                                            Drive uniform random events spread across all cells/bins and verify DUT matches model.
+760875.01ns INFO     test                               [window 0] model scores: D=1213 L=958 R=879 U=839  winner=Down margin=255  nonzero_features=150/2048 total_count=240
+801885.01ns INFO     test                               [window 1] model scores: D=1194 L=1151 R=1405 U=534  winner=Right margin=211  nonzero_features=152/2048 total_count=240
+842895.01ns INFO     test                               [window 2] model scores: D=857 L=1092 R=848 U=829  winner=Left margin=235  nonzero_features=159/2048 total_count=240
+883905.01ns INFO     test                               [window 3] model scores: D=1390 L=640 R=1204 U=1036  winner=Down margin=186  nonzero_features=150/2048 total_count=240
+924915.01ns INFO     test                               [window 4] model scores: D=1371 L=1149 R=1267 U=793  winner=Down margin=104  nonzero_features=151/2048 total_count=240
+[TEST PASS] test_score_model_validates_classifications @ 945490.008 ns
+945490.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_score_model_validates_classifications passed
+945490.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_wrong_gesture_trajectory_no_false_positive (10/27)
+                                                            Uniform random events: DUT and ScoreModel must agree on every classification.
 [TEST START] test_wrong_gesture_trajectory_no_false_positive
-989540.01ns INFO     test                               [window 0] model scores: D=930 L=1227 R=1031 U=1627  winner=Up margin=400  nonzero_features=246/2048 total_count=255
-1030550.01ns INFO     test                               [window 1] model scores: D=1049 L=1523 R=1422 U=1666  winner=Up margin=143  nonzero_features=246/2048 total_count=256
-[TEST PASS] test_wrong_gesture_trajectory_no_false_positive @ 1051125.009 ns
-1051125.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_wrong_gesture_trajectory_no_false_positive passed
-1051125.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_bin_file_gesture_0 (11/18)
+1097710.01ns INFO     test                               [window 0] model scores: D=930 L=1227 R=1031 U=1627  winner=Up margin=400  nonzero_features=246/2048 total_count=255
+1138720.01ns INFO     test                               [window 1] model scores: D=1049 L=1523 R=1422 U=1666  winner=Up margin=143  nonzero_features=246/2048 total_count=256
+[TEST PASS] test_wrong_gesture_trajectory_no_false_positive @ 1159295.009 ns
+1159295.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_wrong_gesture_trajectory_no_false_positive passed
+1159295.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_bin_file_gesture_0 (11/27)
                                                              Stream bin file 0 into the DUT and report classifications.
 [TEST START] test_bin_file_gesture_0
-1136055.01ns INFO     test                               [wave_down_sun_test1] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_down_sun_test1.bin (mode=timestamp_forced) ...
-7470275.01ns INFO     test                               [window 0] model scores: D=450011 L=424265 R=533838 U=482895  winner=Right margin=50943  nonzero_features=1984/2048 total_count=186619
-7511285.01ns INFO     test                               [window 1] model scores: D=191807 L=144544 R=150772 U=169137  winner=Down margin=22670  nonzero_features=1737/2048 total_count=174011
-7552295.01ns INFO     test                               [window 2] model scores: D=167193 L=129983 R=138872 U=152416  winner=Down margin=14777  nonzero_features=1487/2048 total_count=155418
-7593305.01ns INFO     test                               [window 3] model scores: D=147374 L=119256 R=123723 U=131978  winner=Down margin=15396  nonzero_features=1240/2048 total_count=120179
-7634315.01ns INFO     test                               [window 4] model scores: D=133390 L=104600 R=106100 U=113715  winner=Down margin=19675  nonzero_features=993/2048 total_count=78110
-7675325.01ns INFO     test                               [window 5] model scores: D=104539 L=81369 R=77962 U=87948  winner=Down margin=16591  nonzero_features=743/2048 total_count=46329
-7716335.01ns INFO     test                               [window 6] model scores: D=77264 L=63488 R=54785 U=68306  winner=Down margin=8958  nonzero_features=494/2048 total_count=28227
-7757345.01ns INFO     test                               [window 7] model scores: D=52432 L=39428 R=31657 U=45502  winner=Down margin=6930  nonzero_features=246/2048 total_count=13537
-7777920.01ns INFO     test                               [wave_down_sun_test1] Completed windows: 8, Accepted words: 249121
-7777920.01ns INFO     test                               [wave_down_sun_test1] DUT gesture outputs (1 total):
-7777920.01ns INFO     test                                 gesture=Down (class=0, confidence=1)
-7777920.01ns INFO     test                               [wave_down_sun_test1] dominant=Down ratio=1.000 class_hist=(Down:1)
-7777920.01ns INFO     test                               [wave_down_sun_test1] expected=Down match=1/1 ratio=1.000
-[TEST PASS] test_bin_file_gesture_0 @ 7777920.010 ns
-7777920.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_bin_file_gesture_0 passed
-7777920.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_bin_file_gesture_1 (12/18)
+1264985.01ns INFO     test                               [wave_down_sun_test1] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_down_sun_test1.bin (mode=timestamp_forced) ...
+7599205.01ns INFO     test                               [window 0] model scores: D=450011 L=424265 R=533838 U=482895  winner=Right margin=50943  nonzero_features=1984/2048 total_count=186619
+7640215.01ns INFO     test                               [window 1] model scores: D=191807 L=144544 R=150772 U=169137  winner=Down margin=22670  nonzero_features=1737/2048 total_count=174011
+7681225.01ns INFO     test                               [window 2] model scores: D=167193 L=129983 R=138872 U=152416  winner=Down margin=14777  nonzero_features=1487/2048 total_count=155418
+7722235.01ns INFO     test                               [window 3] model scores: D=147374 L=119256 R=123723 U=131978  winner=Down margin=15396  nonzero_features=1240/2048 total_count=120179
+7763245.01ns INFO     test                               [window 4] model scores: D=133390 L=104600 R=106100 U=113715  winner=Down margin=19675  nonzero_features=993/2048 total_count=78110
+7804255.01ns INFO     test                               [window 5] model scores: D=104539 L=81369 R=77962 U=87948  winner=Down margin=16591  nonzero_features=743/2048 total_count=46329
+7845265.01ns INFO     test                               [window 6] model scores: D=77264 L=63488 R=54785 U=68306  winner=Down margin=8958  nonzero_features=494/2048 total_count=28227
+7886275.01ns INFO     test                               [window 7] model scores: D=52432 L=39428 R=31657 U=45502  winner=Down margin=6930  nonzero_features=246/2048 total_count=13537
+7906850.01ns INFO     test                               [wave_down_sun_test1] Completed windows: 8, Accepted words: 249121
+7906850.01ns INFO     test                               [wave_down_sun_test1] DUT gesture outputs (1 total):
+7906850.01ns INFO     test                                 gesture=Down (class=0, confidence=1)
+7906850.01ns INFO     test                               [wave_down_sun_test1] dominant=Down ratio=1.000 class_hist=(Down:1)
+7906850.01ns INFO     test                               [wave_down_sun_test1] expected=Down match=1/1 ratio=1.000
+[TEST PASS] test_bin_file_gesture_0 @ 7906850.010 ns
+7906850.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_bin_file_gesture_0 passed
+7906850.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_bin_file_gesture_1 (12/27)
                                                              Stream bin file 1 into the DUT and report classifications.
 [TEST START] test_bin_file_gesture_1
-7862850.01ns INFO     test                               [wave_left_sun_test1] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_left_sun_test1.bin (mode=timestamp_forced) ...
-17079080.01ns INFO     test                               [window 0] model scores: D=935440 L=1018645 R=1241395 U=1382673  winner=Up margin=141278  nonzero_features=1974/2048 total_count=283362
-17120090.01ns INFO     test                               [window 1] model scores: D=168167 L=200209 R=185288 U=194065  winner=Left margin=6144  nonzero_features=1731/2048 total_count=271345
-17161100.01ns INFO     test                               [window 2] model scores: D=150523 L=188561 R=170093 U=162594  winner=Left margin=18468  nonzero_features=1485/2048 total_count=258559
-17202110.01ns INFO     test                               [window 3] model scores: D=135028 L=173108 R=155762 U=143208  winner=Left margin=17346  nonzero_features=1239/2048 total_count=240559
-17243120.01ns INFO     test                               [window 4] model scores: D=120534 L=147465 R=127129 U=121649  winner=Left margin=20336  nonzero_features=991/2048 total_count=207574
-17284130.01ns INFO     test                               [window 5] model scores: D=102124 L=133005 R=93466 U=131459  winner=Left margin=1546  nonzero_features=743/2048 total_count=153633
-17325140.01ns INFO     test                               [window 6] model scores: D=80642 L=97941 R=66468 U=79258  winner=Left margin=17299  nonzero_features=498/2048 total_count=87611
-17366150.01ns INFO     test                               [window 7] model scores: D=49552 L=69107 R=34917 U=51892  winner=Left margin=17215  nonzero_features=249/2048 total_count=34465
-17386725.01ns INFO     test                               [wave_left_sun_test1] Completed windows: 8, Accepted words: 345864
-17386725.01ns INFO     test                               [wave_left_sun_test1] DUT gesture outputs (6 total):
-17386725.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
-17386725.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-17386725.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-17386725.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-17386725.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-17386725.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-17386725.01ns INFO     test                               [wave_left_sun_test1] dominant=Left ratio=0.833 class_hist=(Left:5 Up:1)
-17386725.01ns INFO     test                               [wave_left_sun_test1] expected=Left match=5/6 ratio=0.833
-[TEST PASS] test_bin_file_gesture_1 @ 17386725.011 ns
-17386725.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_bin_file_gesture_1 passed
-17386725.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_bin_file_gesture_2 (13/18)
+8012540.01ns INFO     test                               [wave_left_sun_test1] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_left_sun_test1.bin (mode=timestamp_forced) ...
+17228770.01ns INFO     test                               [window 0] model scores: D=935440 L=1018645 R=1241395 U=1382673  winner=Up margin=141278  nonzero_features=1974/2048 total_count=283362
+17269780.01ns INFO     test                               [window 1] model scores: D=168167 L=200209 R=185288 U=194065  winner=Left margin=6144  nonzero_features=1731/2048 total_count=271345
+17310790.01ns INFO     test                               [window 2] model scores: D=150523 L=188561 R=170093 U=162594  winner=Left margin=18468  nonzero_features=1485/2048 total_count=258559
+17351800.01ns INFO     test                               [window 3] model scores: D=135028 L=173108 R=155762 U=143208  winner=Left margin=17346  nonzero_features=1239/2048 total_count=240559
+17392810.01ns INFO     test                               [window 4] model scores: D=120534 L=147465 R=127129 U=121649  winner=Left margin=20336  nonzero_features=991/2048 total_count=207574
+17433820.01ns INFO     test                               [window 5] model scores: D=102124 L=133005 R=93466 U=131459  winner=Left margin=1546  nonzero_features=743/2048 total_count=153633
+17474830.01ns INFO     test                               [window 6] model scores: D=80642 L=97941 R=66468 U=79258  winner=Left margin=17299  nonzero_features=498/2048 total_count=87611
+17515840.01ns INFO     test                               [window 7] model scores: D=49552 L=69107 R=34917 U=51892  winner=Left margin=17215  nonzero_features=249/2048 total_count=34465
+17536415.01ns INFO     test                               [wave_left_sun_test1] Completed windows: 8, Accepted words: 345864
+17536415.01ns INFO     test                               [wave_left_sun_test1] DUT gesture outputs (6 total):
+17536415.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
+17536415.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+17536415.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+17536415.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+17536415.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+17536415.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+17536415.01ns INFO     test                               [wave_left_sun_test1] dominant=Left ratio=0.833 class_hist=(Left:5 Up:1)
+17536415.01ns INFO     test                               [wave_left_sun_test1] expected=Left match=5/6 ratio=0.833
+[TEST PASS] test_bin_file_gesture_1 @ 17536415.011 ns
+17536415.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_bin_file_gesture_1 passed
+17536415.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_bin_file_gesture_2 (13/27)
                                                               Stream bin file 2 into the DUT and report classifications.
 [TEST START] test_bin_file_gesture_2
-17471655.01ns INFO     test                               [wave_right_sun_test1] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_right_sun_test1.bin (mode=timestamp_forced) ...
-25744965.01ns INFO     test                               [window 0] model scores: D=573189 L=650827 R=723316 U=510528  winner=Right margin=72489  nonzero_features=2007/2048 total_count=252101
-25785975.01ns INFO     test                               [window 1] model scores: D=175794 L=171585 R=212474 U=183168  winner=Right margin=29306  nonzero_features=1757/2048 total_count=239021
-25826985.01ns INFO     test                               [window 2] model scores: D=158877 L=171063 R=182494 U=158984  winner=Right margin=11431  nonzero_features=1507/2048 total_count=222701
-25867995.01ns INFO     test                               [window 3] model scores: D=144066 L=141625 R=158786 U=146675  winner=Right margin=12111  nonzero_features=1256/2048 total_count=179520
-25909005.01ns INFO     test                               [window 4] model scores: D=121093 L=115927 R=146612 U=130431  winner=Right margin=16181  nonzero_features=1003/2048 total_count=128403
-25950015.01ns INFO     test                               [window 5] model scores: D=97152 L=94985 R=125384 U=98764  winner=Right margin=26620  nonzero_features=753/2048 total_count=81685
-25991025.01ns INFO     test                               [window 6] model scores: D=79901 L=69420 R=98550 U=76108  winner=Right margin=18649  nonzero_features=503/2048 total_count=45054
-26032035.01ns INFO     test                               [window 7] model scores: D=51406 L=42600 R=70746 U=48207  winner=Right margin=19340  nonzero_features=254/2048 total_count=20123
-26052610.01ns INFO     test                               [wave_right_sun_test1] Completed windows: 8, Accepted words: 314600
-26052610.01ns INFO     test                               [wave_right_sun_test1] DUT gesture outputs (1 total):
-26052610.01ns INFO     test                                 gesture=Right (class=2, confidence=1)
-26052610.01ns INFO     test                               [wave_right_sun_test1] dominant=Right ratio=1.000 class_hist=(Right:1)
-26052610.01ns INFO     test                               [wave_right_sun_test1] expected=Right match=1/1 ratio=1.000
-[TEST PASS] test_bin_file_gesture_2 @ 26052610.012 ns
-26052610.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_bin_file_gesture_2 passed
-26052610.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_bin_file_gesture_3 (14/18)
+17642105.01ns INFO     test                               [wave_right_sun_test1] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_right_sun_test1.bin (mode=timestamp_forced) ...
+25915415.01ns INFO     test                               [window 0] model scores: D=573189 L=650827 R=723316 U=510528  winner=Right margin=72489  nonzero_features=2007/2048 total_count=252101
+25956425.01ns INFO     test                               [window 1] model scores: D=175794 L=171585 R=212474 U=183168  winner=Right margin=29306  nonzero_features=1757/2048 total_count=239021
+25997435.01ns INFO     test                               [window 2] model scores: D=158877 L=171063 R=182494 U=158984  winner=Right margin=11431  nonzero_features=1507/2048 total_count=222701
+26038445.01ns INFO     test                               [window 3] model scores: D=144066 L=141625 R=158786 U=146675  winner=Right margin=12111  nonzero_features=1256/2048 total_count=179520
+26079455.01ns INFO     test                               [window 4] model scores: D=121093 L=115927 R=146612 U=130431  winner=Right margin=16181  nonzero_features=1003/2048 total_count=128403
+26120465.01ns INFO     test                               [window 5] model scores: D=97152 L=94985 R=125384 U=98764  winner=Right margin=26620  nonzero_features=753/2048 total_count=81685
+26161475.01ns INFO     test                               [window 6] model scores: D=79901 L=69420 R=98550 U=76108  winner=Right margin=18649  nonzero_features=503/2048 total_count=45054
+26202485.01ns INFO     test                               [window 7] model scores: D=51406 L=42600 R=70746 U=48207  winner=Right margin=19340  nonzero_features=254/2048 total_count=20123
+26223060.01ns INFO     test                               [wave_right_sun_test1] Completed windows: 8, Accepted words: 314600
+26223060.01ns INFO     test                               [wave_right_sun_test1] DUT gesture outputs (1 total):
+26223060.01ns INFO     test                                 gesture=Right (class=2, confidence=1)
+26223060.01ns INFO     test                               [wave_right_sun_test1] dominant=Right ratio=1.000 class_hist=(Right:1)
+26223060.01ns INFO     test                               [wave_right_sun_test1] expected=Right match=1/1 ratio=1.000
+[TEST PASS] test_bin_file_gesture_2 @ 26223060.012 ns
+26223060.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_bin_file_gesture_2 passed
+26223060.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_bin_file_gesture_3 (14/27)
                                                               Stream bin file 3 into the DUT and report classifications.
 [TEST START] test_bin_file_gesture_3
-26137540.01ns INFO     test                               [wave_up_sun_test1] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_up_sun_test1.bin (mode=timestamp_forced) ...
-33318840.01ns INFO     test                               [window 0] model scores: D=510641 L=494948 R=532832 U=494367  winner=Right margin=22191  nonzero_features=1990/2048 total_count=214875
-33359850.01ns INFO     test                               [window 1] model scores: D=187638 L=154208 R=159632 U=205308  winner=Up margin=17670  nonzero_features=1741/2048 total_count=202980
-33400860.01ns INFO     test                               [window 2] model scores: D=173476 L=135055 R=144952 U=175570  winner=Up margin=2094  nonzero_features=1493/2048 total_count=188569
-33441870.01ns INFO     test                               [window 3] model scores: D=143847 L=130866 R=134910 U=150780  winner=Up margin=6933  nonzero_features=1244/2048 total_count=159050
-33482880.01ns INFO     test                               [window 4] model scores: D=117782 L=108381 R=105325 U=146044  winner=Up margin=28262  nonzero_features=995/2048 total_count=100043
-33523890.01ns INFO     test                               [window 5] model scores: D=95498 L=89756 R=82060 U=109621  winner=Up margin=14123  nonzero_features=745/2048 total_count=52466
-33564900.01ns INFO     test                               [window 6] model scores: D=74668 L=66435 R=57996 U=81803  winner=Up margin=7135  nonzero_features=496/2048 total_count=29898
-33605910.01ns INFO     test                               [window 7] model scores: D=47767 L=41132 R=32937 U=54149  winner=Up margin=6382  nonzero_features=248/2048 total_count=14346
-33626485.01ns INFO     test                               [wave_up_sun_test1] Completed windows: 8, Accepted words: 277377
-33626485.01ns INFO     test                               [wave_up_sun_test1] DUT gesture outputs (1 total):
-33626485.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
-33626485.01ns INFO     test                               [wave_up_sun_test1] dominant=Up ratio=1.000 class_hist=(Up:1)
-33626485.01ns INFO     test                               [wave_up_sun_test1] expected=Up match=1/1 ratio=1.000
-[TEST PASS] test_bin_file_gesture_3 @ 33626485.013 ns
-33626485.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_bin_file_gesture_3 passed
-33626485.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_bin_file_timing_replay_ab (15/18)
+26328750.01ns INFO     test                               [wave_up_sun_test1] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_up_sun_test1.bin (mode=timestamp_forced) ...
+33510050.01ns INFO     test                               [window 0] model scores: D=510641 L=494948 R=532832 U=494367  winner=Right margin=22191  nonzero_features=1990/2048 total_count=214875
+33551060.01ns INFO     test                               [window 1] model scores: D=187638 L=154208 R=159632 U=205308  winner=Up margin=17670  nonzero_features=1741/2048 total_count=202980
+33592070.01ns INFO     test                               [window 2] model scores: D=173476 L=135055 R=144952 U=175570  winner=Up margin=2094  nonzero_features=1493/2048 total_count=188569
+33633080.01ns INFO     test                               [window 3] model scores: D=143847 L=130866 R=134910 U=150780  winner=Up margin=6933  nonzero_features=1244/2048 total_count=159050
+33674090.01ns INFO     test                               [window 4] model scores: D=117782 L=108381 R=105325 U=146044  winner=Up margin=28262  nonzero_features=995/2048 total_count=100043
+33715100.01ns INFO     test                               [window 5] model scores: D=95498 L=89756 R=82060 U=109621  winner=Up margin=14123  nonzero_features=745/2048 total_count=52466
+33756110.01ns INFO     test                               [window 6] model scores: D=74668 L=66435 R=57996 U=81803  winner=Up margin=7135  nonzero_features=496/2048 total_count=29898
+33797120.01ns INFO     test                               [window 7] model scores: D=47767 L=41132 R=32937 U=54149  winner=Up margin=6382  nonzero_features=248/2048 total_count=14346
+33817695.01ns INFO     test                               [wave_up_sun_test1] Completed windows: 8, Accepted words: 277377
+33817695.01ns INFO     test                               [wave_up_sun_test1] DUT gesture outputs (1 total):
+33817695.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
+33817695.01ns INFO     test                               [wave_up_sun_test1] dominant=Up ratio=1.000 class_hist=(Up:1)
+33817695.01ns INFO     test                               [wave_up_sun_test1] expected=Up match=1/1 ratio=1.000
+[TEST PASS] test_bin_file_gesture_3 @ 33817695.013 ns
+33817695.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_bin_file_gesture_3 passed
+33817695.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_bin_file_timing_replay_ab (15/27)
                                                               A/B timing investigation: timestamp-forced vs clock-driven replay.
 [TEST START] test_bin_file_timing_replay_ab
-33711415.01ns INFO     test                               [wave_down_sun_test1-forced] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_down_sun_test1.bin (mode=timestamp_forced) ...
-40045635.01ns INFO     test                               [window 0] model scores: D=450011 L=424265 R=533838 U=482895  winner=Right margin=50943  nonzero_features=1984/2048 total_count=186619
-40086645.01ns INFO     test                               [window 1] model scores: D=191807 L=144544 R=150772 U=169137  winner=Down margin=22670  nonzero_features=1737/2048 total_count=174011
-40127655.01ns INFO     test                               [window 2] model scores: D=167193 L=129983 R=138872 U=152416  winner=Down margin=14777  nonzero_features=1487/2048 total_count=155418
-40168665.01ns INFO     test                               [window 3] model scores: D=147374 L=119256 R=123723 U=131978  winner=Down margin=15396  nonzero_features=1240/2048 total_count=120179
-40209675.01ns INFO     test                               [window 4] model scores: D=133390 L=104600 R=106100 U=113715  winner=Down margin=19675  nonzero_features=993/2048 total_count=78110
-40250685.01ns INFO     test                               [window 5] model scores: D=104539 L=81369 R=77962 U=87948  winner=Down margin=16591  nonzero_features=743/2048 total_count=46329
-40291695.01ns INFO     test                               [window 6] model scores: D=77264 L=63488 R=54785 U=68306  winner=Down margin=8958  nonzero_features=494/2048 total_count=28227
-40332705.01ns INFO     test                               [window 7] model scores: D=52432 L=39428 R=31657 U=45502  winner=Down margin=6930  nonzero_features=246/2048 total_count=13537
-40353280.01ns INFO     test                               [wave_down_sun_test1-forced] Completed windows: 8, Accepted words: 249121
-40353280.01ns INFO     test                               [wave_down_sun_test1-forced] DUT gesture outputs (1 total):
-40353280.01ns INFO     test                                 gesture=Down (class=0, confidence=1)
-40353280.01ns INFO     test                               [wave_down_sun_test1-forced] dominant=Down ratio=1.000 class_hist=(Down:1)
-40353280.01ns INFO     test                               [wave_down_sun_test1-forced] expected=Down match=1/1 ratio=1.000
-40438205.01ns INFO     test                               [wave_down_sun_test1-clock] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_down_sun_test1.bin (mode=clock_driven) ...
-46772425.01ns INFO     test                               [window 0] model scores: D=450011 L=424265 R=533838 U=482895  winner=Right margin=50943  nonzero_features=1984/2048 total_count=186619
-46813435.01ns INFO     test                               [window 1] model scores: D=191807 L=144544 R=150772 U=169137  winner=Down margin=22670  nonzero_features=1737/2048 total_count=174011
-46854445.01ns INFO     test                               [window 2] model scores: D=167193 L=129983 R=138872 U=152416  winner=Down margin=14777  nonzero_features=1487/2048 total_count=155418
-46895455.01ns INFO     test                               [window 3] model scores: D=147374 L=119256 R=123723 U=131978  winner=Down margin=15396  nonzero_features=1240/2048 total_count=120179
-46936465.01ns INFO     test                               [window 4] model scores: D=133390 L=104600 R=106100 U=113715  winner=Down margin=19675  nonzero_features=993/2048 total_count=78110
-46977475.01ns INFO     test                               [window 5] model scores: D=104539 L=81369 R=77962 U=87948  winner=Down margin=16591  nonzero_features=743/2048 total_count=46329
-47018485.01ns INFO     test                               [window 6] model scores: D=77264 L=63488 R=54785 U=68306  winner=Down margin=8958  nonzero_features=494/2048 total_count=28227
-47059495.01ns INFO     test                               [window 7] model scores: D=52432 L=39428 R=31657 U=45502  winner=Down margin=6930  nonzero_features=246/2048 total_count=13537
-47080070.01ns INFO     test                               [wave_down_sun_test1-clock] Completed windows: 8, Accepted words: 249121
-47080070.01ns INFO     test                               [wave_down_sun_test1-clock] DUT gesture outputs (1 total):
-47080070.01ns INFO     test                                 gesture=Down (class=0, confidence=1)
-47080070.01ns INFO     test                               [wave_down_sun_test1-clock] dominant=Down ratio=1.000 class_hist=(Down:1)
-47080070.01ns INFO     test                               [wave_down_sun_test1-clock] expected=Down match=1/1 ratio=1.000
-47080070.01ns INFO     test                               [wave_down_sun_test1] A/B: forced_windows=8 clock_windows=8 seq_diff=0/1
-47164995.01ns INFO     test                               [wave_left_sun_test1-forced] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_left_sun_test1.bin (mode=timestamp_forced) ...
-56381225.01ns INFO     test                               [window 0] model scores: D=935440 L=1018645 R=1241395 U=1382673  winner=Up margin=141278  nonzero_features=1974/2048 total_count=283362
-56422235.01ns INFO     test                               [window 1] model scores: D=168167 L=200209 R=185288 U=194065  winner=Left margin=6144  nonzero_features=1731/2048 total_count=271345
-56463245.01ns INFO     test                               [window 2] model scores: D=150523 L=188561 R=170093 U=162594  winner=Left margin=18468  nonzero_features=1485/2048 total_count=258559
-56504255.01ns INFO     test                               [window 3] model scores: D=135028 L=173108 R=155762 U=143208  winner=Left margin=17346  nonzero_features=1239/2048 total_count=240559
-56545265.01ns INFO     test                               [window 4] model scores: D=120534 L=147465 R=127129 U=121649  winner=Left margin=20336  nonzero_features=991/2048 total_count=207574
-56586275.01ns INFO     test                               [window 5] model scores: D=102124 L=133005 R=93466 U=131459  winner=Left margin=1546  nonzero_features=743/2048 total_count=153633
-56627285.01ns INFO     test                               [window 6] model scores: D=80642 L=97941 R=66468 U=79258  winner=Left margin=17299  nonzero_features=498/2048 total_count=87611
-56668295.01ns INFO     test                               [window 7] model scores: D=49552 L=69107 R=34917 U=51892  winner=Left margin=17215  nonzero_features=249/2048 total_count=34465
-56688870.01ns INFO     test                               [wave_left_sun_test1-forced] Completed windows: 8, Accepted words: 345864
-56688870.01ns INFO     test                               [wave_left_sun_test1-forced] DUT gesture outputs (6 total):
-56688870.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
-56688870.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-56688870.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-56688870.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-56688870.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-56688870.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-56688870.01ns INFO     test                               [wave_left_sun_test1-forced] dominant=Left ratio=0.833 class_hist=(Left:5 Up:1)
-56688870.01ns INFO     test                               [wave_left_sun_test1-forced] expected=Left match=5/6 ratio=0.833
-56773795.01ns INFO     test                               [wave_left_sun_test1-clock] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_left_sun_test1.bin (mode=clock_driven) ...
-65990025.01ns INFO     test                               [window 0] model scores: D=935440 L=1018645 R=1241395 U=1382673  winner=Up margin=141278  nonzero_features=1974/2048 total_count=283362
-66031035.01ns INFO     test                               [window 1] model scores: D=168167 L=200209 R=185288 U=194065  winner=Left margin=6144  nonzero_features=1731/2048 total_count=271345
-66072045.01ns INFO     test                               [window 2] model scores: D=150523 L=188561 R=170093 U=162594  winner=Left margin=18468  nonzero_features=1485/2048 total_count=258559
-66113055.01ns INFO     test                               [window 3] model scores: D=135028 L=173108 R=155762 U=143208  winner=Left margin=17346  nonzero_features=1239/2048 total_count=240559
-66154065.01ns INFO     test                               [window 4] model scores: D=120534 L=147465 R=127129 U=121649  winner=Left margin=20336  nonzero_features=991/2048 total_count=207574
-66195075.01ns INFO     test                               [window 5] model scores: D=102124 L=133005 R=93466 U=131459  winner=Left margin=1546  nonzero_features=743/2048 total_count=153633
-66236085.01ns INFO     test                               [window 6] model scores: D=80642 L=97941 R=66468 U=79258  winner=Left margin=17299  nonzero_features=498/2048 total_count=87611
-66277095.01ns INFO     test                               [window 7] model scores: D=49552 L=69107 R=34917 U=51892  winner=Left margin=17215  nonzero_features=249/2048 total_count=34465
-66297670.01ns INFO     test                               [wave_left_sun_test1-clock] Completed windows: 8, Accepted words: 345864
-66297670.01ns INFO     test                               [wave_left_sun_test1-clock] DUT gesture outputs (6 total):
-66297670.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
-66297670.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-66297670.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-66297670.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-66297670.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-66297670.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
-66297670.01ns INFO     test                               [wave_left_sun_test1-clock] dominant=Left ratio=0.833 class_hist=(Left:5 Up:1)
-66297670.01ns INFO     test                               [wave_left_sun_test1-clock] expected=Left match=5/6 ratio=0.833
-66297670.01ns INFO     test                               [wave_left_sun_test1] A/B: forced_windows=8 clock_windows=8 seq_diff=0/6
-66382595.01ns INFO     test                               [wave_right_sun_test1-forced] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_right_sun_test1.bin (mode=timestamp_forced) ...
-74655905.01ns INFO     test                               [window 0] model scores: D=573189 L=650827 R=723316 U=510528  winner=Right margin=72489  nonzero_features=2007/2048 total_count=252101
-74696915.01ns INFO     test                               [window 1] model scores: D=175794 L=171585 R=212474 U=183168  winner=Right margin=29306  nonzero_features=1757/2048 total_count=239021
-74737925.01ns INFO     test                               [window 2] model scores: D=158877 L=171063 R=182494 U=158984  winner=Right margin=11431  nonzero_features=1507/2048 total_count=222701
-74778935.01ns INFO     test                               [window 3] model scores: D=144066 L=141625 R=158786 U=146675  winner=Right margin=12111  nonzero_features=1256/2048 total_count=179520
-74819945.01ns INFO     test                               [window 4] model scores: D=121093 L=115927 R=146612 U=130431  winner=Right margin=16181  nonzero_features=1003/2048 total_count=128403
-74860955.01ns INFO     test                               [window 5] model scores: D=97152 L=94985 R=125384 U=98764  winner=Right margin=26620  nonzero_features=753/2048 total_count=81685
-74901965.01ns INFO     test                               [window 6] model scores: D=79901 L=69420 R=98550 U=76108  winner=Right margin=18649  nonzero_features=503/2048 total_count=45054
-74942975.01ns INFO     test                               [window 7] model scores: D=51406 L=42600 R=70746 U=48207  winner=Right margin=19340  nonzero_features=254/2048 total_count=20123
-74963550.01ns INFO     test                               [wave_right_sun_test1-forced] Completed windows: 8, Accepted words: 314600
-74963550.01ns INFO     test                               [wave_right_sun_test1-forced] DUT gesture outputs (1 total):
-74963550.01ns INFO     test                                 gesture=Right (class=2, confidence=1)
-74963550.01ns INFO     test                               [wave_right_sun_test1-forced] dominant=Right ratio=1.000 class_hist=(Right:1)
-74963550.01ns INFO     test                               [wave_right_sun_test1-forced] expected=Right match=1/1 ratio=1.000
-75048475.01ns INFO     test                               [wave_right_sun_test1-clock] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_right_sun_test1.bin (mode=clock_driven) ...
-83321785.01ns INFO     test                               [window 0] model scores: D=573189 L=650827 R=723316 U=510528  winner=Right margin=72489  nonzero_features=2007/2048 total_count=252101
-83362795.01ns INFO     test                               [window 1] model scores: D=175794 L=171585 R=212474 U=183168  winner=Right margin=29306  nonzero_features=1757/2048 total_count=239021
-83403805.01ns INFO     test                               [window 2] model scores: D=158877 L=171063 R=182494 U=158984  winner=Right margin=11431  nonzero_features=1507/2048 total_count=222701
-83444815.01ns INFO     test                               [window 3] model scores: D=144066 L=141625 R=158786 U=146675  winner=Right margin=12111  nonzero_features=1256/2048 total_count=179520
-83485825.01ns INFO     test                               [window 4] model scores: D=121093 L=115927 R=146612 U=130431  winner=Right margin=16181  nonzero_features=1003/2048 total_count=128403
-83526835.01ns INFO     test                               [window 5] model scores: D=97152 L=94985 R=125384 U=98764  winner=Right margin=26620  nonzero_features=753/2048 total_count=81685
-83567845.01ns INFO     test                               [window 6] model scores: D=79901 L=69420 R=98550 U=76108  winner=Right margin=18649  nonzero_features=503/2048 total_count=45054
-83608855.01ns INFO     test                               [window 7] model scores: D=51406 L=42600 R=70746 U=48207  winner=Right margin=19340  nonzero_features=254/2048 total_count=20123
-83629430.01ns INFO     test                               [wave_right_sun_test1-clock] Completed windows: 8, Accepted words: 314600
-83629430.01ns INFO     test                               [wave_right_sun_test1-clock] DUT gesture outputs (1 total):
-83629430.01ns INFO     test                                 gesture=Right (class=2, confidence=1)
-83629430.01ns INFO     test                               [wave_right_sun_test1-clock] dominant=Right ratio=1.000 class_hist=(Right:1)
-83629430.01ns INFO     test                               [wave_right_sun_test1-clock] expected=Right match=1/1 ratio=1.000
-83629430.01ns INFO     test                               [wave_right_sun_test1] A/B: forced_windows=8 clock_windows=8 seq_diff=0/1
-83714355.01ns INFO     test                               [wave_up_sun_test1-forced] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_up_sun_test1.bin (mode=timestamp_forced) ...
-90895655.01ns INFO     test                               [window 0] model scores: D=510641 L=494948 R=532832 U=494367  winner=Right margin=22191  nonzero_features=1990/2048 total_count=214875
-90936665.01ns INFO     test                               [window 1] model scores: D=187638 L=154208 R=159632 U=205308  winner=Up margin=17670  nonzero_features=1741/2048 total_count=202980
-90977675.01ns INFO     test                               [window 2] model scores: D=173476 L=135055 R=144952 U=175570  winner=Up margin=2094  nonzero_features=1493/2048 total_count=188569
-91018685.01ns INFO     test                               [window 3] model scores: D=143847 L=130866 R=134910 U=150780  winner=Up margin=6933  nonzero_features=1244/2048 total_count=159050
-91059695.01ns INFO     test                               [window 4] model scores: D=117782 L=108381 R=105325 U=146044  winner=Up margin=28262  nonzero_features=995/2048 total_count=100043
-91100705.01ns INFO     test                               [window 5] model scores: D=95498 L=89756 R=82060 U=109621  winner=Up margin=14123  nonzero_features=745/2048 total_count=52466
-91141715.01ns INFO     test                               [window 6] model scores: D=74668 L=66435 R=57996 U=81803  winner=Up margin=7135  nonzero_features=496/2048 total_count=29898
-91182725.01ns INFO     test                               [window 7] model scores: D=47767 L=41132 R=32937 U=54149  winner=Up margin=6382  nonzero_features=248/2048 total_count=14346
-91203300.01ns INFO     test                               [wave_up_sun_test1-forced] Completed windows: 8, Accepted words: 277377
-91203300.01ns INFO     test                               [wave_up_sun_test1-forced] DUT gesture outputs (1 total):
-91203300.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
-91203300.01ns INFO     test                               [wave_up_sun_test1-forced] dominant=Up ratio=1.000 class_hist=(Up:1)
-91203300.01ns INFO     test                               [wave_up_sun_test1-forced] expected=Up match=1/1 ratio=1.000
-91288225.01ns INFO     test                               [wave_up_sun_test1-clock] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_up_sun_test1.bin (mode=clock_driven) ...
-98469525.01ns INFO     test                               [window 0] model scores: D=510641 L=494948 R=532832 U=494367  winner=Right margin=22191  nonzero_features=1990/2048 total_count=214875
-98510535.01ns INFO     test                               [window 1] model scores: D=187638 L=154208 R=159632 U=205308  winner=Up margin=17670  nonzero_features=1741/2048 total_count=202980
-98551545.01ns INFO     test                               [window 2] model scores: D=173476 L=135055 R=144952 U=175570  winner=Up margin=2094  nonzero_features=1493/2048 total_count=188569
-98592555.01ns INFO     test                               [window 3] model scores: D=143847 L=130866 R=134910 U=150780  winner=Up margin=6933  nonzero_features=1244/2048 total_count=159050
-98633565.01ns INFO     test                               [window 4] model scores: D=117782 L=108381 R=105325 U=146044  winner=Up margin=28262  nonzero_features=995/2048 total_count=100043
-98674575.01ns INFO     test                               [window 5] model scores: D=95498 L=89756 R=82060 U=109621  winner=Up margin=14123  nonzero_features=745/2048 total_count=52466
-98715585.01ns INFO     test                               [window 6] model scores: D=74668 L=66435 R=57996 U=81803  winner=Up margin=7135  nonzero_features=496/2048 total_count=29898
-98756595.01ns INFO     test                               [window 7] model scores: D=47767 L=41132 R=32937 U=54149  winner=Up margin=6382  nonzero_features=248/2048 total_count=14346
-98777170.01ns INFO     test                               [wave_up_sun_test1-clock] Completed windows: 8, Accepted words: 277377
-98777170.01ns INFO     test                               [wave_up_sun_test1-clock] DUT gesture outputs (1 total):
-98777170.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
-98777170.01ns INFO     test                               [wave_up_sun_test1-clock] dominant=Up ratio=1.000 class_hist=(Up:1)
-98777170.01ns INFO     test                               [wave_up_sun_test1-clock] expected=Up match=1/1 ratio=1.000
-98777170.01ns INFO     test                               [wave_up_sun_test1] A/B: forced_windows=8 clock_windows=8 seq_diff=0/1
-[TEST PASS] test_bin_file_timing_replay_ab @ 98777170.014 ns
-98777170.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_bin_file_timing_replay_ab passed
-98777170.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_windowing_strategy_matches_sliding_model (16/18)
+33923385.01ns INFO     test                               [wave_down_sun_test1-forced] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_down_sun_test1.bin (mode=timestamp_forced) ...
+40257605.01ns INFO     test                               [window 0] model scores: D=450011 L=424265 R=533838 U=482895  winner=Right margin=50943  nonzero_features=1984/2048 total_count=186619
+40298615.01ns INFO     test                               [window 1] model scores: D=191807 L=144544 R=150772 U=169137  winner=Down margin=22670  nonzero_features=1737/2048 total_count=174011
+40339625.01ns INFO     test                               [window 2] model scores: D=167193 L=129983 R=138872 U=152416  winner=Down margin=14777  nonzero_features=1487/2048 total_count=155418
+40380635.01ns INFO     test                               [window 3] model scores: D=147374 L=119256 R=123723 U=131978  winner=Down margin=15396  nonzero_features=1240/2048 total_count=120179
+40421645.01ns INFO     test                               [window 4] model scores: D=133390 L=104600 R=106100 U=113715  winner=Down margin=19675  nonzero_features=993/2048 total_count=78110
+40462655.01ns INFO     test                               [window 5] model scores: D=104539 L=81369 R=77962 U=87948  winner=Down margin=16591  nonzero_features=743/2048 total_count=46329
+40503665.01ns INFO     test                               [window 6] model scores: D=77264 L=63488 R=54785 U=68306  winner=Down margin=8958  nonzero_features=494/2048 total_count=28227
+40544675.01ns INFO     test                               [window 7] model scores: D=52432 L=39428 R=31657 U=45502  winner=Down margin=6930  nonzero_features=246/2048 total_count=13537
+40565250.01ns INFO     test                               [wave_down_sun_test1-forced] Completed windows: 8, Accepted words: 249121
+40565250.01ns INFO     test                               [wave_down_sun_test1-forced] DUT gesture outputs (1 total):
+40565250.01ns INFO     test                                 gesture=Down (class=0, confidence=1)
+40565250.01ns INFO     test                               [wave_down_sun_test1-forced] dominant=Down ratio=1.000 class_hist=(Down:1)
+40565250.01ns INFO     test                               [wave_down_sun_test1-forced] expected=Down match=1/1 ratio=1.000
+40670935.01ns INFO     test                               [wave_down_sun_test1-clock] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_down_sun_test1.bin (mode=clock_driven) ...
+47005155.01ns INFO     test                               [window 0] model scores: D=450011 L=424265 R=533838 U=482895  winner=Right margin=50943  nonzero_features=1984/2048 total_count=186619
+47046165.01ns INFO     test                               [window 1] model scores: D=191807 L=144544 R=150772 U=169137  winner=Down margin=22670  nonzero_features=1737/2048 total_count=174011
+47087175.01ns INFO     test                               [window 2] model scores: D=167193 L=129983 R=138872 U=152416  winner=Down margin=14777  nonzero_features=1487/2048 total_count=155418
+47128185.01ns INFO     test                               [window 3] model scores: D=147374 L=119256 R=123723 U=131978  winner=Down margin=15396  nonzero_features=1240/2048 total_count=120179
+47169195.01ns INFO     test                               [window 4] model scores: D=133390 L=104600 R=106100 U=113715  winner=Down margin=19675  nonzero_features=993/2048 total_count=78110
+47210205.01ns INFO     test                               [window 5] model scores: D=104539 L=81369 R=77962 U=87948  winner=Down margin=16591  nonzero_features=743/2048 total_count=46329
+47251215.01ns INFO     test                               [window 6] model scores: D=77264 L=63488 R=54785 U=68306  winner=Down margin=8958  nonzero_features=494/2048 total_count=28227
+47292225.01ns INFO     test                               [window 7] model scores: D=52432 L=39428 R=31657 U=45502  winner=Down margin=6930  nonzero_features=246/2048 total_count=13537
+47312800.01ns INFO     test                               [wave_down_sun_test1-clock] Completed windows: 8, Accepted words: 249121
+47312800.01ns INFO     test                               [wave_down_sun_test1-clock] DUT gesture outputs (1 total):
+47312800.01ns INFO     test                                 gesture=Down (class=0, confidence=1)
+47312800.01ns INFO     test                               [wave_down_sun_test1-clock] dominant=Down ratio=1.000 class_hist=(Down:1)
+47312800.01ns INFO     test                               [wave_down_sun_test1-clock] expected=Down match=1/1 ratio=1.000
+47312800.01ns INFO     test                               [wave_down_sun_test1] A/B: forced_windows=8 clock_windows=8 seq_diff=0/1
+47418485.01ns INFO     test                               [wave_left_sun_test1-forced] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_left_sun_test1.bin (mode=timestamp_forced) ...
+56634715.01ns INFO     test                               [window 0] model scores: D=935440 L=1018645 R=1241395 U=1382673  winner=Up margin=141278  nonzero_features=1974/2048 total_count=283362
+56675725.01ns INFO     test                               [window 1] model scores: D=168167 L=200209 R=185288 U=194065  winner=Left margin=6144  nonzero_features=1731/2048 total_count=271345
+56716735.01ns INFO     test                               [window 2] model scores: D=150523 L=188561 R=170093 U=162594  winner=Left margin=18468  nonzero_features=1485/2048 total_count=258559
+56757745.01ns INFO     test                               [window 3] model scores: D=135028 L=173108 R=155762 U=143208  winner=Left margin=17346  nonzero_features=1239/2048 total_count=240559
+56798755.01ns INFO     test                               [window 4] model scores: D=120534 L=147465 R=127129 U=121649  winner=Left margin=20336  nonzero_features=991/2048 total_count=207574
+56839765.01ns INFO     test                               [window 5] model scores: D=102124 L=133005 R=93466 U=131459  winner=Left margin=1546  nonzero_features=743/2048 total_count=153633
+56880775.01ns INFO     test                               [window 6] model scores: D=80642 L=97941 R=66468 U=79258  winner=Left margin=17299  nonzero_features=498/2048 total_count=87611
+56921785.01ns INFO     test                               [window 7] model scores: D=49552 L=69107 R=34917 U=51892  winner=Left margin=17215  nonzero_features=249/2048 total_count=34465
+56942360.01ns INFO     test                               [wave_left_sun_test1-forced] Completed windows: 8, Accepted words: 345864
+56942360.01ns INFO     test                               [wave_left_sun_test1-forced] DUT gesture outputs (6 total):
+56942360.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
+56942360.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+56942360.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+56942360.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+56942360.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+56942360.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+56942360.01ns INFO     test                               [wave_left_sun_test1-forced] dominant=Left ratio=0.833 class_hist=(Left:5 Up:1)
+56942360.01ns INFO     test                               [wave_left_sun_test1-forced] expected=Left match=5/6 ratio=0.833
+57048045.01ns INFO     test                               [wave_left_sun_test1-clock] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_left_sun_test1.bin (mode=clock_driven) ...
+66264275.01ns INFO     test                               [window 0] model scores: D=935440 L=1018645 R=1241395 U=1382673  winner=Up margin=141278  nonzero_features=1974/2048 total_count=283362
+66305285.01ns INFO     test                               [window 1] model scores: D=168167 L=200209 R=185288 U=194065  winner=Left margin=6144  nonzero_features=1731/2048 total_count=271345
+66346295.01ns INFO     test                               [window 2] model scores: D=150523 L=188561 R=170093 U=162594  winner=Left margin=18468  nonzero_features=1485/2048 total_count=258559
+66387305.01ns INFO     test                               [window 3] model scores: D=135028 L=173108 R=155762 U=143208  winner=Left margin=17346  nonzero_features=1239/2048 total_count=240559
+66428315.01ns INFO     test                               [window 4] model scores: D=120534 L=147465 R=127129 U=121649  winner=Left margin=20336  nonzero_features=991/2048 total_count=207574
+66469325.01ns INFO     test                               [window 5] model scores: D=102124 L=133005 R=93466 U=131459  winner=Left margin=1546  nonzero_features=743/2048 total_count=153633
+66510335.01ns INFO     test                               [window 6] model scores: D=80642 L=97941 R=66468 U=79258  winner=Left margin=17299  nonzero_features=498/2048 total_count=87611
+66551345.01ns INFO     test                               [window 7] model scores: D=49552 L=69107 R=34917 U=51892  winner=Left margin=17215  nonzero_features=249/2048 total_count=34465
+66571920.01ns INFO     test                               [wave_left_sun_test1-clock] Completed windows: 8, Accepted words: 345864
+66571920.01ns INFO     test                               [wave_left_sun_test1-clock] DUT gesture outputs (6 total):
+66571920.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
+66571920.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+66571920.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+66571920.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+66571920.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+66571920.01ns INFO     test                                 gesture=Left (class=1, confidence=1)
+66571920.01ns INFO     test                               [wave_left_sun_test1-clock] dominant=Left ratio=0.833 class_hist=(Left:5 Up:1)
+66571920.01ns INFO     test                               [wave_left_sun_test1-clock] expected=Left match=5/6 ratio=0.833
+66571920.01ns INFO     test                               [wave_left_sun_test1] A/B: forced_windows=8 clock_windows=8 seq_diff=0/6
+66677605.01ns INFO     test                               [wave_right_sun_test1-forced] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_right_sun_test1.bin (mode=timestamp_forced) ...
+74950915.01ns INFO     test                               [window 0] model scores: D=573189 L=650827 R=723316 U=510528  winner=Right margin=72489  nonzero_features=2007/2048 total_count=252101
+74991925.01ns INFO     test                               [window 1] model scores: D=175794 L=171585 R=212474 U=183168  winner=Right margin=29306  nonzero_features=1757/2048 total_count=239021
+75032935.01ns INFO     test                               [window 2] model scores: D=158877 L=171063 R=182494 U=158984  winner=Right margin=11431  nonzero_features=1507/2048 total_count=222701
+75073945.01ns INFO     test                               [window 3] model scores: D=144066 L=141625 R=158786 U=146675  winner=Right margin=12111  nonzero_features=1256/2048 total_count=179520
+75114955.01ns INFO     test                               [window 4] model scores: D=121093 L=115927 R=146612 U=130431  winner=Right margin=16181  nonzero_features=1003/2048 total_count=128403
+75155965.01ns INFO     test                               [window 5] model scores: D=97152 L=94985 R=125384 U=98764  winner=Right margin=26620  nonzero_features=753/2048 total_count=81685
+75196975.01ns INFO     test                               [window 6] model scores: D=79901 L=69420 R=98550 U=76108  winner=Right margin=18649  nonzero_features=503/2048 total_count=45054
+75237985.01ns INFO     test                               [window 7] model scores: D=51406 L=42600 R=70746 U=48207  winner=Right margin=19340  nonzero_features=254/2048 total_count=20123
+75258560.01ns INFO     test                               [wave_right_sun_test1-forced] Completed windows: 8, Accepted words: 314600
+75258560.01ns INFO     test                               [wave_right_sun_test1-forced] DUT gesture outputs (1 total):
+75258560.01ns INFO     test                                 gesture=Right (class=2, confidence=1)
+75258560.01ns INFO     test                               [wave_right_sun_test1-forced] dominant=Right ratio=1.000 class_hist=(Right:1)
+75258560.01ns INFO     test                               [wave_right_sun_test1-forced] expected=Right match=1/1 ratio=1.000
+75364245.01ns INFO     test                               [wave_right_sun_test1-clock] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_right_sun_test1.bin (mode=clock_driven) ...
+83637555.01ns INFO     test                               [window 0] model scores: D=573189 L=650827 R=723316 U=510528  winner=Right margin=72489  nonzero_features=2007/2048 total_count=252101
+83678565.01ns INFO     test                               [window 1] model scores: D=175794 L=171585 R=212474 U=183168  winner=Right margin=29306  nonzero_features=1757/2048 total_count=239021
+83719575.01ns INFO     test                               [window 2] model scores: D=158877 L=171063 R=182494 U=158984  winner=Right margin=11431  nonzero_features=1507/2048 total_count=222701
+83760585.01ns INFO     test                               [window 3] model scores: D=144066 L=141625 R=158786 U=146675  winner=Right margin=12111  nonzero_features=1256/2048 total_count=179520
+83801595.01ns INFO     test                               [window 4] model scores: D=121093 L=115927 R=146612 U=130431  winner=Right margin=16181  nonzero_features=1003/2048 total_count=128403
+83842605.01ns INFO     test                               [window 5] model scores: D=97152 L=94985 R=125384 U=98764  winner=Right margin=26620  nonzero_features=753/2048 total_count=81685
+83883615.01ns INFO     test                               [window 6] model scores: D=79901 L=69420 R=98550 U=76108  winner=Right margin=18649  nonzero_features=503/2048 total_count=45054
+83924625.01ns INFO     test                               [window 7] model scores: D=51406 L=42600 R=70746 U=48207  winner=Right margin=19340  nonzero_features=254/2048 total_count=20123
+83945200.01ns INFO     test                               [wave_right_sun_test1-clock] Completed windows: 8, Accepted words: 314600
+83945200.01ns INFO     test                               [wave_right_sun_test1-clock] DUT gesture outputs (1 total):
+83945200.01ns INFO     test                                 gesture=Right (class=2, confidence=1)
+83945200.01ns INFO     test                               [wave_right_sun_test1-clock] dominant=Right ratio=1.000 class_hist=(Right:1)
+83945200.01ns INFO     test                               [wave_right_sun_test1-clock] expected=Right match=1/1 ratio=1.000
+83945200.01ns INFO     test                               [wave_right_sun_test1] A/B: forced_windows=8 clock_windows=8 seq_diff=0/1
+84050885.01ns INFO     test                               [wave_up_sun_test1-forced] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_up_sun_test1.bin (mode=timestamp_forced) ...
+91232185.01ns INFO     test                               [window 0] model scores: D=510641 L=494948 R=532832 U=494367  winner=Right margin=22191  nonzero_features=1990/2048 total_count=214875
+91273195.01ns INFO     test                               [window 1] model scores: D=187638 L=154208 R=159632 U=205308  winner=Up margin=17670  nonzero_features=1741/2048 total_count=202980
+91314205.01ns INFO     test                               [window 2] model scores: D=173476 L=135055 R=144952 U=175570  winner=Up margin=2094  nonzero_features=1493/2048 total_count=188569
+91355215.01ns INFO     test                               [window 3] model scores: D=143847 L=130866 R=134910 U=150780  winner=Up margin=6933  nonzero_features=1244/2048 total_count=159050
+91396225.01ns INFO     test                               [window 4] model scores: D=117782 L=108381 R=105325 U=146044  winner=Up margin=28262  nonzero_features=995/2048 total_count=100043
+91437235.01ns INFO     test                               [window 5] model scores: D=95498 L=89756 R=82060 U=109621  winner=Up margin=14123  nonzero_features=745/2048 total_count=52466
+91478245.01ns INFO     test                               [window 6] model scores: D=74668 L=66435 R=57996 U=81803  winner=Up margin=7135  nonzero_features=496/2048 total_count=29898
+91519255.01ns INFO     test                               [window 7] model scores: D=47767 L=41132 R=32937 U=54149  winner=Up margin=6382  nonzero_features=248/2048 total_count=14346
+91539830.01ns INFO     test                               [wave_up_sun_test1-forced] Completed windows: 8, Accepted words: 277377
+91539830.01ns INFO     test                               [wave_up_sun_test1-forced] DUT gesture outputs (1 total):
+91539830.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
+91539830.01ns INFO     test                               [wave_up_sun_test1-forced] dominant=Up ratio=1.000 class_hist=(Up:1)
+91539830.01ns INFO     test                               [wave_up_sun_test1-forced] expected=Up match=1/1 ratio=1.000
+91645515.01ns INFO     test                               [wave_up_sun_test1-clock] Streaming /mnt/c/Users/jason/Documents/group-g-dalton/EVT2_gesture_set/test_set/wave_up_sun_test1.bin (mode=clock_driven) ...
+98826815.01ns INFO     test                               [window 0] model scores: D=510641 L=494948 R=532832 U=494367  winner=Right margin=22191  nonzero_features=1990/2048 total_count=214875
+98867825.01ns INFO     test                               [window 1] model scores: D=187638 L=154208 R=159632 U=205308  winner=Up margin=17670  nonzero_features=1741/2048 total_count=202980
+98908835.01ns INFO     test                               [window 2] model scores: D=173476 L=135055 R=144952 U=175570  winner=Up margin=2094  nonzero_features=1493/2048 total_count=188569
+98949845.01ns INFO     test                               [window 3] model scores: D=143847 L=130866 R=134910 U=150780  winner=Up margin=6933  nonzero_features=1244/2048 total_count=159050
+98990855.01ns INFO     test                               [window 4] model scores: D=117782 L=108381 R=105325 U=146044  winner=Up margin=28262  nonzero_features=995/2048 total_count=100043
+99031865.01ns INFO     test                               [window 5] model scores: D=95498 L=89756 R=82060 U=109621  winner=Up margin=14123  nonzero_features=745/2048 total_count=52466
+99072875.01ns INFO     test                               [window 6] model scores: D=74668 L=66435 R=57996 U=81803  winner=Up margin=7135  nonzero_features=496/2048 total_count=29898
+99113885.01ns INFO     test                               [window 7] model scores: D=47767 L=41132 R=32937 U=54149  winner=Up margin=6382  nonzero_features=248/2048 total_count=14346
+99134460.01ns INFO     test                               [wave_up_sun_test1-clock] Completed windows: 8, Accepted words: 277377
+99134460.01ns INFO     test                               [wave_up_sun_test1-clock] DUT gesture outputs (1 total):
+99134460.01ns INFO     test                                 gesture=Up (class=3, confidence=1)
+99134460.01ns INFO     test                               [wave_up_sun_test1-clock] dominant=Up ratio=1.000 class_hist=(Up:1)
+99134460.01ns INFO     test                               [wave_up_sun_test1-clock] expected=Up match=1/1 ratio=1.000
+99134460.01ns INFO     test                               [wave_up_sun_test1] A/B: forced_windows=8 clock_windows=8 seq_diff=0/1
+[TEST PASS] test_bin_file_timing_replay_ab @ 99134460.014 ns
+99134460.01ns INFO     cocotb.regression                  voxel_bin_core_tb.test_bin_file_timing_replay_ab passed
+99134460.01ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_windowing_strategy_matches_sliding_model (16/27)
                                                               Verify consecutive windows are sliding by one bin after warm-up.
 [TEST START] test_windowing_strategy_matches_sliding_model
-98907930.02ns INFO     test                               [window 0] model scores: D=1136 L=841 R=1351 U=464  winner=Right margin=215  nonzero_features=151/2048 total_count=224
-98948940.02ns INFO     test                               [window 1] model scores: D=898 L=1069 R=1121 U=845  winner=Right margin=52  nonzero_features=152/2048 total_count=224
-98989950.02ns INFO     test                               [window 2] model scores: D=788 L=1038 R=1321 U=641  winner=Right margin=283  nonzero_features=148/2048 total_count=224
-99030960.02ns INFO     test                               [window 3] model scores: D=876 L=1560 R=936 U=1147  winner=Left margin=413  nonzero_features=152/2048 total_count=224
-[TEST PASS] test_windowing_strategy_matches_sliding_model @ 99051535.015 ns
-99051535.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_windowing_strategy_matches_sliding_model passed
-99051535.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_weight_write_blocked_in_classify_mode (17/18)
-                                                              weight_wr_valid_gated must be 0 when the mode is CLASSIFY, even if weight_wr_valid_i=1.
-[TEST START] test_weight_write_blocked_in_classify_mode
-[TEST PASS] test_weight_write_blocked_in_classify_mode @ 99051690.016 ns
-99051690.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_weight_write_blocked_in_classify_mode passed
-99051690.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_mac_backpressure_holds_binner (18/18)
+99285980.02ns INFO     test                               [window 0] model scores: D=1136 L=841 R=1351 U=464  winner=Right margin=215  nonzero_features=151/2048 total_count=224
+99326990.02ns INFO     test                               [window 1] model scores: D=898 L=1069 R=1121 U=845  winner=Right margin=52  nonzero_features=152/2048 total_count=224
+99368000.02ns INFO     test                               [window 2] model scores: D=788 L=1038 R=1321 U=641  winner=Right margin=283  nonzero_features=148/2048 total_count=224
+99409010.02ns INFO     test                               [window 3] model scores: D=876 L=1560 R=936 U=1147  winner=Left margin=413  nonzero_features=152/2048 total_count=224
+[TEST PASS] test_windowing_strategy_matches_sliding_model @ 99429585.015 ns
+99429585.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_windowing_strategy_matches_sliding_model passed
+99429585.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_mac_backpressure_holds_binner (17/27)
                                                               When the MAC is busy the binner must park in ST_WAIT_RD and complete both windows.
 [TEST START] test_mac_backpressure_holds_binner
-99177240.02ns INFO     test                               [window 0] model scores: D=269 L=330 R=352 U=560  winner=Up margin=208  nonzero_features=59/2048 total_count=64
-99218250.02ns INFO     test                               [window 1] model scores: D=86 L=295 R=320 U=301  winner=Right margin=19  nonzero_features=55/2048 total_count=60
-[TEST PASS] test_mac_backpressure_holds_binner @ 99238825.017 ns
-99238825.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_mac_backpressure_holds_binner passed
-99238825.02ns INFO     cocotb.regression                  *******************************************************************************************************************************
-                                                          ** TEST                                                                   STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **
-                                                          *******************************************************************************************************************************
-                                                          ** voxel_bin_core_tb.test_voxel_bin_core_end_to_end_golden                 PASS      233225.00           4.70      49595.45  **
-                                                          ** voxel_bin_core_tb.test_empty_window_produces_no_gesture                 PASS       61725.00           1.21      50877.26  **
-                                                          ** voxel_bin_core_tb.test_reset_mid_pipeline_recovers_cleanly              PASS       10760.00           0.17      63490.16  **
-                                                          ** voxel_bin_core_tb.test_debug_event_count_tracks_accepted_words          PASS        9805.00           0.20      49157.37  **
-                                                          ** voxel_bin_core_tb.test_fifo_backpressure_no_lost_events                 PASS        7065.00           0.18      40101.66  **
-                                                          ** voxel_bin_core_tb.test_core_timestamp_boundary_binning_matches_golden   PASS       61785.00           1.23      50071.47  **
-                                                          ** voxel_bin_core_tb.test_sustained_region_fires_gesture                   PASS      151695.00           2.89      52507.36  **
-                                                          ** voxel_bin_core_tb.test_decoder_events_match_model_exactly               PASS        6145.00           0.09      65235.43  **
-                                                          ** voxel_bin_core_tb.test_score_model_validates_classifications            PASS      315875.00           6.44      49048.46  **
-                                                          ** voxel_bin_core_tb.test_wrong_gesture_trajectory_no_false_positive       PASS      193045.00           3.41      56644.76  **
-                                                          ** voxel_bin_core_tb.test_bin_file_gesture_0                               PASS     6726795.00         169.20      39757.31  **
-                                                          ** voxel_bin_core_tb.test_bin_file_gesture_1                               PASS     9608805.00         229.30      41905.07  **
-                                                          ** voxel_bin_core_tb.test_bin_file_gesture_2                               PASS     8665885.00         212.22      40835.38  **
-                                                          ** voxel_bin_core_tb.test_bin_file_gesture_3                               PASS     7573875.00         195.30      38781.61  **
-                                                          ** voxel_bin_core_tb.test_bin_file_timing_replay_ab                        PASS    65150685.00        1576.08      41337.12  **
-                                                          ** voxel_bin_core_tb.test_windowing_strategy_matches_sliding_model         PASS      274365.00           5.01      54803.77  **
-                                                          ** voxel_bin_core_tb.test_weight_write_blocked_in_classify_mode            PASS         155.00           0.01      27417.22  **
-                                                          ** voxel_bin_core_tb.test_mac_backpressure_holds_binner                    PASS      187135.00           3.25      57507.70  **
-                                                          *******************************************************************************************************************************
-                                                          ** TESTS=18 PASS=18 FAIL=0 SKIP=0                                                  99238825.02        2410.99      41161.02  **
-                                                          *******************************************************************************************************************************
+99575895.02ns INFO     test                               [window 0] model scores: D=269 L=330 R=352 U=560  winner=Up margin=208  nonzero_features=59/2048 total_count=64
+99616905.02ns INFO     test                               [window 1] model scores: D=86 L=295 R=320 U=301  winner=Right margin=19  nonzero_features=55/2048 total_count=60
+[TEST PASS] test_mac_backpressure_holds_binner @ 99637480.016 ns
+99637480.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_mac_backpressure_holds_binner passed
+99637480.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_fsm_boots_from_st_boot_to_st_run (18/27)
+                                                              After reset FSM is in ST_BOOT with core_rst_o=1; after BOOT_REQ+done it reaches ST_RUN.
+[TEST START] test_fsm_boots_from_st_boot_to_st_run
+99637480.02ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/voxel_bin_core_tb.py:1304: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                            cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+[TEST PASS] test_fsm_boots_from_st_boot_to_st_run @ 99647940.017 ns
+99647940.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_fsm_boots_from_st_boot_to_st_run passed
+99647940.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_evt_ld_en_only_asserts_during_load_window (19/27)
+                                                              evt_ld_en is 0 in ST_BOOT, 1 during LD_OPEN/LD_WAIT, and 0 again in ST_RUN.
+[TEST START] test_evt_ld_en_only_asserts_during_load_window
+99647940.02ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/voxel_bin_core_tb.py:1357: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                            cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+[TEST PASS] test_evt_ld_en_only_asserts_during_load_window @ 99658410.018 ns
+99658410.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_evt_ld_en_only_asserts_during_load_window passed
+99658410.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_weight_writes_blocked_outside_load_window (20/27)
+                                                              Weight event words are silently discarded when evt_ld_en=0 (ST_BOOT and ST_RUN).
+[TEST START] test_weight_writes_blocked_outside_load_window
+99658410.02ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/voxel_bin_core_tb.py:1394: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                            cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+[TEST PASS] test_weight_writes_blocked_outside_load_window @ 99668975.019 ns
+99668975.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_weight_writes_blocked_outside_load_window passed
+99668975.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_weight_writes_accepted_during_load_window (21/27)
+                                                              Weight event words decoded while evt_ld_en=1 must assert weight_wr_valid_gated.
+[TEST START] test_weight_writes_accepted_during_load_window
+99668975.02ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/voxel_bin_core_tb.py:1436: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                            cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+[TEST PASS] test_weight_writes_accepted_during_load_window @ 99679455.020 ns
+99679455.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_weight_writes_accepted_during_load_window passed
+99679455.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_no_gesture_before_boot_completes (22/27)
+                                                              Events and rollovers fed before boot must not produce gesture_valid (MAC in reset).
+[TEST START] test_no_gesture_before_boot_completes
+99679455.02ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/voxel_bin_core_tb.py:1475: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                            cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+[TEST PASS] test_no_gesture_before_boot_completes @ 99682385.021 ns
+99682385.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_no_gesture_before_boot_completes passed
+99682385.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_debug_req_during_load_clears_evt_ld_en (23/27)
+                                                              If debug_req fires while in LD_OPEN/LD_WAIT, evt_ld_en must deassert immediately.
+[TEST START] test_debug_req_during_load_clears_evt_ld_en
+99682385.02ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/voxel_bin_core_tb.py:1518: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                            cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+[TEST PASS] test_debug_req_during_load_clears_evt_ld_en @ 99692935.022 ns
+99692935.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_debug_req_during_load_clears_evt_ld_en passed
+99692935.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_debug_req_from_boot_then_reload (24/27)
+                                                              DEBUG_REQ from ST_BOOT → ST_DEBUG → boot_req restarts load → reaches ST_RUN.
+[TEST START] test_debug_req_from_boot_then_reload
+99692935.02ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/voxel_bin_core_tb.py:1566: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                            cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+[TEST PASS] test_debug_req_from_boot_then_reload @ 99703435.023 ns
+99703435.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_debug_req_from_boot_then_reload passed
+99703435.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_reload_req_from_run_state (25/27)
+                                                              RELOAD_REQ while in ST_RUN must re-enter ST_LOAD and eventually reach ST_RUN.
+[TEST START] test_reload_req_from_run_state
+99703435.02ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/voxel_bin_core_tb.py:1611: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                            cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+[TEST PASS] test_reload_req_from_run_state @ 99724235.024 ns
+99724235.02ns INFO     cocotb.regression                  voxel_bin_core_tb.test_reload_req_from_run_state passed
+99724235.02ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_fsm_state_debug_signals_through_boot (26/27)
+                                                              main_state_dbg_o and load_state_dbg_o must reflect the correct encoding at each stage.
+[TEST START] test_fsm_state_debug_signals_through_boot
+99724235.03ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/voxel_bin_core_tb.py:1655: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                            cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+[TEST PASS] test_fsm_state_debug_signals_through_boot @ 99734705.025 ns
+99734705.03ns INFO     cocotb.regression                  voxel_bin_core_tb.test_fsm_state_debug_signals_through_boot passed
+99734705.03ns INFO     cocotb.regression                  running voxel_bin_core_tb.test_boot_with_weights_enables_correct_classification (27/27)
+                                                              Full event-stream weight load → classification produces expected class per ScoreModel.
+[TEST START] test_boot_with_weights_enables_correct_classification
+99734705.03ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/voxel_bin_core_tb.py:1719: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                            cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+99871015.03ns INFO     test                               [window 0] model scores: D=1001 L=809 R=1052 U=722  winner=Right margin=51  nonzero_features=111/2048 total_count=160
+99912025.03ns INFO     test                               [window 1] model scores: D=1004 L=680 R=759 U=425  winner=Down margin=245  nonzero_features=110/2048 total_count=160
+99953035.03ns INFO     test                               [window 2] model scores: D=1185 L=809 R=769 U=572  winner=Down margin=376  nonzero_features=109/2048 total_count=160
+[TEST PASS] test_boot_with_weights_enables_correct_classification @ 99973610.026 ns
+99973610.03ns INFO     cocotb.regression                  voxel_bin_core_tb.test_boot_with_weights_enables_correct_classification passed
+99973610.03ns INFO     cocotb.regression                  *********************************************************************************************************************************
+                                                          ** TEST                                                                     STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **
+                                                          *********************************************************************************************************************************
+                                                          ** voxel_bin_core_tb.test_voxel_bin_core_end_to_end_golden                   PASS      241345.00           2.77      86996.57  **
+                                                          ** voxel_bin_core_tb.test_empty_window_produces_no_gesture                   PASS       69565.00           1.04      67062.91  **
+                                                          ** voxel_bin_core_tb.test_reset_mid_pipeline_recovers_cleanly                PASS       18670.00           0.26      71740.13  **
+                                                          ** voxel_bin_core_tb.test_debug_event_count_tracks_accepted_words            PASS       20105.00           0.39      50971.53  **
+                                                          ** voxel_bin_core_tb.test_fifo_backpressure_no_lost_events                   PASS       15495.00           0.20      75830.57  **
+                                                          ** voxel_bin_core_tb.test_core_timestamp_boundary_binning_matches_golden     PASS       69615.00           1.10      63306.06  **
+                                                          ** voxel_bin_core_tb.test_sustained_region_fires_gesture                     PASS      159835.00           3.00      53338.59  **
+                                                          ** voxel_bin_core_tb.test_decoder_events_match_model_exactly                 PASS       14225.00           0.18      77309.18  **
+                                                          ** voxel_bin_core_tb.test_score_model_validates_classifications              PASS      336635.00           6.22      54140.33  **
+                                                          ** voxel_bin_core_tb.test_wrong_gesture_trajectory_no_false_positive         PASS      213805.00           3.54      60437.10  **
+                                                          ** voxel_bin_core_tb.test_bin_file_gesture_0                                 PASS     6747555.00         151.88      44427.96  **
+                                                          ** voxel_bin_core_tb.test_bin_file_gesture_1                                 PASS     9629565.00         200.83      47947.86  **
+                                                          ** voxel_bin_core_tb.test_bin_file_gesture_2                                 PASS     8686645.00         186.88      46481.44  **
+                                                          ** voxel_bin_core_tb.test_bin_file_gesture_3                                 PASS     7594635.00         162.44      46754.51  **
+                                                          ** voxel_bin_core_tb.test_bin_file_timing_replay_ab                          PASS    65316765.00        1335.87      48894.73  **
+                                                          ** voxel_bin_core_tb.test_windowing_strategy_matches_sliding_model           PASS      295125.00           4.84      61003.59  **
+                                                          ** voxel_bin_core_tb.test_mac_backpressure_holds_binner                      PASS      207895.00           3.19      65156.44  **
+                                                          ** voxel_bin_core_tb.test_fsm_boots_from_st_boot_to_st_run                   PASS       10460.00           0.14      75701.10  **
+                                                          ** voxel_bin_core_tb.test_evt_ld_en_only_asserts_during_load_window          PASS       10470.00           0.09     113508.12  **
+                                                          ** voxel_bin_core_tb.test_weight_writes_blocked_outside_load_window          PASS       10565.00           0.09     112681.58  **
+                                                          ** voxel_bin_core_tb.test_weight_writes_accepted_during_load_window          PASS       10480.00           0.12      85097.58  **
+                                                          ** voxel_bin_core_tb.test_no_gesture_before_boot_completes                   PASS        2930.00           0.04      83486.03  **
+                                                          ** voxel_bin_core_tb.test_debug_req_during_load_clears_evt_ld_en             PASS       10550.00           0.13      78679.93  **
+                                                          ** voxel_bin_core_tb.test_debug_req_from_boot_then_reload                    PASS       10500.00           0.13      78698.99  **
+                                                          ** voxel_bin_core_tb.test_reload_req_from_run_state                          PASS       20800.00           0.20     105182.63  **
+                                                          ** voxel_bin_core_tb.test_fsm_state_debug_signals_through_boot               PASS       10470.00           0.10     104149.84  **
+                                                          ** voxel_bin_core_tb.test_boot_with_weights_enables_correct_classification   PASS      238905.00           3.95      60432.09  **
+                                                          *********************************************************************************************************************************
+                                                          ** TESTS=27 PASS=27 FAIL=0 SKIP=0                                                    99973610.03        2069.74      48302.38  **
+                                                          *********************************************************************************************************************************
 FST info: dumpfile cocotb/sim_build/voxel_bin_core/voxel_bin_core.fst opened for output.
 make[1]: Leaving directory '/mnt/c/Users/jason/Documents/group-g-dalton'
