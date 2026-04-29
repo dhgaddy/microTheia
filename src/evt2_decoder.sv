@@ -12,6 +12,8 @@ module evt2_decoder #(
     parameter int SCORE_BITS        = 36,
     parameter int WEIGHT_BITS       = 8,
     parameter bit REQUIRE_TIME_HIGH = 1'b1,
+    parameter bit SWAP_INPUT_BYTES  = 1'b0,
+    parameter bit MAP_SWAP_XY       = 1'b0,
     parameter bit MAP_FLIP_X        = 1'b0,
     parameter bit MAP_FLIP_Y        = 1'b0
 )(
