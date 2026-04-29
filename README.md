@@ -1,4 +1,4 @@
-# Group G (Still unsure of the name)
+# μTheia
 
 Project uses wafer.space MPW and runs using the gf180mcu PDK.
 
