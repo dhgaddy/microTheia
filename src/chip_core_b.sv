@@ -3,7 +3,7 @@
 
 `default_nettype none
 
-module chip_core #(
+module chip_core_b #(
     parameter NUM_INPUT_PADS,
     parameter NUM_BIDIR_PADS,
     parameter NUM_ANALOG_PADS
@@ -68,33 +68,33 @@ module chip_core #(
     logic [31:0] debug_bus;
 
     system_package #(
-    .CLK_FREQ_HZ(32_000_000),
-    .WINDOW_MS(1000),
-    .GRID_SIZE(16),
-    .NUM_BINS(8),
-    .READOUT_BINS(8),
-    .COUNTER_BITS(16),
-    .FIFO_DEPTH(256),
-    .DATA_WIDTH(32),
-    .REQUIRE_TIME_HIGH(1),
-    .SENSOR_WIDTH(320),
-    .SENSOR_HEIGH(320),
-    .WEIGHT_BITS(8),
-    .POR_CYCLES(1024),
-    .NUM_CLASSES(4),
-    .SOFT_RESET_CYCLES(64),
-    // SCORE_BITS must match voxel_bin_core's formula: COUNTER_BITS+WEIGHT_BITS+clog2(FC)+1
-    .SCORE_BITS(COUNTER_BITS + WEIGHT_BITS + $clog2(READOUT_BINS * GRID_SIZE * GRID_SIZE) + 1)
+        .CLK_FREQ_HZ(32_000_000),
+        .WINDOW_MS(1000),
+        .GRID_SIZE(16),
+        .NUM_BINS(8),
+        .READOUT_BINS(8),
+        .COUNTER_BITS(16),
+        .FIFO_DEPTH(256),
+        .DATA_WIDTH(32),
+        .REQUIRE_TIME_HIGH(1),
+        .SENSOR_WIDTH(320),
+        .SENSOR_HEIGH(320),
+        .WEIGHT_BITS(8),
+        .POR_CYCLES(1024),
+        .NUM_CLASSES(4),
+        .SOFT_RESET_CYCLES(64),
+        // SCORE_BITS must match voxel_bin_core's formula: COUNTER_BITS+WEIGHT_BITS+clog2(FC)+1
+        .SCORE_BITS(COUNTER_BITS + WEIGHT_BITS + $clog2(READOUT_BINS * GRID_SIZE * GRID_SIZE) + 1)
     ) system_package_a (
-    .clk(clk),
-    .reset(!rst_n), //active low here and then no downstream module need to be adjusted
-    .MOSI(MOSI_wire), //master out slave in (from off chip to in chip)
-    .SCLK(SCLK_wire), //no CDC or DLL needed if SCLK sufficiently slower than clk. apparently chip clock must be 4x fast minimum (32 MHz chip, 8 MHz sclk should work)
-    .CS(CS_wire), // aka SS, signals a transaction is occuring or not
-    .MISO(MISO_wire), //master in slave out (from in chip to off chip)
-    .debug_bus(debug_bus), //bus from debug mux, pages selectable via commands over spi
-    .spi_ready(spi_ready) //signal that the spi frontend module has succesfully initialized and is ready to begin operation. NOTE: reset must go high to initialize spi module
-);
+        .clk(clk),
+        .rst(!rst_n), //active low here and then no downstream module need to be adjusted
+        .MOSI(MOSI_wire), //master out slave in (from off chip to in chip)
+        .SCLK(SCLK_wire), //no CDC or DLL needed if SCLK sufficiently slower than clk. apparently chip clock must be 4x fast minimum (32 MHz chip, 8 MHz sclk should work)
+        .CS(CS_wire), // aka SS, signals a transaction is occuring or not
+        .MISO(MISO_wire), //master in slave out (from in chip to off chip)
+        .debug_bus(debug_bus), //bus from debug mux, pages selectable via commands over spi
+        .spi_ready(spi_ready) //signal that the spi frontend module has succesfully initialized and is ready to begin operation. NOTE: reset must go high to initialize spi module
+    );
     //assigning spi ready and debug bus to pins according to pinout chart, currently do not support alternating these to a different pinout
     assign bidir_out[39] = spi_ready;
     assign bidir_out [37:6] = debug_bus;

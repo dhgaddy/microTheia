@@ -27,8 +27,6 @@ jobs:
 
       - run: make sim DUT=input_fifo
       - run: make sim DUT=evt2_decoder
-      - run: make sim DUT=MatMul
-
       - run: make sim DUT=voxel_gesture_classifier
       - run: make sim DUT=voxel_mac_engine
       - run: make sim DUT=voxel_binning

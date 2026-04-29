@@ -7,7 +7,7 @@ module spi_wrapper #(
     parameter int DATA_WIDTH = 32
 )(
     input  wire clk,
-    input  wire reset,
+    input  wire rst,
     // SPI pins: our chip is slave
     input  wire SCLK,
     input  wire CS,
@@ -15,7 +15,7 @@ module spi_wrapper #(
     output wire MISO,
     // received word stream into chip
     output logic [DATA_WIDTH-1:0] evt_word,
-    output logic                  evt_valid,
+    output logic                  evt_word_valid,
     // classification result from chip
     input  wire [1:0] gesture,
     input  wire       gesture_valid,
@@ -30,8 +30,8 @@ module spi_wrapper #(
     logic processing_word;
     logic process_next_word;
     logic processing_word_d;
-    logic CS_d, request_next, spi_abort_reset, spi_do_reset;
-    assign spi_do_reset = reset | spi_abort_reset;
+    logic CS_d, request_next, spi_abort_rst, spi_do_rst;
+    assign spi_do_rst = rst | spi_abort_rst;
 
     logic [2:0] classification_output;
 
@@ -50,41 +50,41 @@ module spi_wrapper #(
         .data_word_send    (word_out),
         .INPUT_SIGNAL      (MOSI),
         .data_word_recv    (word_in),
-        .do_reset          (spi_do_reset), //not just reset, to enable dumping aborted words if CS goes high mid-transaction. IP holds onto partial words between transactions otherwise
+        .do_reset          (spi_do_rst), //not just rst, to enable dumping aborted words if CS goes high mid-transaction. IP holds onto partial words between transactions otherwise
         .is_ready          (spi_ready)
     );
 
 always_ff @(posedge clk) begin
-    if (reset) begin
+    if (rst) begin
         evt_word              <= '0;
-        evt_valid             <= 1'b0;
+        evt_word_valid        <= 1'b0;
         process_next_word     <= 1'b0;
         processing_word_d     <= 1'b0;
         classification_output <= '0;
         CS_d                  <= 1'b1;
-        spi_abort_reset       <= 1'b0;
+        spi_abort_rst         <= 1'b0;
     end else begin
         CS_d <= CS;
 
         // pull down signals that should be pulsed for one cycle only after triggering
-        evt_valid         <= 1'b0;
+        evt_word_valid    <= 1'b0;
         process_next_word <= 1'b0;
-        spi_abort_reset   <= 1'b0;
+        spi_abort_rst     <= 1'b0;
 
         // If CS rises while the SPI IP still processing, then master aborted
         // a partial word and we should dump it. resetting the SPI IP so the next transaction starts clean
         if (!CS_d && CS && processing_word) begin // if rising edge CS + currently processing
-            spi_abort_reset   <= 1'b1;
+            spi_abort_rst     <= 1'b1;
             processing_word_d <= 1'b0;
-        end else if (spi_abort_reset) begin
+        end else if (spi_abort_rst) begin
             processing_word_d <= 1'b0;
         end else begin
             processing_word_d <= processing_word;
 
             // detect word completion
             if (processing_word_d && !processing_word) begin
-                evt_word  <= word_in;
-                evt_valid <= 1'b1;
+                evt_word       <= word_in;
+                evt_word_valid <= 1'b1;
             end
 
             // request next word only during active CS-low transaction

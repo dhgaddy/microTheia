@@ -18,10 +18,6 @@ module voxel_bin_core #(
     parameter int FIFO_DEPTH        = 256,
     parameter int DATA_WIDTH        = 32,
     parameter int REQUIRE_TIME_HIGH = 1,
-    parameter int SWAP_INPUT_BYTES  = 0,
-    parameter int MAP_SWAP_XY       = 0,
-    parameter int MAP_FLIP_X        = 0,
-    parameter int MAP_FLIP_Y        = 0,
     parameter int SENSOR_WIDTH      = 320,
     parameter int SENSOR_HEIGHT     = 320,
     parameter int WEIGHT_BITS       = 8,
@@ -31,51 +27,23 @@ module voxel_bin_core #(
     parameter int SCORE_BITS        = COUNTER_BITS + WEIGHT_BITS +
                                       $clog2(READOUT_BINS * GRID_SIZE * GRID_SIZE) + 1
 )(
-    input  logic       clk,
-    input  logic       rst,
-
-    // Mode control
-    input  logic [2:0] active_mode_i, // 00=BOOT, 01=PROGRAM, 10=CLASSIFY, 11=DEBUG//
+    input  logic        clk,
+    input  logic        rst,
 
     // Event stream in
     input  logic [31:0] evt_word,
     input  logic        evt_word_valid,
-    output logic        evt_word_ready,//
+    // output logic        evt_word_ready,
 
     // Gesture outputs
     output logic [1:0]  gesture,
     output logic        gesture_valid,
     output logic        gesture_confidence,
 
-    // Weight SRAM write port — loads weights into the per-class SRAMs at runtime.
-    // Do not assert weight_wr_valid_i while the MAC engine is running (mac_busy).
-    input  logic                                                weight_wr_valid_i,//
-    input  logic [1:0]                                          weight_wr_class_i,//
-    input  logic [$clog2(READOUT_BINS*GRID_SIZE*GRID_SIZE)-1:0] weight_wr_addr_i,//
-    input  logic [WEIGHT_BITS-1:0]                              weight_wr_data_i,//
+    // Debug
+    output logic [31:0] debug_mux,
 
-    // Threshold SRAM write port — addr 0-3 = class thresholds, 4-7 = diff thresholds.
-    input  logic                  thresh_wr_valid_i,//
-    input  logic [2:0]            thresh_wr_addr_i,//
-    input  logic [SCORE_BITS-1:0] thresh_wr_data_i,//
-
-    // Debug outputs
-    output logic [7:0] debug_event_count,
-    output logic       debug_fifo_empty,
-    output logic       debug_fifo_full,
-    output logic       debug_temporal_phase,
-    output logic       debug_class_valid,
-    output logic       debug_class_pass,
-    output logic       debug_feature_window_ready,
-    output logic       debug_capture_active,
-    output logic       debug_score_busy,
-
-    // Force a bin rollover (test/debug use only; tie to 0 in production)
-    input  logic       force_rollover_i,
-
-    //debug mux output
-
-    output logic [31:0] debug_mux
+    input logic force_rollover_i
 );
 
     // Mode constants
@@ -341,13 +309,13 @@ module voxel_bin_core #(
         .ts_in           (dec_ts_out),
         .force_rollover_i(force_rollover_i),
         .event_ready     (binner_event_ready),
-        .readout_ready(binner_readout_ready),
-        .readout_start(binner_readout_start),
-        .readout_valid(binner_readout_valid),
-        .readout_data (binner_readout_data),
-        .readout_index(binner_readout_index),
-        .readout_last (binner_readout_last),
-        .vox_bin_dbg  (vox_bin_dbg)
+        .readout_ready   (binner_readout_ready),
+        .readout_start   (binner_readout_start),
+        .readout_valid   (binner_readout_valid),
+        .readout_data    (binner_readout_data),
+        .readout_index   (binner_readout_index),
+        .readout_last    (binner_readout_last),
+        .vox_bin_dbg     (vox_bin_dbg)
     );
 
     // ------------------------------------------------------------------
