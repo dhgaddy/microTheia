@@ -15,7 +15,7 @@ module selectable_debug (
     input [3:0] in_fifo_dbg,
     input [15:0] vox_core_debug,
     input [31:0] score_A, score_B, score_C, score_D, fifo_in, fifo_out,
-    //input [31:0] control_dbg,
+    input [11:0] fsm_debug_bus,
     input [3:0] debug_select
 );
 
@@ -129,23 +129,14 @@ bit index       description
 30              debug_capture_active
 31              debug_score_busy
 
-PAGE 3 (debug_select = 4'b0011): reserved for control module debug signals
+PAGE 3 (debug_select = 4'b0011): FSM debug
 bit index       description
-[31:0]          reserved         
+[11:0]          fsm_debug_bus  ->    main_state_dbg_o [11:6] load_state_dbg_o [5:2] boot_fail_o [1] boot_done_o [0]
+[31:12]          reserved         
 
 PAGE 4 (debug_select = 4'b0100): evt2_decoder event output
 bit index       description
-0               x_out[0]
-1               x_out[1]
-2               x_out[2]
-3               x_out[3]
-4               y_out[0]
-5               y_out[1]
-6               y_out[2]
-7               y_out[3]
-8               event_valid
-9               data_ready
-[31:10]         tied to ground
+[31:0]          bottom 32 bits of timestamp out from decoder
 
 PAGE 5 (debug_select = 4'b0101): input to input_FIFO
 [31:0] = [31:0] input_FIFO_in
@@ -190,12 +181,12 @@ always_comb begin
             PAGE_2: begin
                 selected_debug = {vox_core_debug, in_fifo_dbg, decoder_dbg};
             end
-            /*PAGE_3: begin
-                debug_bus = control_dbg
+            PAGE_3: begin
+                debug_bus = {20'b0, fsm_debug_bus}
             end
-            */
+            
             PAGE_4: begin
-                selected_debug = {22'b0,decoder_output};
+                selected_debug = {decoder_output};
             end
             PAGE_5: begin
                 selected_debug = fifo_in;
