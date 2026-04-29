@@ -120,7 +120,7 @@ module voxel_bin_core #(
     
     //Controller Wires
     logic                  evt_ld_en;
-    logic                  core_rst;
+    logic                  core_rst_o;
     logic                  boot_done_o;
     logic                  boot_fail_o;
     logic [3:0]            main_state_dbg_o;
@@ -217,8 +217,7 @@ module voxel_bin_core #(
         .main_state_dbg_o  (main_state_dbg_o), //next two lines self explanatory - 4 bits
         .load_state_dbg_o  (load_state_dbg_o) // 6 bits
     );
-    logic [11:0] fsm_debug_bus; //12 bits  main_state_dbg_o [11:6] load_state_dbg_o [5:2] boot_fail_o [1] boot_done_o [0]
-    assign fsm_debug_bus = {main_state_dbg_o, load_state_dbg_o, boot_fail_o, boot_done_o};
+
     // ------------------------------------------------------------------
     // Input FIFO
     // ------------------------------------------------------------------
