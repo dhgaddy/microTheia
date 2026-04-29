@@ -10,10 +10,10 @@ module input_fifo #(
     input  logic [DATA_WIDTH-1:0] data_i,
     input  logic                  ready_i,
     input  logic                  valid_i,
-    output logic                  ready_o, 
+    output logic                  ready_o,
     output logic                  valid_o,
     output logic [DATA_WIDTH-1:0] data_o,
-    output logic [3:0] in_fifo_dbg // debug bus 
+    output logic [3:0] in_fifo_dbg // debug bus
 );
 
     localparam int FIFO_DEPTH_LOG2 = $clog2(FIFO_DEPTH);
@@ -29,6 +29,10 @@ module input_fifo #(
 
     logic [DATA_WIDTH-1:0] ram_rd_data;
     logic                  rd_pending;
+    // A pop collided with a simultaneous write — SRAM read was suppressed this
+    // cycle and must be re-issued the next cycle when write_to_ram is deasserted.
+    // rd_ptr and tail_count are NOT updated until the read actually fires.
+    logic                  read_deferred;
 
     logic [FIFO_DEPTH_LOG2:0] total_count;
     logic push, pop;
@@ -52,7 +56,14 @@ module input_fifo #(
     );
 
     assign write_to_ram = push & ~bypass_to_out;
-    assign issue_ram_read = pop & (tail_count != 0);
+
+    // GF180 SRAM macro constraint: one physical address bus — simultaneous R+W
+    // to different addresses in synthesis causes the write to win and the read
+    // to be silently lost.  Suppress the SRAM read whenever write_to_ram is
+    // active; read_deferred re-fires it on the next cycle when the bus is free.
+    assign issue_ram_read = ~write_to_ram & (
+        (pop & (tail_count != 0)) | read_deferred
+    );
 
     gf180_sram_1r1w #(
         .width_p(DATA_WIDTH),
@@ -74,45 +85,65 @@ module input_fifo #(
     logic [DATA_WIDTH-1:0]      out_data_n;
     logic                       out_valid_n;
     logic                       rd_pending_n;
+    logic                       read_deferred_n;
 
     always_ff @(posedge clk_i) begin
         if (reset_i) begin
-            wr_ptr      <= '0;
-            rd_ptr      <= '0;
-            tail_count  <= '0;
-            out_data_r  <= '0;
-            out_valid_r <= 1'b0;
-            rd_pending  <= 1'b0;
+            wr_ptr        <= '0;
+            rd_ptr        <= '0;
+            tail_count    <= '0;
+            out_data_r    <= '0;
+            out_valid_r   <= 1'b0;
+            rd_pending    <= 1'b0;
+            read_deferred <= 1'b0;
         end else begin
-            
-            wr_ptr_n     = wr_ptr;
-            rd_ptr_n     = rd_ptr;
-            tail_count_n = tail_count;
-            out_data_n   = out_data_r;
-            out_valid_n  = out_valid_r;
-            rd_pending_n = rd_pending;
 
+            wr_ptr_n        = wr_ptr;
+            rd_ptr_n        = rd_ptr;
+            tail_count_n    = tail_count;
+            out_data_n      = out_data_r;
+            out_valid_n     = out_valid_r;
+            rd_pending_n    = rd_pending;
+            read_deferred_n = read_deferred;
+
+            // Complete a previous SRAM read.
             if (rd_pending) begin
                 out_data_n   = ram_rd_data;
                 out_valid_n  = 1'b1;
                 rd_pending_n = 1'b0;
             end
 
+            // Deferred read: the SRAM is now free — advance the pointer and
+            // issue the read that was suppressed by a write collision.
+            if (read_deferred && !write_to_ram) begin
+                rd_pending_n    = 1'b1;
+                rd_ptr_n        = rd_ptr_n + 1'b1;
+                tail_count_n    = tail_count_n - 1'b1;
+                read_deferred_n = 1'b0;
+            end
+
             if (pop) begin
                 if (tail_count != 0) begin
-                    out_valid_n   = 1'b0;
-                    rd_pending_n  = 1'b1;
-                    rd_ptr_n      = rd_ptr + 1'b1;
-                    tail_count_n  = tail_count_n - 1'b1;
+                    out_valid_n = 1'b0;
+                    if (!write_to_ram) begin
+                        // SRAM is free — issue the read immediately.
+                        rd_pending_n    = 1'b1;
+                        rd_ptr_n        = rd_ptr_n + 1'b1;
+                        tail_count_n    = tail_count_n - 1'b1;
+                    end else begin
+                        // Write is using the SRAM — defer the read.
+                        // rd_ptr and tail_count are held until the read fires.
+                        read_deferred_n = 1'b1;
+                    end
                 end else if (push) begin
-                    out_data_n    = data_i;
-                    out_valid_n   = 1'b1;
+                    out_data_n  = data_i;
+                    out_valid_n = 1'b1;
                 end else begin
-                    out_valid_n   = 1'b0;
+                    out_valid_n = 1'b0;
                 end
             end else if (!out_valid_r && push && !rd_pending && (tail_count == 0)) begin
-                out_data_n        = data_i;
-                out_valid_n       = 1'b1;
+                out_data_n  = data_i;
+                out_valid_n = 1'b1;
             end
 
             if (write_to_ram) begin
@@ -120,12 +151,13 @@ module input_fifo #(
                 tail_count_n = tail_count_n + 1'b1;
             end
 
-            wr_ptr      <= wr_ptr_n;
-            rd_ptr      <= rd_ptr_n;
-            tail_count  <= tail_count_n;
-            out_data_r  <= out_data_n;
-            out_valid_r <= out_valid_n;
-            rd_pending  <= rd_pending_n;
+            wr_ptr        <= wr_ptr_n;
+            rd_ptr        <= rd_ptr_n;
+            tail_count    <= tail_count_n;
+            out_data_r    <= out_data_n;
+            out_valid_r   <= out_valid_n;
+            rd_pending    <= rd_pending_n;
+            read_deferred <= read_deferred_n;
         end
     end
 

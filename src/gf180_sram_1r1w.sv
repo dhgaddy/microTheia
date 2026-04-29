@@ -60,6 +60,11 @@ module gf180_sram_1r1w #(
     localparam int NUM_BANKS  = (depth_p + MACRO_DEPTH - 1) / MACRO_DEPTH;
     localparam int ADDR_BITS  = $clog2(depth_p > 1 ? depth_p : 2);
 
+    initial begin
+        if (depth_p < 1 || depth_p > 4096)
+            $fatal(1, "%m: depth_p=%0d out of range — wrapper supports 1–4096 (4 banks × 1024)", depth_p);
+    end
+
 `ifndef SYNTHESIS
     // ------------------------------------------------------------------
     // Behavioral simulation model — identical 1-cycle read latency.
@@ -84,6 +89,11 @@ module gf180_sram_1r1w #(
             if (rd_valid_i)
                 sim_rd_data_r <= sim_mem[rd_addr_i];
         end
+        // Hazard check: simultaneous R+W to different addresses is safe in this
+        // behavioral model (independent NBA assignments) but in synthesis the
+        // write address wins the single address bus and the read is silently lost.
+        if (!reset_i && wr_valid_i && rd_valid_i && (wr_addr_i != rd_addr_i))
+            $warning("%m @%0t: simultaneous wr+rd to different addresses (wr=%0d rd=%0d) — synthesis drops the read", $time, wr_addr_i, rd_addr_i);
     end
 
     assign rd_data_o = sim_rd_data_r;

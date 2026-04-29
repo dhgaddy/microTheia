@@ -177,13 +177,15 @@ async def test_write_wins_simultaneous_wr_rd(dut):
     dut.wr_valid_i.value = 0
     dut.rd_valid_i.value = 0
 
-    # Simultaneous rd_data_o (one cycle after the above edge): simulation model
-    # returns the old value (read-before-write NBA ordering).
+    # Simultaneous rd_data_o (one cycle after the above edge):
+    # - Simulation model (NBA ordering): read-before-write → seed_val.
+    # - Gate-level / synthesis model (GWEN=0 wins): write wins → new_val.
+    # Both are valid outcomes depending on the simulation target.
     await RisingEdge(dut.clk_i)
     await ReadOnly()
     sim_rd = int(dut.rd_data_o.value)
-    assert sim_rd == seed_val, \
-        f"Simultaneous rd result: expected old value 0x{seed_val:X} (read-before-write), got 0x{sim_rd:X}"
+    assert sim_rd in (seed_val, new_val), \
+        f"Simultaneous rd result: expected 0x{seed_val:X} (sim/read-before-write) or 0x{new_val:X} (synth/write-wins), got 0x{sim_rd:X}"
     await NextTimeStep()
 
     # A plain subsequent read must return the newly-written value.
@@ -236,17 +238,18 @@ async def test_rd_during_reset_ignored(dut):
 async def test_randomized_write_read_scoreboard(dut):
     """100 random writes followed by full read-back against a Python shadow RAM."""
     await setup(dut)
-    rng    = random.Random(0xDEAD_BEEF)
-    shadow = [0] * DEPTH_P
+    rng          = random.Random(0xDEAD_BEEF)
+    shadow       = [0] * DEPTH_P
+    written_addrs = set()
 
     for _ in range(100):
-        addr        = rng.randint(0, ADDR_MAX)
-        data        = rng.randint(0, DATA_MASK)
+        addr         = rng.randint(0, ADDR_MAX)
+        data         = rng.randint(0, DATA_MASK)
         shadow[addr] = data
+        written_addrs.add(addr)
         await write_word(dut, addr, data)
 
-    written = [a for a in range(DEPTH_P) if shadow[a] != 0]
-    for addr in written:
+    for addr in sorted(written_addrs):
         got = await read_word(dut, addr)
         assert got == shadow[addr], \
             f"addr={addr}: expected 0x{shadow[addr]:X}, got 0x{got:X}"
@@ -268,3 +271,54 @@ async def test_back_to_back_writes_then_sequential_reads(dut):
         got = await read_word(dut, addr)
         assert got == ref[addr], \
             f"addr={addr}: expected 0x{ref[addr]:X}, got 0x{got:X}"
+
+
+@logged_test()
+async def test_pipelined_reads(dut):
+    """rd_valid_i held high for N consecutive cycles with incrementing address.
+    Verifies that back-to-back reads (as the MAC engine would issue) all return
+    correct data without gaps or off-by-one pipeline shifts."""
+    await setup(dut)
+    N   = min(8, DEPTH_P)
+    ref = [(i * 31 + 7) & DATA_MASK for i in range(N)]
+    for i in range(N):
+        await write_word(dut, i, ref[i])
+
+    # Assert rd_valid for N consecutive cycles, advancing the address each cycle.
+    # After ReadOnly() in each cycle, rd_data_o already holds the result registered
+    # on that edge (NBA semantics in the behavioral model).
+    results = []
+    dut.rd_valid_i.value = 1
+    for i in range(N):
+        dut.rd_addr_i.value = i
+        await RisingEdge(dut.clk_i)
+        await ReadOnly()
+        results.append(int(dut.rd_data_o.value))
+        await NextTimeStep()
+    dut.rd_valid_i.value = 0
+
+    for i, got in enumerate(results):
+        assert got == ref[i], \
+            f"pipeline[{i}]: expected 0x{ref[i]:X}, got 0x{got:X}"
+
+
+@logged_test()
+async def test_multibank_boundary(dut):
+    """Cross-bank address boundary: last address in bank 0 (1023) and first address
+    in bank 1 (1024) must be independent locations.  Skipped when DEPTH_P <= 1024
+    (single-bank configuration)."""
+    if DEPTH_P <= 1024:
+        return
+    await setup(dut)
+    pairs = [
+        (1023,    0xAB & DATA_MASK),
+        (1024,    0xCD & DATA_MASK),
+        (0,       0x12 & DATA_MASK),
+        (ADDR_MAX, 0x34 & DATA_MASK),
+    ]
+    for addr, val in pairs:
+        await write_word(dut, addr, val)
+    for addr, expected in pairs:
+        got = await read_word(dut, addr)
+        assert got == expected, \
+            f"bank-boundary addr={addr}: expected 0x{expected:X}, got 0x{got:X}"
