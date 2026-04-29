@@ -13,7 +13,7 @@ module input_fifo #(
     output logic                  ready_o,
     output logic                  valid_o,
     output logic [DATA_WIDTH-1:0] data_o,
-    output logic [3:0] in_fifo_dbg // debug bus
+    output logic [3:0]            in_fifo_dbg // debug bus
 );
 
     localparam int FIFO_DEPTH_LOG2 = $clog2(FIFO_DEPTH);

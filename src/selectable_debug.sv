@@ -7,16 +7,21 @@
 //all connections are for SPECIFIC pins
 module selectable_debug (
     output [31:0] debug_bus,
-    input [10:0] class_dbg,
-    input [14:0] mac_dbg,
-    input [30:0] vox_bin_dbg,
-    input [11:0] decoder_dbg,
-    input [31:0] decoder_output,
-    input [3:0] in_fifo_dbg,
-    input [15:0] vox_core_debug,
-    input [31:0] score_A, score_B, score_C, score_D, fifo_in, fifo_out,
-    input [11:0] fsm_debug_bus,
-    input [3:0] debug_select
+    input [10:0]  class_dbg,
+    input [14:0]  mac_dbg,
+    input [30:0]  vox_bin_dbg,
+    input [11:0]  decoder_dbg,
+    input [31:0]  decoder_output,
+    input [3:0]   in_fifo_dbg,
+    input [15:0]  vox_core_debug,
+    input [31:0]  score_A,
+    input [31:0]  score_B,
+    input [31:0]  score_C,
+    input [31:0]  score_D,
+    input [31:0]  fifo_in,
+    input [31:0]  fifo_out,
+    input [11:0]  fsm_debug_bus,
+    input [3:0]   debug_select
 );
 
 //select debug page to connect to 32 bit debug interface

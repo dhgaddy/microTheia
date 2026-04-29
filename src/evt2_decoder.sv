@@ -28,7 +28,7 @@ module evt2_decoder #(
     output logic [$clog2(GRID_SIZE)-1:0] y_out,
     output logic                         event_valid,
     output logic                         evt_reads_done,
-    output logic [10:0]                   weight_addr_o,
+    output logic [10:0]                  weight_addr_o,
     output logic [WEIGHT_BITS-1:0]       weight_data_o,
     output logic [1:0]                   weight_sram_addr_o,
     output logic                         weight_event_valid,
