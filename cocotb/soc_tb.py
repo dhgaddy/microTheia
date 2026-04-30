@@ -19,7 +19,7 @@ except Exception:
 
 
 # Basic config
-MODULE = os.environ.get("TOPLEVEL", "system_package")
+MODULE = os.environ.get("TOPLEVEL", "soc")
 
 if load_config is not None:
     try:
@@ -193,7 +193,7 @@ def build_evt2_debug_page(page):
 def build_evt2_boot_req():
     """
     Build BOOT_REQ command word (type=0xC).
-    Triggers chip_flash_fsm: ST_BOOT -> ST_LOAD so weights/thresholds can be written.
+    Triggers control_fsm: ST_BOOT -> ST_LOAD so weights/thresholds can be written.
     """
     return (EVT_BOOT_REQ & 0xF) << 28
 
@@ -293,7 +293,7 @@ def build_boot_stream_words(weights, thresholds):
     Build the full SPI boot/programming stream.
 
     Order:
-        1. BOOT_REQ  — triggers chip_flash_fsm ST_BOOT -> ST_LOAD
+        1. BOOT_REQ  - triggers control_fsm ST_BOOT -> ST_LOAD
         2. all weight words
         3. all threshold upper/lower words
         4. EVT_READS_DONE
@@ -452,7 +452,7 @@ async def setup_system(dut):
     """
     Start chip clock and apply reset.
 
-    Current system_package top-level uses active-high rst.
+    Current soc top-level uses active-high rst.
     """
     dut._log.info(
         f"Starting chip clock: CLK_FREQ_HZ={CLK_FREQ_HZ}, "
@@ -467,7 +467,7 @@ async def setup_system(dut):
     dut.CS.value = 1
     dut.MOSI.value = 0
 
-    # system_package uses active-high rst.
+    # soc uses active-high rst.
     dut.rst.value = 1
 
     await ClockCycles(dut.clk, 16)
@@ -483,7 +483,7 @@ async def reset_system_no_new_clock(dut):
     Reset system without starting another clock.
     Used by multi-recording test.
 
-    Current system_package top-level uses active-high rst.
+    Current soc top-level uses active-high rst.
     """
     await NextTimeStep()
 
@@ -491,7 +491,7 @@ async def reset_system_no_new_clock(dut):
     dut.CS.value = 1
     dut.MOSI.value = 0
 
-    # system_package uses active-high rst.
+    # soc uses active-high rst.
     dut.rst.value = 1
 
     await ClockCycles(dut.clk, 16)
@@ -641,7 +641,7 @@ class GestureMonitor:
     """
     Tracks every gesture_valid pulse.
 
-    The gesture signals are internal signals inside system_package.
+    The gesture signals are internal signals inside soc.
     cocotb can usually see them because they are declared in the top module.
     """
 
@@ -875,10 +875,10 @@ async def read_classification_over_spi(dut):
 
 # Tests
 @logged_test()
-async def test_system_package_boot_stream_over_spi(dut):
+async def test_soc_boot_stream_over_spi(dut):
     """
     Sanity test:
-        1. Reset system_package.
+        1. Reset soc.
         2. Wait for spi_ready.
         3. Stream all weights over SPI.
         4. Stream all thresholds over SPI.
@@ -896,10 +896,10 @@ async def test_system_package_boot_stream_over_spi(dut):
 
 
 @logged_test()
-async def test_system_package_boot_then_stream_one_bin_file(dut):
+async def test_soc_boot_then_stream_one_bin_file(dut):
     """
     Full integration test:
-        1. Reset system_package.
+        1. Reset soc.
         2. Wait for spi_ready.
         3. Stream all weights/thresholds over SPI as EVT2 boot commands.
         4. Send EVT_READS_DONE.
@@ -979,7 +979,7 @@ async def test_system_package_boot_then_stream_one_bin_file(dut):
 
 
 @logged_test()
-async def test_system_package_boot_then_stream_all_bin_files(dut):
+async def test_soc_boot_then_stream_all_bin_files(dut):
     """
     Full four-file integration test.
 

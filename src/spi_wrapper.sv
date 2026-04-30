@@ -1,7 +1,7 @@
 `default_nettype none
-//just the spi module and control logic from system_package.sv
+//just the spi module and control logic from soc.sv
 //purpose is to enable testing of the spi interface independent of voxel_bin_core
-//also will help clean up system_package module
+//also will help clean up soc module
 
 module spi_wrapper #(
     parameter int DATA_WIDTH = 32

@@ -1,0 +1,29 @@
+====================================================
+ Running DUT=soc with CONFIG=voxel_default
+====================================================
+make[1]: Entering directory '/mnt/c/Users/jason/Documents/group-g-dalton'
+mkdir -p cocotb/sim_build/soc
+/usr/bin/iverilog -o cocotb/sim_build/soc/sim.vvp -s soc -g2012 -Psoc.CLK_FREQ_HZ=12000000 -Psoc.WINDOW_MS=1000 -Psoc.GRID_SIZE=16 -Psoc.NUM_BINS=8 -Psoc.READOUT_BINS=8 -Psoc.COUNTER_BITS=16 -Psoc.FIFO_DEPTH=256 -Psoc.DATA_WIDTH=32 -Psoc.SENSOR_WIDTH=320 -Psoc.SENSOR_HEIGHT=320 -Psoc.REQUIRE_TIME_HIGH=1 -Psoc.WEIGHT_BITS=8 -Psoc.NUM_CLASSES=4 -Psoc.SCORE_BITS=36 -f cocotb/sim_build/soc/cmds.f -s cocotb_iverilog_dump  src/verilog_spi/spi_module.v src/verilog_spi/pos_edge_det.v src/verilog_spi/neg_edge_det.v src/chip_core.sv src/control_fsm.sv src/evt2_decoder.sv src/gf180_sram_1r1w.sv src/input_fifo.sv src/selectable_debug.sv src/spi_wrapper.sv src/soc.sv src/voxel_bin_core.sv src/voxel_binning.sv src/voxel_gesture_classifier.sv src/voxel_mac_engine.sv  cocotb/sim_build/soc/cocotb_iverilog_dump.v
+rm -f results.xml
+COCOTB_TEST_MODULES=soc_tb COCOTB_TESTCASE= COCOTB_TEST_FILTER= COCOTB_TOPLEVEL=soc TOPLEVEL_LANG=verilog \
+         /usr/bin/vvp -M /home/jasonwaseq/.local/lib/python3.12/site-packages/cocotb/libs -m libcocotbvpi_icarus   cocotb/sim_build/soc/sim.vvp -fst
+     -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:93   in _embed_init_python              Using Python 3.12.4 interpreter at /usr/bin/python3
+     -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:79   in gpi_print_registered_impl       VPI registered
+     0.00ns INFO     cocotb                             Running on Icarus Verilog version 12.0 (stable)
+     0.00ns INFO     cocotb                             Seeding Python random module with 1777507680
+     0.00ns INFO     cocotb                             Initialized cocotb v2.0.1 from /home/jasonwaseq/.local/lib/python3.12/site-packages/cocotb
+     0.00ns INFO     cocotb.regression                  pytest not found, install it to enable better AssertionError messages
+     0.00ns INFO     cocotb                             Running tests
+     0.00ns INFO     cocotb.regression                  running soc_tb.test_soc_boot_stream_over_spi (1/3)
+                                                            Sanity test:
+[TEST START] test_soc_boot_stream_over_spi
+     0.00ns INFO     cocotb.soc                         Starting chip clock: CLK_FREQ_HZ=32000000, period=31250 ps (31.250 ns)
+     0.00ns WARNING  py.warnings                        /mnt/c/Users/jason/Documents/group-g-dalton/cocotb/soc_tb.py:441: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                          cocotb.start_soon(Clock(dut.clk, CHIP_PERIOD_PS, units="ps").start())
+  2093.75ns INFO     cocotb.soc                         spi_ready asserted after 0 clk cycles
+  2093.75ns INFO     cocotb.soc                         Boot stream contains 8210 words: BOOT_REQ + 4 classes * 2048 weights + 8 thresholds * 2 + READS_DONE
+  2093.75ns INFO     cocotb.soc                         boot_weights_thresholds_reads_done: streaming 8210 words over SPI mode 0, half_cycles=2, capture_miso=False
+  2343.75ns INFO     cocotb.soc                         boot_weights_thresholds_reads_done: word 0/8210 MOSI=0xC0000000
+4127343.75ns INFO     cocotb.soc                         boot_weights_thresholds_reads_done: word 1000/8210 MOSI=0x2007CE00
+8252343.75ns INFO     cocotb.soc                         boot_weights_thresholds_reads_done: word 2000/8210 MOSI=0x200F9E00
+12377343.75ns INFO     cocotb.soc                         boot_weights_thresholds_reads_done: word 3000/8210 MOSI=0x20076E80

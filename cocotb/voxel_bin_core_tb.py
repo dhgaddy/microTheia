@@ -73,7 +73,7 @@ LD_WAIT     = 3
 LD_DONE     = 4
 LD_FAIL     = 5
 
-# Must match chip_flash_fsm parameter PWR_WAIT_CYCLES
+# Must match control_fsm parameter PWR_WAIT_CYCLES
 PWR_WAIT_CYCLES = 1024
 
 # Special control words (pkt_type in bits [31:28])
@@ -1295,7 +1295,7 @@ async def test_mac_backpressure_holds_binner(dut):
 
 
 # ---------------------------------------------------------------------------
-# chip_flash_fsm integration tests
+# control_fsm integration tests
 # ---------------------------------------------------------------------------
 
 @logged_test()
