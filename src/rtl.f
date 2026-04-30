@@ -3,7 +3,7 @@ src/verilog_spi/pos_edge_det.v
 src/verilog_spi/neg_edge_det.v
 src/chip_core.sv
 src/control_fsm.sv
-# src/chip_top.sv
+src/chip_top.sv
 src/evt2_decoder.sv
 src/gf180_sram_1r1w.sv
 src/input_fifo.sv
