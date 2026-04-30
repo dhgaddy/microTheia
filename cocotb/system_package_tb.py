@@ -17,10 +17,8 @@ except Exception:
     load_config = None
 
 
-# ---------------------------------------------------------------------------
-# Basic config
-# ---------------------------------------------------------------------------
 
+# Basic config
 MODULE = os.environ.get("TOPLEVEL", "system_package")
 
 if load_config is not None:
@@ -49,9 +47,10 @@ CHIP_PERIOD_NS = CHIP_PERIOD_PS / 1000.0
 
 DATA_WIDTH = 32
 
-GRID_SIZE = int(CFG.get("GRID_SIZE", os.environ.get("GRID_SIZE", 16)))
+GRID_SIZE    = int(CFG.get("GRID_SIZE",    os.environ.get("GRID_SIZE",    16)))
 READOUT_BINS = int(CFG.get("READOUT_BINS", os.environ.get("READOUT_BINS", 8)))
-NUM_CLASSES = int(CFG.get("NUM_CLASSES", os.environ.get("NUM_CLASSES", 4)))
+NUM_CLASSES  = int(CFG.get("NUM_CLASSES",  os.environ.get("NUM_CLASSES",  4)))
+WINDOW_MS    = int(CFG.get("WINDOW_MS",    os.environ.get("WINDOW_MS",    1000)))
 SENSOR_WIDTH = int(CFG.get("SENSOR_WIDTH", os.environ.get("SENSOR_WIDTH", 320)))
 SENSOR_HEIGHT = int(CFG.get("SENSOR_HEIGHT", os.environ.get("SENSOR_HEIGHT", SENSOR_WIDTH)))
 
@@ -87,10 +86,8 @@ EXPECTED_BIN_FILE_CLASS = {
 }
 
 
-# ---------------------------------------------------------------------------
-# EVT2 packet type encodings
-# ---------------------------------------------------------------------------
 
+# EVT2 packet type encodings
 EVT_CD_OFF = 0x0
 EVT_CD_ON = 0x1
 
@@ -113,10 +110,8 @@ EVT_BOOT_REQ   = 0xC
 EVT_READS_DONE = 0xF
 
 
-# ---------------------------------------------------------------------------
-# EVT2 boot/program word builders
-# ---------------------------------------------------------------------------
 
+# EVT2 boot/program word builders
 def build_evt2_weight(weight, feature_addr, class_id):
     """
     Build one EVT_WEIGHT command word.
@@ -212,10 +207,7 @@ def build_evt2_time_high(payload):
     return ((EVT_TIME_HIGH & 0xF) << 28) | (int(payload) & 0x0FFFFFFF)
 
 
-# ---------------------------------------------------------------------------
 # File loading helpers
-# ---------------------------------------------------------------------------
-
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -307,6 +299,37 @@ def build_boot_stream_words(weights, thresholds):
         4. EVT_READS_DONE
     """
     words = [build_evt2_boot_req()]
+
+    for class_id in range(NUM_CLASSES):
+        for feature_addr in range(FEATURE_COUNT):
+            words.append(
+                build_evt2_weight(
+                    weight=weights[class_id][feature_addr],
+                    feature_addr=feature_addr,
+                    class_id=class_id,
+                )
+            )
+
+    for threshold_addr, threshold_value in enumerate(thresholds):
+        words.append(build_evt2_thresh_upper(threshold_value, threshold_addr))
+        words.append(build_evt2_thresh_lower(threshold_value, threshold_addr))
+
+    words.append(build_evt2_reads_done())
+
+    return words
+
+
+def build_program_stream_words(weights, thresholds):
+    """
+    Build the SPI programming stream after BOOT_REQ has been accepted and the
+    core FSM has asserted evt_ld_en.
+
+    Order:
+        1. all weight words
+        2. all threshold upper/lower words
+        3. EVT_READS_DONE
+    """
+    words = []
 
     for class_id in range(NUM_CLASSES):
         for feature_addr in range(FEATURE_COUNT):
@@ -423,10 +446,8 @@ def _read_evt2_bin(path):
     return words
 
 
-# ---------------------------------------------------------------------------
-# SPI mode 0 helpers
-# ---------------------------------------------------------------------------
 
+# SPI mode 0 helpers
 async def setup_system(dut):
     """
     Start chip clock and apply reset.
@@ -615,10 +636,7 @@ def expected_miso_from_classification(gesture, confidence):
     return classification << (DATA_WIDTH - 3)
 
 
-# ---------------------------------------------------------------------------
 # Internal gesture monitor
-# ---------------------------------------------------------------------------
-
 class GestureMonitor:
     """
     Tracks every gesture_valid pulse.
@@ -649,23 +667,58 @@ class GestureMonitor:
 
 
 async def wait_for_monitor_count(dut, monitor, min_count=1, max_cycles=2_000_000):
+    class_valid_seen = 0
+    class_pass_seen = 0
+
     for _ in range(max_cycles):
         await RisingEdge(dut.clk)
+
+        if _read_sig(dut, "u_core.class_valid") == 1:
+            class_valid_seen += 1
+        if _read_sig(dut, "u_core.class_pass") == 1:
+            class_pass_seen += 1
 
         if monitor.count >= min_count:
             return
 
+    await log_pipeline_state(dut, "gesture-timeout")
+
     raise AssertionError(
         f"Timed out waiting for gesture monitor count >= {min_count}. "
-        f"Current count={monitor.count}"
+        f"Current count={monitor.count}; "
+        f"class_valid_seen={class_valid_seen}; class_pass_seen={class_pass_seen}"
     )
+
+
+def _read_sig(handle, name):
+    """Read a signal by dotted path from a cocotb handle; return int or '?'."""
+    try:
+        parts = name.split(".")
+        obj = handle
+        for p in parts:
+            obj = getattr(obj, p)
+        return int(obj.value)
+    except Exception:
+        return "?"
 
 
 async def wait_after_reads_done(dut):
     """
     Gives the boot/program FSM time to settle after EVT_READS_DONE.
+    Logs FSM + pipeline state so failures are easier to diagnose.
     """
     await ClockCycles(dut.clk, 100)
+
+    core_rst    = _read_sig(dut, "u_core.core_rst_o")
+    boot_done   = _read_sig(dut, "u_core.boot_done_o")
+    main_state  = _read_sig(dut, "u_core.main_state_dbg_o")
+    load_state  = _read_sig(dut, "u_core.load_state_dbg_o")
+    evt_ld_en   = _read_sig(dut, "u_core.evt_ld_en")
+
+    dut._log.info(
+        f"POST-BOOT FSM: core_rst_o={core_rst} boot_done_o={boot_done} "
+        f"main_state={main_state} load_state={load_state} evt_ld_en={evt_ld_en}"
+    )
 
     try:
         dut._log.info(f"debug_bus after READS_DONE = 0x{int(dut.debug_bus.value):08X}")
@@ -673,10 +726,53 @@ async def wait_after_reads_done(dut):
         pass
 
 
-# ---------------------------------------------------------------------------
-# Higher-level system helpers
-# ---------------------------------------------------------------------------
+async def wait_for_evt_ld_en(dut, max_cycles=5000):
+    """
+    Wait for the internal boot/program FSM to enter its load window.
 
+    Weight/threshold EVT2 words are intentionally ignored until evt_ld_en is
+    high, so programming must not begin immediately after BOOT_REQ.
+    """
+    for cycle in range(max_cycles):
+        await RisingEdge(dut.clk)
+
+        if _read_sig(dut, "u_core.evt_ld_en") == 1:
+            dut._log.info(f"evt_ld_en asserted after BOOT_REQ at +{cycle} clk cycles")
+            return
+
+    core_rst   = _read_sig(dut, "u_core.core_rst_o")
+    boot_done  = _read_sig(dut, "u_core.boot_done_o")
+    main_state = _read_sig(dut, "u_core.main_state_dbg_o")
+    load_state = _read_sig(dut, "u_core.load_state_dbg_o")
+
+    raise AssertionError(
+        "Timed out waiting for evt_ld_en after BOOT_REQ: "
+        f"core_rst_o={core_rst} boot_done_o={boot_done} "
+        f"main_state={main_state} load_state={load_state}"
+    )
+
+
+async def log_pipeline_state(dut, tag=""):
+    """Snapshot key pipeline signals for diagnostic logging."""
+    core_rst   = _read_sig(dut, "u_core.core_rst_o")
+    evt_count  = _read_sig(dut, "u_core.debug_event_count")
+    fwr        = _read_sig(dut, "u_core.feature_window_ready")
+    cap        = _read_sig(dut, "u_core.capture_active")
+    mac_busy   = _read_sig(dut, "u_core.mac_busy")
+    score_a    = _read_sig(dut, "u_core.score_A")
+    score_b    = _read_sig(dut, "u_core.score_B")
+    score_c    = _read_sig(dut, "u_core.score_C")
+    score_d    = _read_sig(dut, "u_core.score_D")
+
+    dut._log.info(
+        f"PIPELINE{(' ' + tag) if tag else ''}: "
+        f"core_rst={core_rst} evt_count={evt_count} "
+        f"fwr={fwr} cap={cap} mac_busy={mac_busy} "
+        f"scores=[{score_a},{score_b},{score_c},{score_d}]"
+    )
+
+
+# Higher-level system helpers
 async def boot_core_over_spi(dut):
     """
     Load all weights and thresholds over SPI using EVT2 boot command words.
@@ -684,18 +780,28 @@ async def boot_core_over_spi(dut):
     weights = load_weights_from_mem()
     thresholds = load_thresholds()
 
-    boot_words = build_boot_stream_words(weights, thresholds)
+    program_words = build_program_stream_words(weights, thresholds)
 
     dut._log.info(
-        f"Boot stream contains {len(boot_words)} words: "
-        f"BOOT_REQ + {NUM_CLASSES} classes * {FEATURE_COUNT} weights + "
+        f"Boot/program stream contains {1 + len(program_words)} words: "
+        f"BOOT_REQ, wait for evt_ld_en, then "
+        f"{NUM_CLASSES} classes * {FEATURE_COUNT} weights + "
         f"{len(thresholds)} thresholds * 2 + READS_DONE"
     )
 
     await spi_mode0_stream_words(
         dut,
-        boot_words,
-        tag="boot_weights_thresholds_reads_done",
+        [build_evt2_boot_req()],
+        tag="boot_req",
+        capture_miso=False,
+    )
+
+    await wait_for_evt_ld_en(dut)
+
+    await spi_mode0_stream_words(
+        dut,
+        program_words,
+        tag="weights_thresholds_reads_done",
         capture_miso=False,
     )
 
@@ -704,8 +810,39 @@ async def boot_core_over_spi(dut):
     return weights, thresholds
 
 
+def _append_bin_flush_events(words, readout_bins, window_ms):
+    """
+    Append synthetic TIME_HIGH + CD_OFF pairs after the recording.
+
+    voxel_binning fires its first readout only after `readout_bins` bin
+    rollovers have occurred.  Each rollover is triggered by an incoming CD
+    event whose timestamp crosses a bin boundary.  Short recordings may lack
+    the final few microseconds needed, so we pad with synthetic events spaced
+    one BIN_DURATION_US apart.  Each event can trigger at most one rollover.
+    Adding `readout_bins + 1` events guarantees the required count regardless
+    of how many the recording itself covered.
+    """
+    bin_duration_us = (window_ms * 1000) // readout_bins
+
+    # Find the last TIME_HIGH value in the recording.
+    last_th_reg = 0
+    for w in words:
+        if (w >> 28) == 0x8:
+            last_th_reg = w & 0x0FFFFFFF
+
+    for i in range(1, readout_bins + 2):
+        ts_us    = last_th_reg * 64 + i * bin_duration_us
+        th_val   = (ts_us >> 6) & 0x0FFFFFFF
+        ts_lsb   = ts_us & 0x3F
+        words.append((0x8 << 28) | th_val)                               # TIME_HIGH
+        words.append((0x0 << 28) | (ts_lsb << 22) | (160 << 11) | 160)  # CD_OFF (160,160)
+
+    return words
+
+
 async def stream_bin_recording_over_spi(dut, bin_path):
     words = _read_evt2_bin(bin_path)
+    words = _append_bin_flush_events(list(words), READOUT_BINS, WINDOW_MS)
 
     dut._log.info(
         f"Streaming EVT2 recording {bin_path} over SPI: {len(words)} words"
@@ -736,11 +873,7 @@ async def read_classification_over_spi(dut):
 
     return miso
 
-
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
-
 @logged_test()
 async def test_system_package_boot_stream_over_spi(dut):
     """
@@ -798,8 +931,14 @@ async def test_system_package_boot_then_stream_one_bin_file(dut):
 
     await stream_bin_recording_over_spi(dut, bin_path)
 
+    # Snapshot pipeline state immediately after stream ends.
+    await log_pipeline_state(dut, "post-stream")
+
     # Let any final pipeline/classification pulse happen after the stream.
-    await ClockCycles(dut.clk, 500)
+    # 5000 cycles: enough for readout (2049 cyc) + MAC (2050 cyc) + classifier.
+    await ClockCycles(dut.clk, 5000)
+
+    await log_pipeline_state(dut, "post-drain")
 
     await wait_for_monitor_count(dut, monitor, min_count=1)
 
