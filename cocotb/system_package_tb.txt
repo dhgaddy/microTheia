@@ -1,0 +1,4 @@
+====================================================
+ Running DUT=system_package with CONFIG=voxel_default
+====================================================
+make[1]: Entering directory '/mnt/c/Users/jason/Documents/group-g-dalton'

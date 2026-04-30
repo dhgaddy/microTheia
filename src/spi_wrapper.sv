@@ -16,6 +16,7 @@ module spi_wrapper #(
     // received word stream into chip
     output logic [DATA_WIDTH-1:0] evt_word,
     output logic                  evt_word_valid,
+    input  wire                   evt_word_ready_i,
     // classification result from chip
     input  wire [1:0] gesture,
     input  wire       gesture_valid,
@@ -30,6 +31,7 @@ module spi_wrapper #(
     logic processing_word;
     logic process_next_word;
     logic processing_word_d;
+    logic word_held;
     logic CS_d, request_next, spi_abort_rst, spi_do_rst;
     assign spi_do_rst = rst | spi_abort_rst;
 
@@ -58,6 +60,7 @@ always_ff @(posedge clk) begin
     if (rst) begin
         evt_word              <= '0;
         evt_word_valid        <= 1'b0;
+        word_held             <= 1'b0;
         process_next_word     <= 1'b0;
         processing_word_d     <= 1'b0;
         classification_output <= '0;
@@ -66,10 +69,14 @@ always_ff @(posedge clk) begin
     end else begin
         CS_d <= CS;
 
-        // pull down signals that should be pulsed for one cycle only after triggering
-        evt_word_valid    <= 1'b0;
         process_next_word <= 1'b0;
         spi_abort_rst     <= 1'b0;
+
+        // Release hold when downstream FIFO accepts the word
+        if (evt_word_valid && evt_word_ready_i) begin
+            evt_word_valid <= 1'b0;
+            word_held      <= 1'b0;
+        end
 
         // If CS rises while the SPI IP still processing, then master aborted
         // a partial word and we should dump it. resetting the SPI IP so the next transaction starts clean
@@ -81,18 +88,19 @@ always_ff @(posedge clk) begin
         end else begin
             processing_word_d <= processing_word;
 
-            // detect word completion
-            if (processing_word_d && !processing_word) begin
+            // detect word completion — hold valid high until FIFO accepts
+            if (processing_word_d && !processing_word && !word_held) begin
                 evt_word       <= word_in;
                 evt_word_valid <= 1'b1;
+                word_held      <= 1'b1;
             end
 
-            // request next word only during active CS-low transaction
-            if (!processing_word && !CS) begin
+            // request next word only during active CS-low and when not holding a word
+            if (!processing_word && !CS && !word_held) begin
                 process_next_word <= 1'b1;
             end
         end
-            
+
         if (gesture_valid) begin
             classification_output <= {gesture_confidence, gesture};
         end

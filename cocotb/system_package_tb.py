@@ -95,7 +95,7 @@ EVT_CD_OFF = 0x0
 EVT_CD_ON = 0x1
 
 # Weight:
-# [4 bit type], [8 bit weight], [9 bit address], [4 bit sram address], [7 don't care]
+# [4 bit type], [8 bit weight], [11 bit feature_addr], [2 bit class_id], [7 don't care]
 EVT_WEIGHT = 0x2
 
 # Threshold:
@@ -109,6 +109,7 @@ EVT_TIME_HIGH = 0x8
 # [4 bit type], [4 bit page select], [24 don't care]
 DEBUG_PAGE = 0xE
 
+EVT_BOOT_REQ   = 0xC
 EVT_READS_DONE = 0xF
 
 
@@ -120,32 +121,18 @@ def build_evt2_weight(weight, feature_addr, class_id):
     """
     Build one EVT_WEIGHT command word.
 
-    Layout:
-        [31:28] type        = 0x2
-        [27:20] weight      = 8-bit weight
-        [19:11] local addr  = 9-bit local feature address
-        [10:7]  sram addr   = 4-bit SRAM selector
-        [6:0]   don't care  = 0
-
-    Assumption:
-        feature_addr is 0..2047 for each class.
-        local_addr = feature_addr[8:0]
-        bank       = feature_addr[10:9]
-        sram_addr  = {class_id[1:0], bank[1:0]}
+    Layout (matches evt2_decoder.sv):
+        [31:28] type         = 0x2
+        [27:20] weight       = 8-bit weight value
+        [19:9]  feature_addr = 11-bit address within class SRAM (0..2047)
+        [8:7]   class_id     = 2-bit SRAM selector (0..3)
+        [6:0]   don't care   = 0
     """
-    feature_addr = int(feature_addr)
-    class_id = int(class_id)
-
-    local_addr = feature_addr & 0x1FF
-    bank = (feature_addr >> 9) & 0x3
-
-    sram_addr = ((class_id & 0x3) << 2) | bank
-
     return (
         ((EVT_WEIGHT & 0xF) << 28)
         | ((int(weight) & 0xFF) << 20)
-        | ((local_addr & 0x1FF) << 11)
-        | ((sram_addr & 0xF) << 7)
+        | ((int(feature_addr) & 0x7FF) << 9)
+        | ((int(class_id) & 0x3) << 7)
     )
 
 
@@ -206,6 +193,14 @@ def build_evt2_debug_page(page):
         [23:0]  don't care
     """
     return ((DEBUG_PAGE & 0xF) << 28) | ((int(page) & 0xF) << 24)
+
+
+def build_evt2_boot_req():
+    """
+    Build BOOT_REQ command word (type=0xC).
+    Triggers chip_flash_fsm: ST_BOOT -> ST_LOAD so weights/thresholds can be written.
+    """
+    return (EVT_BOOT_REQ & 0xF) << 28
 
 
 def build_evt2_time_high(payload):
@@ -306,11 +301,12 @@ def build_boot_stream_words(weights, thresholds):
     Build the full SPI boot/programming stream.
 
     Order:
-        1. all weight words
-        2. all threshold upper/lower words
-        3. EVT_READS_DONE
+        1. BOOT_REQ  — triggers chip_flash_fsm ST_BOOT -> ST_LOAD
+        2. all weight words
+        3. all threshold upper/lower words
+        4. EVT_READS_DONE
     """
-    words = []
+    words = [build_evt2_boot_req()]
 
     for class_id in range(NUM_CLASSES):
         for feature_addr in range(FEATURE_COUNT):
@@ -692,7 +688,7 @@ async def boot_core_over_spi(dut):
 
     dut._log.info(
         f"Boot stream contains {len(boot_words)} words: "
-        f"{NUM_CLASSES} classes * {FEATURE_COUNT} weights + "
+        f"BOOT_REQ + {NUM_CLASSES} classes * {FEATURE_COUNT} weights + "
         f"{len(thresholds)} thresholds * 2 + READS_DONE"
     )
 
