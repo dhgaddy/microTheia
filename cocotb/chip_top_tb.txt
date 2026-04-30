@@ -1,8 +1,8 @@
-cd cocotb; PDK=gf180mcuD SLOT=1x1 python3 chip_top_tb.py
+cd cocotb; PDK_ROOT=/mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD PDK=gf180mcuD SLOT=1x1 python3 chip_top_tb.py
      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:93   in _embed_init_python              Using Python 3.12.4 interpreter at /usr/bin/python3
      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:79   in gpi_print_registered_impl       VPI registered
      0.00ns INFO     cocotb                             Running on Icarus Verilog version 12.0 (stable)
-     0.00ns INFO     cocotb                             Seeding Python random module with 1777589700
+     0.00ns INFO     cocotb                             Seeding Python random module with 1777592711
      0.00ns INFO     cocotb                             Initialized cocotb v2.0.1 from /home/jasonwaseq/.local/lib/python3.12/site-packages/cocotb
      0.00ns INFO     cocotb.regression                  pytest not found, install it to enable better AssertionError messages
      0.00ns INFO     cocotb                             Running tests
@@ -61,13 +61,12 @@ cd cocotb; PDK=gf180mcuD SLOT=1x1 python3 chip_top_tb.py
  77781.25ns INFO     cocotb.regression                  *****************************************************************************************************
                                                         ** TEST                                         STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **
                                                         *****************************************************************************************************
-                                                        ** chip_top_tb.test_reset_and_spi_ready          PASS        2093.75           0.05      39441.75  **
-                                                        ** chip_top_tb.test_default_spi_boot_and_miso    PASS       12218.75           0.06     202926.76  **
-                                                        ** chip_top_tb.test_debug_page_sweep             PASS       32781.25           0.18     186743.44  **
-                                                        ** chip_top_tb.test_alt_input_mode_toggle        PASS       17468.75           0.10     180378.60  **
-                                                        ** chip_top_tb.test_alt_input_mode_toggle_back   PASS       13218.75           0.07     177867.57  **
+                                                        ** chip_top_tb.test_reset_and_spi_ready          PASS        2093.75           0.04      46534.60  **
+                                                        ** chip_top_tb.test_default_spi_boot_and_miso    PASS       12218.75           0.05     229970.48  **
+                                                        ** chip_top_tb.test_debug_page_sweep             PASS       32781.25           0.15     216867.31  **
+                                                        ** chip_top_tb.test_alt_input_mode_toggle        PASS       17468.75           0.08     231850.03  **
+                                                        ** chip_top_tb.test_alt_input_mode_toggle_back   PASS       13218.75           0.07     184045.28  **
                                                         *****************************************************************************************************
-                                                        ** TESTS=5 PASS=5 FAIL=0 SKIP=0                             77781.25           0.49     157475.96  **
+                                                        ** TESTS=5 PASS=5 FAIL=0 SKIP=0                             77781.25           0.42     183545.63  **
                                                         *****************************************************************************************************
 FST info: dumpfile /mnt/c/Users/jason/Documents/microTheia/cocotb/sim_build/chip_top.fst opened for output.
-[chip_top_tb] PDK not found at /home/jasonwaseq/.ciel/gf180mcuD; using sim/io_stubs.v

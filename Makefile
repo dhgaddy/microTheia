@@ -3,7 +3,7 @@ MAKEFILE_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 RUN_TAG = $(shell ls librelane/runs/ | tail -n 1)
 TOP = voxel_bin_top
 
-PDK_ROOT ?= $(MAKEFILE_DIR)/dependencies/pdks
+PDK_ROOT ?= $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD
 PDK ?= gf180mcuD
 PDK_TAG ?= 1.8.0
 SCL ?= gf180mcu_as_sc_mcu7t3v3
@@ -178,7 +178,7 @@ sim-all: ## Test all the modules against Makefile compile args
 .PHONY: sim-all
 
 sim-chip-top: ## Run chip_top RTL simulation with cocotb (uses Python runner; PDK optional)
-	cd cocotb; PDK=${PDK} SLOT=${SLOT} python3 chip_top_tb.py
+	cd cocotb; PDK_ROOT=${PDK_ROOT} PDK=${PDK} SLOT=${SLOT} python3 chip_top_tb.py
 .PHONY: sim-chip-top
 
 sim-gl: ## Run gate-level simulation with cocotb (after copy-final)
