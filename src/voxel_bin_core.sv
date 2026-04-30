@@ -217,7 +217,7 @@ module voxel_bin_core #(
     // ------------------------------------------------------------------
     // Controller FSM
     // ------------------------------------------------------------------    
-    chip_flash_fsm controller_fsm (
+    control_fsm controller_fsm (
         .clk               (clk),
         .rst_n             (~rst),
         .boot_req_i        (boot_req_o), //output from decoder BOOT_REQ word

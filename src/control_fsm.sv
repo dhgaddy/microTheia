@@ -1,4 +1,4 @@
-module chip_flash_fsm #(
+module control_fsm #(
     parameter int unsigned PWR_WAIT_CYCLES = 1024
 ) (
     input  logic clk,

@@ -5,7 +5,7 @@
 //cleaned up top level packaging of entire voxel binning -> classification system
 //TODO: remove deprecated ports from voxel_bin_core module that are not present here
 //using the third party SPI introduces some extra latency cycles because it is strongly transaction oriented
-module system_package #(
+module soc #(
     parameter int CLK_FREQ_HZ          = 32_000_000,
     parameter int WINDOW_MS            = 1000,
     parameter int GRID_SIZE            = 16,
