@@ -144,7 +144,7 @@ sim: ## Run RTL simulation with cocotb
 		fi; \
 		rm -rf cocotb/sim_build/$$d; \
 		\
-		SRCS=$$(grep -v '^[[:space:]]*$$' src/rtl.f | grep -v '^[[:space:]]*#' | tr '\n' ' '); \
+		SRCS=$$(grep -v '^[[:space:]]*$$' src/rtl.f | grep -v '^[[:space:]]*#' | tr -d '\r' | tr '\n' ' '); \
 		\
 		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
 		export SIM_CONFIG=$(CONFIG_FILE); \

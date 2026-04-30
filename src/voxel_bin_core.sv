@@ -33,7 +33,7 @@ module voxel_bin_core #(
     // Event stream in
     input  logic [31:0] evt_word,
     input  logic        evt_word_valid,
-    // output logic        evt_word_ready,
+    output logic        evt_word_ready,
 
     // Gesture outputs
     output logic [1:0]  gesture,
@@ -58,6 +58,8 @@ module voxel_bin_core #(
     logic        fifo_out_valid;
     logic        fifo_out_ready;
     logic [31:0] fifo_out_data;
+
+    logic [7:0] debug_event_count;
     
     //FSM wires
     logic boot_req_o;
@@ -137,9 +139,6 @@ module voxel_bin_core #(
     assign weight_wr_valid_gated = dec_weight_event_valid && evt_ld_en; //enables srams to be written to when in load state and the READ_DONE word not sent
     assign thresh_wr_valid_gated = dec_thresh_event_valid && evt_ld_en;
 
-    // FIFO ready (driven by input_fifo.ready_o)
-    logic        evt_word_ready;
-
     // Debug Bus Wires
     logic [31:0] debug_bus;
     logic [10:0] class_dbg;
@@ -161,7 +160,6 @@ module voxel_bin_core #(
     logic        debug_feature_window_ready;
     logic        debug_capture_active;
     logic        debug_score_busy;
-    logic [7:0]  debug_event_count;
 
     // mac_start fires when a feature window is ready and the engine is idle
     assign mac_start = feature_window_ready && !mac_busy;

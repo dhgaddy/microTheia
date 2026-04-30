@@ -53,6 +53,7 @@ module system_package #(
         .MISO               (MISO),
         .evt_word           (evt_word),
         .evt_word_valid     (evt_word_valid),
+        .evt_word_ready_i   (evt_word_ready),
         .gesture            (gesture),
         .gesture_valid      (gesture_valid),
         .gesture_confidence (gesture_confidence),
@@ -78,6 +79,7 @@ module system_package #(
         .rst                        (rst),
         .evt_word                   (evt_word),
         .evt_word_valid             (evt_word_valid),
+        .evt_word_ready             (evt_word_ready),
         .gesture                    (gesture), //2 bits to support 4 classes/gestures
         .gesture_valid              (gesture_valid), //1 bit
         .gesture_confidence         (gesture_confidence), // 1 bit 

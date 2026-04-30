@@ -33,13 +33,13 @@ def logged_test(*test_args, **test_kwargs):
             try:
                 await func(dut, *args, **kwargs)
             except Exception as exc:
-                sim_time_ns = float(get_sim_time(unit="ns"))
+                sim_time_ns = float(get_sim_time(units="ns"))
                 print(
                     _color(f"[TEST FAIL] {test_name} @ {sim_time_ns:.3f} ns ({exc})", _ANSI_RED),
                     flush=True,
                 )
                 raise
-            sim_time_ns = float(get_sim_time(unit="ns"))
+            sim_time_ns = float(get_sim_time(units="ns"))
             print(_color(f"[TEST PASS] {test_name} @ {sim_time_ns:.3f} ns", _ANSI_GREEN), flush=True)
 
         return wrapped

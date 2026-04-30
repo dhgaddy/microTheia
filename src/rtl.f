@@ -1,4 +1,6 @@
-# src/verilog_spi/spi_module.sv
+src/verilog_spi/spi_module.v
+src/verilog_spi/pos_edge_det.v
+src/verilog_spi/neg_edge_det.v
 src/chip_core_b.sv
 src/chip_core.sv
 src/chip_flash_fsm.sv
