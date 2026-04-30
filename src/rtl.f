@@ -8,7 +8,7 @@ src/evt2_decoder.sv
 src/gf180_sram_1r1w.sv
 src/input_fifo.sv
 src/selectable_debug.sv
-# src/slot_defines.svh
+src/slot_defines.svh
 src/spi_wrapper.sv
 src/soc.sv
 src/voxel_bin_core.sv
