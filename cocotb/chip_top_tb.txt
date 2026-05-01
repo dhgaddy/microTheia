@@ -1,8 +1,8 @@
-cd cocotb; PDK_ROOT=/mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD PDK=gf180mcuD SLOT=1x1 python3 chip_top_tb.py
+cd cocotb; LD_LIBRARY_PATH="" PDK_ROOT=/mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD PDK=gf180mcuD SLOT=1x1 python3 chip_top_tb.py
      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:93   in _embed_init_python              Using Python 3.12.4 interpreter at /usr/bin/python3
      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:79   in gpi_print_registered_impl       VPI registered
      0.00ns INFO     cocotb                             Running on Icarus Verilog version 12.0 (stable)
-     0.00ns INFO     cocotb                             Seeding Python random module with 1777602511
+     0.00ns INFO     cocotb                             Seeding Python random module with 1777603463
      0.00ns INFO     cocotb                             Initialized cocotb v2.0.1 from /home/jasonwaseq/.local/lib/python3.12/site-packages/cocotb
      0.00ns INFO     cocotb.regression                  pytest not found, install it to enable better AssertionError messages
      0.00ns INFO     cocotb                             Running tests
@@ -61,12 +61,12 @@ cd cocotb; PDK_ROOT=/mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf
  77781.25ns INFO     cocotb.regression                  *****************************************************************************************************
                                                         ** TEST                                         STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **
                                                         *****************************************************************************************************
-                                                        ** chip_top_tb.test_reset_and_spi_ready          PASS        2093.75           0.05      45851.86  **
-                                                        ** chip_top_tb.test_default_spi_boot_and_miso    PASS       12218.75           0.06     196556.47  **
-                                                        ** chip_top_tb.test_debug_page_sweep             PASS       32781.25           0.18     186442.36  **
-                                                        ** chip_top_tb.test_alt_input_mode_toggle        PASS       17468.75           0.11     163144.30  **
-                                                        ** chip_top_tb.test_alt_input_mode_toggle_back   PASS       13218.75           0.07     189656.61  **
+                                                        ** chip_top_tb.test_reset_and_spi_ready          PASS        2093.75           0.05      45796.63  **
+                                                        ** chip_top_tb.test_default_spi_boot_and_miso    PASS       12218.75           0.07     185108.55  **
+                                                        ** chip_top_tb.test_debug_page_sweep             PASS       32781.25           0.26     127345.12  **
+                                                        ** chip_top_tb.test_alt_input_mode_toggle        PASS       17468.75           0.09     196123.66  **
+                                                        ** chip_top_tb.test_alt_input_mode_toggle_back   PASS       13218.75           0.08     169548.74  **
                                                         *****************************************************************************************************
-                                                        ** TESTS=5 PASS=5 FAIL=0 SKIP=0                             77781.25           0.49     158736.09  **
+                                                        ** TESTS=5 PASS=5 FAIL=0 SKIP=0                             77781.25           0.57     136738.04  **
                                                         *****************************************************************************************************
 FST info: dumpfile /mnt/c/Users/jason/Documents/microTheia/cocotb/sim_build/chip_top.fst opened for output.

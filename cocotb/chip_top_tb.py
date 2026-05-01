@@ -98,7 +98,7 @@ class InputPins:
 # ── Low-level helpers ─────────────────────────────────────────────────────────
 
 async def _start_clock(dut):
-    cocotb.start_soon(Clock(dut.clk_PAD, CHIP_PERIOD_PS, unit="ps").start())
+    cocotb.start_soon(Clock(dut.clk_PAD, CHIP_PERIOD_PS, "ps").start())
 
 
 async def _reset(dut, pins, hold_cycles=16):

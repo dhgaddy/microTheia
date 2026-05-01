@@ -129,7 +129,7 @@ class InputFifoModel:
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk_i, 10, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk_i, 10, "ns").start())
     dut.reset_i.value = 1
     dut.valid_i.value = 0
     dut.data_i.value = 0

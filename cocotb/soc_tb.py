@@ -459,7 +459,7 @@ async def setup_system(dut):
         f"period={CHIP_PERIOD_PS} ps ({CHIP_PERIOD_NS:.3f} ns)"
     )
 
-    cocotb.start_soon(Clock(dut.clk, CHIP_PERIOD_PS, units="ps").start())
+    cocotb.start_soon(Clock(dut.clk, CHIP_PERIOD_PS, "ps").start())
 
     await NextTimeStep()
 

@@ -26,7 +26,7 @@ SPI_HALF_CHIP_CYCLES_DEFAULT = 4
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, CHIP_PERIOD_NS, unit="ns").start())
+    cocotb.start_soon(Clock(dut.clk, CHIP_PERIOD_NS, "ns").start())
 
     await NextTimeStep()
 
