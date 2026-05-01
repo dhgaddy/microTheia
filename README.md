@@ -9,6 +9,7 @@ Make sure Git and Git LFS are installed.
 ```bash
 git clone git@github.com:MrPoloGit/group-g.git
 cd group-g
+git submodule update --init --recursive
 git lfs pull
 ```
 

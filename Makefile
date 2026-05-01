@@ -43,6 +43,10 @@ CONFIG_FILE := configs/$(CONFIG).txt
 # iCE40 FPGA Flow Wrapper
 ICE40_MAKEFILE := ice40/ice40.mk
 
+# Default testbench module name is <DUT>_tb, but you can override it:
+# Example: make sim DUT=voxel_bin_core_parallel TB=voxel_bin_core
+TB ?= $(DUT)
+
 all: librelane ## Build the project (runs LibreLane)
 .PHONY: all
 
@@ -124,41 +128,37 @@ lint: ## Lint all SystemVerilog files in src
 	          $(SV_SRCS)
 .PHONY: lint
 
-# Default testbench module name is <DUT>_tb, but you can override it:
-# Example: make sim DUT=voxel_bin_core_parallel TB=voxel_bin_core
-TB ?= $(DUT)
-
-sim: ## Run RTL simulation with cocotb
+sim: ## Run RTL simulation with cocotb (DUT=chip_top runs chip_top tb)
 	@if [ -z "$(DUT)" ]; then \
 		echo "Error: You must specify DUT=<module_name>"; \
 		echo "Example: make sim DUT=voxel_bin_top"; \
 		exit 1; \
-	fi; \
-	for d in $(SIM_DUTS); do \
-		echo "===================================================="; \
-		echo " Running DUT=$$d with CONFIG=$(CONFIG)"; \
-		echo "===================================================="; \
-		if [ ! -f "cocotb/$(TB)_tb.py" ]; then \
-			echo "Skipping $$d (no testbench found: cocotb/$(TB)_tb.py)"; \
-			continue; \
-		fi; \
-		rm -rf cocotb/sim_build/$$d; \
-		\
-		SRCS=$$(grep -v '^[[:space:]]*$$' src/rtl.f | grep -v '^[[:space:]]*#' | tr -d '\r' | tr '\n' ' '); \
-		\
-		PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
-		export SIM_CONFIG=$(CONFIG_FILE); \
-		\
-		TOPLEVEL=$$d \
-		TOPLEVEL_LANG=verilog \
-		COCOTB_TEST_MODULES=$(TB)_tb \
-		VERILOG_SOURCES="$$SRCS" \
-		COMPILE_ARGS="$$PARAMS" \
-		WAVES=1 \
-		SIM_BUILD=cocotb/sim_build/$$d \
-		PYTHONPATH=cocotb \
-		make -f $$(cocotb-config --makefiles)/Makefile.sim results.xml; \
-	done
+	elif [ "$(DUT)" = "chip_top" ]; then \
+		$(MAKE) sim-chip-top; \
+	else \
+		for d in $(SIM_DUTS); do \
+			echo "===================================================="; \
+			echo " Running DUT=$$d with CONFIG=$(CONFIG)"; \
+			echo "===================================================="; \
+			if [ ! -f "cocotb/$(TB)_tb.py" ]; then \
+				echo "Skipping $$d (no testbench found: cocotb/$(TB)_tb.py)"; \
+				continue; \
+			fi; \
+			rm -rf cocotb/sim_build/$$d; \
+			SRCS=$$(grep -v '^[[:space:]]*$$' src/rtl.f | grep -v '^[[:space:]]*#' | tr -d '\r' | tr '\n' ' '); \
+			PARAMS=$$(PYTHONPATH=cocotb SIM_CONFIG=$(CONFIG_FILE) python3 -m util.config_parser $$d); \
+			export SIM_CONFIG=$(CONFIG_FILE); \
+			TOPLEVEL=$$d \
+			TOPLEVEL_LANG=verilog \
+			COCOTB_TEST_MODULES=$(TB)_tb \
+			VERILOG_SOURCES="$$SRCS" \
+			COMPILE_ARGS="$$PARAMS" \
+			WAVES=1 \
+			SIM_BUILD=cocotb/sim_build/$$d \
+			PYTHONPATH=cocotb \
+			make -f $$(cocotb-config --makefiles)/Makefile.sim results.xml; \
+		done \
+	fi
 .PHONY: sim
 
 # SRCS="src/gf180_sram_1r1w.sv src/voxel_*.sv src/input_fifo.sv src/evt2_decoder.sv src/control_fsm.sv src/selectable_debug.sv src/spi_wrapper.sv src/verilog_spi/*.v"; \
@@ -179,13 +179,13 @@ sim-all: ## Test all the modules against Makefile compile args
 
 SLOT_UPPER    := $(shell echo $(SLOT) | tr 'a-z' 'A-Z')
 CHIP_TOP_SRCS := src/chip_top.sv src/chip_core.sv src/soc.sv src/spi_wrapper.sv \
-    src/control_fsm.sv src/evt2_decoder.sv src/gf180_sram_1r1w.sv src/input_fifo.sv \
-    src/selectable_debug.sv src/voxel_bin_core.sv src/voxel_binning.sv \
-    src/voxel_gesture_classifier.sv src/voxel_mac_engine.sv \
-    src/verilog_spi/spi_module.v src/verilog_spi/pos_edge_det.v \
-    src/verilog_spi/neg_edge_det.v \
-    ip/gf180mcu_ws_ip__id/vh/gf180mcu_ws_ip__id.v \
-    ip/gf180mcu_ws_ip__logo/vh/gf180mcu_ws_ip__logo.v
+    			 src/control_fsm.sv src/evt2_decoder.sv src/gf180_sram_1r1w.sv src/input_fifo.sv \
+    			 src/selectable_debug.sv src/voxel_bin_core.sv src/voxel_binning.sv \
+    			 src/voxel_gesture_classifier.sv src/voxel_mac_engine.sv \
+    			 src/verilog_spi/spi_module.v src/verilog_spi/pos_edge_det.v \
+    			 src/verilog_spi/neg_edge_det.v \
+    			 ip/gf180mcu_ws_ip__id/vh/gf180mcu_ws_ip__id.v \
+    			 ip/gf180mcu_ws_ip__logo/vh/gf180mcu_ws_ip__logo.v
 CHIP_TOP_PDK_IO := $(PDK_ROOT)/$(PDK)/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_fd_io.v
 
 # Use real PDK IO/SRAM models when available, otherwise fall back to behavioral stubs
