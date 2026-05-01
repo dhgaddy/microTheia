@@ -176,42 +176,43 @@ localparam PAGE_10 = 4'b1010;
 
 logic [31:0] selected_debug;
 always_comb begin
-    unique case (debug_select)
-            PAGE_0: begin
-                selected_debug = {6'b0, mac_dbg , class_dbg};
-            end
-            PAGE_1: begin
-                selected_debug = {1'b0, vox_bin_dbg};
-            end
-            PAGE_2: begin
-                selected_debug = {vox_core_debug, in_fifo_dbg, decoder_dbg};
-            end
-            PAGE_3: begin
-                selected_debug = {20'b0, fsm_debug_bus};
-            end
-            
-            PAGE_4: begin
-                selected_debug = {decoder_output};
-            end
-            PAGE_5: begin
-                selected_debug = fifo_in;
-            end
-            PAGE_6: begin
-                selected_debug = fifo_out;
-            end
-            PAGE_7: begin
-                selected_debug = score_A;
-            end
-            PAGE_8: begin
-                selected_debug = score_B;
-            end
-            PAGE_9: begin
-                selected_debug = score_C;
-            end
-            PAGE_10: begin
-                selected_debug = score_D;
-            end
-            default: selected_debug = {6'b0, mac_dbg , class_dbg};
+    // removed unique
+    case (debug_select)
+        PAGE_0: begin
+            selected_debug = {6'b0, mac_dbg , class_dbg};
+        end
+        PAGE_1: begin
+            selected_debug = {1'b0, vox_bin_dbg};
+        end
+        PAGE_2: begin
+            selected_debug = {vox_core_debug, in_fifo_dbg, decoder_dbg};
+        end
+        PAGE_3: begin
+            selected_debug = {20'b0, fsm_debug_bus};
+        end
+        
+        PAGE_4: begin
+            selected_debug = {decoder_output};
+        end
+        PAGE_5: begin
+            selected_debug = fifo_in;
+        end
+        PAGE_6: begin
+            selected_debug = fifo_out;
+        end
+        PAGE_7: begin
+            selected_debug = score_A;
+        end
+        PAGE_8: begin
+            selected_debug = score_B;
+        end
+        PAGE_9: begin
+            selected_debug = score_C;
+        end
+        PAGE_10: begin
+            selected_debug = score_D;
+        end
+        default: selected_debug = {6'b0, mac_dbg , class_dbg};
     endcase
 end
 

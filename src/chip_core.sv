@@ -126,20 +126,10 @@ module chip_core #(
         end       
     end 
     // muxing input pins and spi interface, using alt_select signal
-    always_comb begin
-        if(alt_select) begin
-            MOSI_wire = input_in[3];
-            SCLK_wire = input_in[2];
-            CS_wire =input_in[4];
-           
-        end
-        else begin
-            MOSI_wire = input_in[6];
-            SCLK_wire = input_in[5];
-            CS_wire =input_in[7];
-           
-        end
-    end          
+    assign MOSI_wire = alt_select ? input_in[3] : input_in[6];
+    assign SCLK_wire = alt_select ? input_in[2] : input_in[5];
+    assign CS_wire   = alt_select ? input_in[4] : input_in[7];
+         
     //muxing MISO to output pins, and disabling output for inactive ports
     assign bidir_out[0] =  !alt_select ? MISO_wire : 1'b0;
     assign bidir_out[1] = alt_select ? MISO_wire : 1'b0;

@@ -52,7 +52,8 @@ module control_fsm #(
             evt_ld_en         <= 1'b0;
 
         end else begin
-            unique case (main_state)
+            // unique
+            case (main_state)
                 ST_BOOT: begin
                     core_rst_o  <= 1'b1;
                     boot_done_o <= 1'b0;
@@ -77,7 +78,8 @@ module control_fsm #(
                         load_state <= LD_IDLE;
                         evt_ld_en  <= 1'b0;
                     end else begin
-                        unique case (load_state)
+                        // unique
+                        case (load_state)
                             LD_IDLE: begin
                                 pwr_wait_cnt <= '0;
                                 load_state   <= LD_WAIT_PWR;

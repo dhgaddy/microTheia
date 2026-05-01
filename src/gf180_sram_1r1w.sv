@@ -89,9 +89,12 @@ module gf180_sram_1r1w #(
             if (rd_valid_i)
                 sim_rd_data_r <= sim_mem[rd_addr_i];
         end
-        // Hazard check: simultaneous R+W to different addresses is safe in this
-        // behavioral model (independent NBA assignments) but in synthesis the
-        // write address wins the single address bus and the read is silently lost.
+    end
+
+    // Hazard check: simultaneous R+W to different addresses is safe in this
+    // behavioral model (independent NBA assignments) but in synthesis the
+    // write address wins the single address bus and the read is silently lost.
+    always @(posedge clk_i) begin
         if (!reset_i && wr_valid_i && rd_valid_i && (wr_addr_i != rd_addr_i))
             $warning("%m @%0t: simultaneous wr+rd to different addresses (wr=%0d rd=%0d) — synthesis drops the read", $time, wr_addr_i, rd_addr_i);
     end
