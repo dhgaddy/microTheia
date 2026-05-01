@@ -3,7 +3,7 @@ MAKEFILE_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 RUN_TAG = $(shell ls librelane/runs/ | tail -n 1)
 TOP = chip_top
 
-PDK_ROOT ?= $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD
+PDK_ROOT ?= $(MAKEFILE_DIR)/gf180mcu
 PDK ?= gf180mcuD
 PDK_TAG ?= 1.8.0
 SCL ?= gf180mcu_as_sc_mcu7t3v3
@@ -50,21 +50,20 @@ TB ?= $(DUT)
 all: librelane ## Build the project (runs LibreLane)
 .PHONY: all
 
-clone-pdk: ## Clone the GF180MCU base PDK into dependencies/pdks/gf180mcuD/
-	mkdir -p $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD
-	git clone https://github.com/wafer-space/gf180mcu.git $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD --depth 1 --branch ${PDK_TAG} --no-local 2>/dev/null || \
-		(cd $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD && git fetch --depth 1 origin tag ${PDK_TAG} && git checkout ${PDK_TAG})
+clone-pdk: ## Clone the GF180MCU PDK repository
+	rm -rf $(MAKEFILE_DIR)/gf180mcu
+	git clone https://github.com/wafer-space/gf180mcu.git $(MAKEFILE_DIR)/gf180mcu --depth 1 --branch ${PDK_TAG}
 .PHONY: clone-pdk
 
 OCD_SRAM_REPO ?= https://github.com/RTimothyEdwards/gf180mcu_ocd_ip_sram.git
 
-clone-ocd-sram: ## Clone 3.3V OCD SRAM macros and install into dependencies/pdks/gf180mcuD/libs.ref/gf180mcu_ocd_ip_sram/
-	@if [ ! -d $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.ref ]; then \
+clone-ocd-sram: ## Clone 3.3V OCD SRAM macros and install into gf180mcu/gf180mcuD/libs.ref/gf180mcu_ocd_ip_sram/
+	@if [ ! -d $(MAKEFILE_DIR)/gf180mcu/gf180mcuD/libs.ref ]; then \
 		echo "ERROR: Run 'make clone-pdk' first."; exit 1; \
 	fi
 	$(eval OCD_TMP := $(shell mktemp -d))
 	git clone $(OCD_SRAM_REPO) $(OCD_TMP) --depth 1
-	$(eval OCD_DST := $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.ref/gf180mcu_ocd_ip_sram)
+	$(eval OCD_DST := $(MAKEFILE_DIR)/gf180mcu/gf180mcuD/libs.ref/gf180mcu_ocd_ip_sram)
 	mkdir -p $(OCD_DST)/gds $(OCD_DST)/lef $(OCD_DST)/lib $(OCD_DST)/verilog $(OCD_DST)/spice
 	for cell in sram256x8m8wm1 sram512x8m8wm1 sram1024x8m8wm1; do \
 		src=$(OCD_TMP)/cells/gf180mcu_ocd_ip_sram__$$cell; \
@@ -78,18 +77,18 @@ clone-ocd-sram: ## Clone 3.3V OCD SRAM macros and install into dependencies/pdks
 	@echo "OCD 3.3V SRAMs installed at $(OCD_DST)"
 .PHONY: clone-ocd-sram
 
-clone-avalon-pdk: ## Merge Avalon 3.3V std cell library into dependencies/pdks/gf180mcuD/
-	@if [ ! -d $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.ref ]; then \
+clone-avalon-pdk: ## Merge Avalon 3.3V std cell library into gf180mcu/gf180mcuD/
+	@if [ ! -d $(MAKEFILE_DIR)/gf180mcu/gf180mcuD/libs.ref ]; then \
 		echo "ERROR: Run 'make clone-pdk' first to fetch the base GF180MCU PDK."; exit 1; \
 	fi
 	$(eval AVALON_TMP := $(shell mktemp -d))
 	git clone $(AVALON_REPO) $(AVALON_TMP) --depth 1
-	cp -r $(AVALON_TMP)/pdk/libs.ref/. $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.ref/
-	cp -r $(AVALON_TMP)/pdk/libs.tech/. $(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.tech/
+	cp -r $(AVALON_TMP)/pdk/libs.ref/. $(MAKEFILE_DIR)/gf180mcu/gf180mcuD/libs.ref/
+	cp -r $(AVALON_TMP)/pdk/libs.tech/. $(MAKEFILE_DIR)/gf180mcu/gf180mcuD/libs.tech/
 	rm -rf $(AVALON_TMP)
 	cp $(MAKEFILE_DIR)/librelane/gf180mcu_as_sc_mcu7t3v3_config.tcl \
-		$(MAKEFILE_DIR)/dependencies/pdks/gf180mcuD/libs.tech/librelane/gf180mcu_as_sc_mcu7t3v3/config.tcl
-	@echo "Avalon 3.3V library merged into dependencies/pdks/gf180mcuD/"
+		$(MAKEFILE_DIR)/gf180mcu/gf180mcuD/libs.tech/librelane/gf180mcu_as_sc_mcu7t3v3/config.tcl
+	@echo "Avalon 3.3V library merged into gf180mcu/gf180mcuD/"
 .PHONY: clone-avalon-pdk
 
 librelane: ## Run LibreLane flow (synthesis, PnR, verification)
