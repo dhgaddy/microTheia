@@ -40,9 +40,6 @@ img/
 *.lyrdb
 results.xml
 
-# third_party
-third_party/
-
 .sbt-global/
 build/
 project/

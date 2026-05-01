@@ -1,6 +1,4 @@
-src/verilog_spi/spi_module.v
-src/verilog_spi/pos_edge_det.v
-src/verilog_spi/neg_edge_det.v
+# sources
 src/chip_core.sv
 src/control_fsm.sv
 # src/chip_top.sv  -- requires IO pad models; use 'make sim-chip-top' instead
@@ -15,3 +13,8 @@ src/voxel_bin_core.sv
 src/voxel_binning.sv
 src/voxel_gesture_classifier.sv
 src/voxel_mac_engine.sv
+
+# third party
+third_party/verilog_spi/spi_module.v
+third_party/verilog_spi/pos_edge_det.v
+third_party/verilog_spi/neg_edge_det.v
