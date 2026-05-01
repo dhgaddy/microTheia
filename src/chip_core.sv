@@ -45,13 +45,16 @@ module chip_core #(
 
     // Set the bidir outputs
     // bidirect pins 2 - 5 are curently reserved
-    assign bidir_oe = '0;
+    // NOTE: do NOT use a blanket `assign bidir_oe = '0` here; doing so creates
+    // multiple drivers on bits that are also driven by bit-select assigns below,
+    // which produces X in simulation. Only the truly unused reserved bits get '0.
+    assign bidir_oe[5:2] = '0; // reserved pins, output disabled
     // debug + heartbeat + spi_ready
     assign bidir_oe[37:6] = '1;
     assign bidir_oe[38]   = 1'b1;
     assign bidir_oe[39]   = 1'b1;
      // pins 0 and 1 are assigned after soc module along with alternate mux pin logic
-    assign bidir_out = '0;
+    assign bidir_out[5:2] = '0; // reserved pins driven to 0
    
 
     assign bidir_cs = '0; //not relevant since all of our bidirects are output

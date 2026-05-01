@@ -1,0 +1,88 @@
+IO sources:  /workspaces/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_fd_io.v /workspaces/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_ws_io.v /workspaces/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_ip_sram/verilog/gf180mcu_fd_ip_sram__sram512x8m8wm1.v
+rm -rf cocotb/sim_build/chip_top
+TOPLEVEL=chip_top \
+TOPLEVEL_LANG=verilog \
+COCOTB_TEST_MODULES=chip_top_tb \
+VERILOG_SOURCES="src/chip_top.sv src/chip_core.sv src/soc.sv src/spi_wrapper.sv src/control_fsm.sv src/evt2_decoder.sv src/gf180_sram_1r1w.sv src/input_fifo.sv src/selectable_debug.sv src/voxel_bin_core.sv src/voxel_binning.sv src/voxel_gesture_classifier.sv src/voxel_mac_engine.sv src/verilog_spi/spi_module.v src/verilog_spi/pos_edge_det.v src/verilog_spi/neg_edge_det.v ip/gf180mcu_ws_ip__id/vh/gf180mcu_ws_ip__id.v ip/gf180mcu_ws_ip__logo/vh/gf180mcu_ws_ip__logo.v  /workspaces/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_fd_io.v /workspaces/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_ws_io.v /workspaces/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_ip_sram/verilog/gf180mcu_fd_ip_sram__sram512x8m8wm1.v" \
+COMPILE_ARGS="-DSLOT_1X1 -I/workspaces/microTheia/src" \
+WAVES=1 \
+SIM_BUILD=cocotb/sim_build/chip_top \
+PYTHONPATH=cocotb \
+make -f $(cocotb-config --makefiles)/Makefile.sim results.xml
+make[1]: Entering directory '/workspaces/microTheia'
+mkdir -p cocotb/sim_build/chip_top
+/opt/oss-cad-suite/bin/iverilog -o cocotb/sim_build/chip_top/sim.vvp -s chip_top -g2012 -DSLOT_1X1 -I/workspaces/microTheia/src -f cocotb/sim_build/chip_top/cmds.f -s cocotb_iverilog_dump  src/chip_top.sv src/chip_core.sv src/soc.sv src/spi_wrapper.sv src/control_fsm.sv src/evt2_decoder.sv src/gf180_sram_1r1w.sv src/input_fifo.sv src/selectable_debug.sv src/voxel_bin_core.sv src/voxel_binning.sv src/voxel_gesture_classifier.sv src/voxel_mac_engine.sv src/verilog_spi/spi_module.v src/verilog_spi/pos_edge_det.v src/verilog_spi/neg_edge_det.v ip/gf180mcu_ws_ip__id/vh/gf180mcu_ws_ip__id.v ip/gf180mcu_ws_ip__logo/vh/gf180mcu_ws_ip__logo.v  /workspaces/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_fd_io.v /workspaces/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_ws_io.v /workspaces/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_ip_sram/verilog/gf180mcu_fd_ip_sram__sram512x8m8wm1.v cocotb/sim_build/chip_top/cocotb_iverilog_dump.v
+rm -f results.xml
+COCOTB_TEST_MODULES=chip_top_tb COCOTB_TESTCASE= COCOTB_TEST_FILTER= COCOTB_TOPLEVEL=chip_top TOPLEVEL_LANG=verilog \
+         /opt/oss-cad-suite/bin/vvp -M /opt/oss-cad-suite/lib/python3.11/site-packages/cocotb-2.0.0.dev0+6987421b-py3.11-linux-x64.egg/cocotb/libs -m libcocotbvpi_icarus   cocotb/sim_build/chip_top/sim.vvp  -fst 
+     -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:79   in set_program_name_in_venv        Did not detect Python virtual environment. Using system-wide Python interpreter
+     -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:101  in gpi_print_registered_impl       VPI registered
+     0.00ns INFO     cocotb                             Running on Icarus Verilog version 13.0 (devel)
+     0.00ns INFO     cocotb                             Running tests with cocotb v2.0.0.dev0+6987421b from /opt/oss-cad-suite/lib/python3.11/site-packages/cocotb-2.0.0.dev0+6987421b-py3.11-linux-x64.egg/cocotb
+     0.00ns INFO     cocotb                             Seeding Python random module with 1777612804
+     0.00ns INFO     cocotb.regression                  running chip_top_tb.test_reset_and_spi_ready (1/5)
+                                                            After reset, chip must assert spi_ready (bidir_PAD[39]) within 5000 cycles.
+  2093.75ns INFO     cocotb.chip_top                    spi_ready asserted after 0 cycles
+  2093.75ns INFO     cocotb.chip_top                    PASS: spi_ready high after reset
+  2093.75ns INFO     cocotb.regression                  chip_top_tb.test_reset_and_spi_ready passed
+  2093.75ns INFO     cocotb.regression                  running chip_top_tb.test_default_spi_boot_and_miso (2/5)
+                                                            Send BOOT_REQ then a DEBUG_PAGE(0) word over the default SPI interface
+  4187.50ns INFO     cocotb.chip_top                    spi_ready asserted after 0 cycles
+  4187.50ns INFO     cocotb.chip_top                    Sending BOOT_REQ over default SPI...
+  8937.50ns INFO     cocotb.chip_top                    boot_req: done (1 words)
+ 14312.50ns INFO     cocotb.chip_top                    miso_page0: done (1 words)
+ 14312.50ns INFO     cocotb.chip_top                    MISO after BOOT_REQ = 0x00000000
+ 14312.50ns INFO     cocotb.chip_top                    PASS: default SPI boot accepted, MISO=0
+ 14312.50ns INFO     cocotb.regression                  chip_top_tb.test_default_spi_boot_and_miso passed
+ 14312.50ns INFO     cocotb.regression                  running chip_top_tb.test_debug_page_sweep (3/5)
+                                                            Select debug pages 0-4 over the default SPI interface.
+ 16406.25ns INFO     cocotb.chip_top                    spi_ready asserted after 0 cycles
+ 21156.25ns INFO     cocotb.chip_top                    boot: done (1 words)
+ 26531.25ns INFO     cocotb.chip_top                    page_sel_0: done (1 words)
+ 26843.75ns INFO     cocotb.chip_top                      Page 0 (voxel_gesture_classifier + mac_engine): debug_bus=0x00000000
+ 31593.75ns INFO     cocotb.chip_top                    page_sel_1: done (1 words)
+ 31906.25ns INFO     cocotb.chip_top                      Page 1 (voxel_binning): debug_bus=0x00000001
+ 36656.25ns INFO     cocotb.chip_top                    page_sel_2: done (1 words)
+ 36968.75ns INFO     cocotb.chip_top                      Page 2 (evt2_decoder + input_FIFO + voxel_core): debug_bus=0x04015801
+ 41718.75ns INFO     cocotb.chip_top                    page_sel_3: done (1 words)
+ 42031.25ns INFO     cocotb.chip_top                      Page 3 (control_module (reserved)): debug_bus=0x00000000
+ 46781.25ns INFO     cocotb.chip_top                    page_sel_4: done (1 words)
+ 47093.75ns INFO     cocotb.chip_top                      Page 4 (evt2_decoder event output): debug_bus=0x00000000
+ 47093.75ns INFO     cocotb.chip_top                    PASS: all debug pages 0-4 selected without simulation error
+ 47093.75ns INFO     cocotb.regression                  chip_top_tb.test_debug_page_sweep passed
+ 47093.75ns INFO     cocotb.regression                  running chip_top_tb.test_alt_input_mode_toggle (4/5)
+                                                            Toggle ALT_INPUT_MODE (input_PAD[8]) once to flip alt_select from 0 → 1.
+ 49187.50ns INFO     cocotb.chip_top                    spi_ready asserted after 0 cycles
+ 53937.50ns INFO     cocotb.chip_top                    boot_def: done (1 words)
+ 59312.50ns INFO     cocotb.chip_top                    miso_before_toggle: done (1 words)
+ 59312.50ns INFO     cocotb.chip_top                    Default MISO (before toggle) = 0x00000000
+ 59312.50ns INFO     cocotb.chip_top                    Pulsing ALT_INPUT_MODE (input_PAD[8]) high...
+ 59812.50ns INFO     cocotb.chip_top                    Testing alt SPI path (input_PAD[2,3,4], MISO=bidir_PAD[1])...
+ 64562.50ns INFO     cocotb.chip_top                    miso_alt: done (1 words)
+ 64562.50ns INFO     cocotb.chip_top                    Alt MISO (after toggle) = 0x00000000
+ 64562.50ns INFO     cocotb.chip_top                    PASS: alt_select toggled; alt SPI functional, bidir_PAD[0]=0
+ 64562.50ns INFO     cocotb.regression                  chip_top_tb.test_alt_input_mode_toggle passed
+ 64562.50ns INFO     cocotb.regression                  running chip_top_tb.test_alt_input_mode_toggle_back (5/5)
+                                                            Toggle ALT_INPUT_MODE twice → alt_select returns to 0 → default SPI active again.
+ 66656.25ns INFO     cocotb.chip_top                    spi_ready asserted after 0 cycles
+ 66656.25ns INFO     cocotb.chip_top                    First toggle → alt_select=1
+ 67156.25ns INFO     cocotb.chip_top                    Second toggle → alt_select=0 (default restored)
+ 72406.25ns INFO     cocotb.chip_top                    boot_restored: done (1 words)
+ 77781.25ns INFO     cocotb.chip_top                    miso_restored: done (1 words)
+ 77781.25ns INFO     cocotb.chip_top                    MISO after double-toggle = 0x00000000
+ 77781.25ns INFO     cocotb.chip_top                    PASS: double toggle restores default SPI interface
+ 77781.25ns INFO     cocotb.regression                  chip_top_tb.test_alt_input_mode_toggle_back passed
+ 77781.25ns INFO     cocotb.regression                  *****************************************************************************************************
+                                                        ** TEST                                         STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **
+                                                        *****************************************************************************************************
+                                                        ** chip_top_tb.test_reset_and_spi_ready          PASS        2093.75           0.02     107331.02  **
+                                                        ** chip_top_tb.test_default_spi_boot_and_miso    PASS       12218.75           0.04     314234.64  **
+                                                        ** chip_top_tb.test_debug_page_sweep             PASS       32781.25           0.11     303342.49  **
+                                                        ** chip_top_tb.test_alt_input_mode_toggle        PASS       17468.75           0.07     249185.48  **
+                                                        ** chip_top_tb.test_alt_input_mode_toggle_back   PASS       13218.75           0.04     309797.11  **
+                                                        *****************************************************************************************************
+                                                        ** TESTS=5 PASS=5 FAIL=0 SKIP=0                             77781.25           0.29     272334.06  **
+                                                        *****************************************************************************************************
+                                                        
+FST info: dumpfile cocotb/sim_build/chip_top/chip_top.fst opened for output.
+make[1]: Leaving directory '/workspaces/microTheia'

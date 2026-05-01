@@ -427,7 +427,7 @@ class CoreHarness:
 
     async def setup(self, start_clock=True):
         if start_clock:
-            cocotb.start_soon(Clock(self.dut.clk, 10, units="ns").start())
+            cocotb.start_soon(Clock(self.dut.clk, 10, "ns").start())
         self.dut.rst.value = 1
         self.dut.evt_word.value = 0
         self.dut.evt_word_valid.value = 0
@@ -1301,7 +1301,7 @@ async def test_mac_backpressure_holds_binner(dut):
 @logged_test()
 async def test_fsm_boots_from_st_boot_to_st_run(dut):
     """After reset FSM is in ST_BOOT with core_rst_o=1; after BOOT_REQ+done it reaches ST_RUN."""
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
     dut.evt_word.value = 0
     dut.evt_word_valid.value = 0
@@ -1354,7 +1354,7 @@ async def test_fsm_boots_from_st_boot_to_st_run(dut):
 @logged_test()
 async def test_evt_ld_en_only_asserts_during_load_window(dut):
     """evt_ld_en is 0 in ST_BOOT, 1 during LD_OPEN/LD_WAIT, and 0 again in ST_RUN."""
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
     dut.evt_word.value = 0
     dut.evt_word_valid.value = 0
@@ -1391,7 +1391,7 @@ async def test_evt_ld_en_only_asserts_during_load_window(dut):
 @logged_test()
 async def test_weight_writes_blocked_outside_load_window(dut):
     """Weight event words are silently discarded when evt_ld_en=0 (ST_BOOT and ST_RUN)."""
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
     dut.evt_word.value = 0
     dut.evt_word_valid.value = 0
@@ -1433,7 +1433,7 @@ async def test_weight_writes_blocked_outside_load_window(dut):
 @logged_test()
 async def test_weight_writes_accepted_during_load_window(dut):
     """Weight event words decoded while evt_ld_en=1 must assert weight_wr_valid_gated."""
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
     dut.evt_word.value = 0
     dut.evt_word_valid.value = 0
@@ -1472,7 +1472,7 @@ async def test_weight_writes_accepted_during_load_window(dut):
 async def test_no_gesture_before_boot_completes(dut):
     """Events and rollovers fed before boot must not produce gesture_valid (MAC in reset)."""
     rng = random.Random(0xABCD_EF01)
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
     dut.evt_word.value = 0
     dut.evt_word_valid.value = 0
@@ -1515,7 +1515,7 @@ async def test_debug_req_during_load_clears_evt_ld_en(dut):
     This is a regression test for the bug where ST_LOAD's debug_req branch did not
     clear evt_ld_en, allowing SRAM writes to leak into ST_DEBUG.
     """
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
     dut.evt_word.value = 0
     dut.evt_word_valid.value = 0
@@ -1563,7 +1563,7 @@ async def test_debug_req_during_load_clears_evt_ld_en(dut):
 @logged_test()
 async def test_debug_req_from_boot_then_reload(dut):
     """DEBUG_REQ from ST_BOOT → ST_DEBUG → boot_req restarts load → reaches ST_RUN."""
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
     dut.evt_word.value = 0
     dut.evt_word_valid.value = 0
@@ -1608,7 +1608,7 @@ async def test_debug_req_from_boot_then_reload(dut):
 @logged_test()
 async def test_reload_req_from_run_state(dut):
     """RELOAD_REQ while in ST_RUN must re-enter ST_LOAD and eventually reach ST_RUN."""
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
     dut.evt_word.value = 0
     dut.evt_word_valid.value = 0
@@ -1652,7 +1652,7 @@ async def test_reload_req_from_run_state(dut):
 @logged_test()
 async def test_fsm_state_debug_signals_through_boot(dut):
     """main_state_dbg_o and load_state_dbg_o must reflect the correct encoding at each stage."""
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
     dut.evt_word.value = 0
     dut.evt_word_valid.value = 0
@@ -1716,7 +1716,7 @@ async def test_boot_with_weights_enables_correct_classification(dut):
     thresholds = load_thresholds()
     score_model = ScoreModel(weights)
 
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
     dut.evt_word.value = 0
     dut.evt_word_valid.value = 0

@@ -3,12 +3,12 @@ src/verilog_spi/pos_edge_det.v
 src/verilog_spi/neg_edge_det.v
 src/chip_core.sv
 src/control_fsm.sv
-# src/chip_top.sv
+# src/chip_top.sv  -- requires IO pad models; use 'make sim-chip-top' instead
 src/evt2_decoder.sv
 src/gf180_sram_1r1w.sv
 src/input_fifo.sv
 src/selectable_debug.sv
-# src/slot_defines.svh
+# src/slot_defines.svh  -- header only, included by chip_top.sv
 src/spi_wrapper.sv
 src/soc.sv
 src/voxel_bin_core.sv

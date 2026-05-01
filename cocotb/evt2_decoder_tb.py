@@ -89,7 +89,7 @@ class Evt2DecoderModel:
 
 
 async def setup(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
     dut.data_in.value = 0
     dut.data_valid.value = 0
@@ -405,7 +405,7 @@ async def send_word(dut, word):
 
 @logged_test()
 async def test_weight_packet(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     await reset_dut(dut)
 
     dut.evt_ld_en.value = 1
@@ -428,7 +428,7 @@ async def test_weight_packet(dut):
 
 @logged_test()
 async def test_weight_requires_ld_en(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     await reset_dut(dut)
 
     dut.evt_ld_en.value = 0
@@ -441,7 +441,7 @@ async def test_weight_requires_ld_en(dut):
 
 @logged_test()
 async def test_threshold_upper_lower(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     await reset_dut(dut)
 
     dut.evt_ld_en.value = 1
@@ -466,7 +466,7 @@ async def test_threshold_upper_lower(dut):
 
 @logged_test()
 async def test_threshold_requires_ld_en(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     await reset_dut(dut)
 
     dut.evt_ld_en.value = 0
@@ -479,7 +479,7 @@ async def test_threshold_requires_ld_en(dut):
 
 @logged_test()
 async def test_reads_done_pulse(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     await reset_dut(dut)
 
     await send_word(dut, make_word(0xF, 0))
@@ -492,7 +492,7 @@ async def test_reads_done_pulse(dut):
 
 @logged_test()
 async def test_debug_page(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     await reset_dut(dut)
 
     page = 0xA
@@ -504,7 +504,7 @@ async def test_debug_page(dut):
 
 @logged_test()
 async def test_boot_req_pulse(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     await reset_dut(dut)
 
     # send BOOT_REQ packet (assuming type 0xB — adjust if different)
@@ -517,7 +517,7 @@ async def test_boot_req_pulse(dut):
 
 @logged_test()
 async def test_reload_req_pulse(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     await reset_dut(dut)
 
     # send RELOAD_REQ packet (assuming type 0xC — adjust if different)
@@ -530,7 +530,7 @@ async def test_reload_req_pulse(dut):
 
 @logged_test()
 async def test_debug_req_pulse(dut):
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     await reset_dut(dut)
 
     # send DEBUG_REQ packet (assuming type 0xD — adjust if different)
