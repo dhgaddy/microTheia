@@ -30,7 +30,6 @@ from pathlib import Path
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, NextTimeStep, RisingEdge
-from cocotb_tools.runner import get_runner
 
 # ── Environment ───────────────────────────────────────────────────────────────
 sim      = os.getenv("SIM",  "icarus")
@@ -422,6 +421,7 @@ async def test_alt_input_mode_toggle_back(dut):
 # ── Runner ────────────────────────────────────────────────────────────────────
 
 def chip_top_runner():
+    from cocotb_tools.runner import get_runner
     proj_path = Path(__file__).resolve().parent
 
     defines  = {f"SLOT_{slot.upper()}": True}

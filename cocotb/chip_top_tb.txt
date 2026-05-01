@@ -1,8 +1,24 @@
-cd cocotb; LD_LIBRARY_PATH="" PDK_ROOT=/mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD PDK=gf180mcuD SLOT=1x1 python3 chip_top_tb.py
+IO sources:  /mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_fd_io.v /mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_ws_io.v /mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_ip_sram/verilog/gf180mcu_fd_ip_sram__sram512x8m8wm1.v
+rm -rf cocotb/sim_build/chip_top
+TOPLEVEL=chip_top \
+TOPLEVEL_LANG=verilog \
+COCOTB_TEST_MODULES=chip_top_tb \
+VERILOG_SOURCES="src/chip_top.sv src/chip_core.sv src/soc.sv src/spi_wrapper.sv src/control_fsm.sv src/evt2_decoder.sv src/gf180_sram_1r1w.sv src/input_fifo.sv src/selectable_debug.sv src/voxel_bin_core.sv src/voxel_binning.sv src/voxel_gesture_classifier.sv src/voxel_mac_engine.sv src/verilog_spi/spi_module.v src/verilog_spi/pos_edge_det.v src/verilog_spi/neg_edge_det.v ip/gf180mcu_ws_ip__id/vh/gf180mcu_ws_ip__id.v ip/gf180mcu_ws_ip__logo/vh/gf180mcu_ws_ip__logo.v  /mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_fd_io.v /mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_ws_io.v /mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_ip_sram/verilog/gf180mcu_fd_ip_sram__sram512x8m8wm1.v" \
+COMPILE_ARGS="-DSLOT_1X1 -I/mnt/c/Users/jason/Documents/microTheia/src" \
+WAVES=1 \
+SIM_BUILD=cocotb/sim_build/chip_top \
+PYTHONPATH=cocotb \
+make -f $(cocotb-config --makefiles)/Makefile.sim results.xml
+make[1]: Entering directory '/mnt/c/Users/jason/Documents/microTheia'
+mkdir -p cocotb/sim_build/chip_top
+/usr/bin/iverilog -o cocotb/sim_build/chip_top/sim.vvp -s chip_top -g2012 -DSLOT_1X1 -I/mnt/c/Users/jason/Documents/microTheia/src -f cocotb/sim_build/chip_top/cmds.f -s cocotb_iverilog_dump  src/chip_top.sv src/chip_core.sv src/soc.sv src/spi_wrapper.sv src/control_fsm.sv src/evt2_decoder.sv src/gf180_sram_1r1w.sv src/input_fifo.sv src/selectable_debug.sv src/voxel_bin_core.sv src/voxel_binning.sv src/voxel_gesture_classifier.sv src/voxel_mac_engine.sv src/verilog_spi/spi_module.v src/verilog_spi/pos_edge_det.v src/verilog_spi/neg_edge_det.v ip/gf180mcu_ws_ip__id/vh/gf180mcu_ws_ip__id.v ip/gf180mcu_ws_ip__logo/vh/gf180mcu_ws_ip__logo.v  /mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_fd_io.v /mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_io/verilog/gf180mcu_ws_io.v /mnt/c/Users/jason/Documents/microTheia/dependencies/pdks/gf180mcuD/gf180mcuD/libs.ref/gf180mcu_fd_ip_sram/verilog/gf180mcu_fd_ip_sram__sram512x8m8wm1.v cocotb/sim_build/chip_top/cocotb_iverilog_dump.v
+rm -f results.xml
+COCOTB_TEST_MODULES=chip_top_tb COCOTB_TESTCASE= COCOTB_TEST_FILTER= COCOTB_TOPLEVEL=chip_top TOPLEVEL_LANG=verilog \
+         /usr/bin/vvp -M /home/jasonwaseq/.local/lib/python3.12/site-packages/cocotb/libs -m libcocotbvpi_icarus   cocotb/sim_build/chip_top/sim.vvp -fst  
      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:93   in _embed_init_python              Using Python 3.12.4 interpreter at /usr/bin/python3
      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:79   in gpi_print_registered_impl       VPI registered
      0.00ns INFO     cocotb                             Running on Icarus Verilog version 12.0 (stable)
-     0.00ns INFO     cocotb                             Seeding Python random module with 1777603463
+     0.00ns INFO     cocotb                             Seeding Python random module with 1777612029
      0.00ns INFO     cocotb                             Initialized cocotb v2.0.1 from /home/jasonwaseq/.local/lib/python3.12/site-packages/cocotb
      0.00ns INFO     cocotb.regression                  pytest not found, install it to enable better AssertionError messages
      0.00ns INFO     cocotb                             Running tests
@@ -61,12 +77,13 @@ cd cocotb; LD_LIBRARY_PATH="" PDK_ROOT=/mnt/c/Users/jason/Documents/microTheia/d
  77781.25ns INFO     cocotb.regression                  *****************************************************************************************************
                                                         ** TEST                                         STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **
                                                         *****************************************************************************************************
-                                                        ** chip_top_tb.test_reset_and_spi_ready          PASS        2093.75           0.05      45796.63  **
-                                                        ** chip_top_tb.test_default_spi_boot_and_miso    PASS       12218.75           0.07     185108.55  **
-                                                        ** chip_top_tb.test_debug_page_sweep             PASS       32781.25           0.26     127345.12  **
-                                                        ** chip_top_tb.test_alt_input_mode_toggle        PASS       17468.75           0.09     196123.66  **
-                                                        ** chip_top_tb.test_alt_input_mode_toggle_back   PASS       13218.75           0.08     169548.74  **
+                                                        ** chip_top_tb.test_reset_and_spi_ready          PASS        2093.75           0.05      40078.06  **
+                                                        ** chip_top_tb.test_default_spi_boot_and_miso    PASS       12218.75           0.07     178518.09  **
+                                                        ** chip_top_tb.test_debug_page_sweep             PASS       32781.25           0.17     187868.45  **
+                                                        ** chip_top_tb.test_alt_input_mode_toggle        PASS       17468.75           0.08     220324.85  **
+                                                        ** chip_top_tb.test_alt_input_mode_toggle_back   PASS       13218.75           0.06     206416.44  **
                                                         *****************************************************************************************************
-                                                        ** TESTS=5 PASS=5 FAIL=0 SKIP=0                             77781.25           0.57     136738.04  **
+                                                        ** TESTS=5 PASS=5 FAIL=0 SKIP=0                             77781.25           0.47     165826.98  **
                                                         *****************************************************************************************************
-FST info: dumpfile /mnt/c/Users/jason/Documents/microTheia/cocotb/sim_build/chip_top.fst opened for output.
+FST info: dumpfile cocotb/sim_build/chip_top/chip_top.fst opened for output.
+make[1]: Leaving directory '/mnt/c/Users/jason/Documents/microTheia'
