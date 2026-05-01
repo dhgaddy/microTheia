@@ -40,11 +40,11 @@ img/
 *.lyrdb
 results.xml
 
-# third_party
-third_party/
-
 .sbt-global/
 build/
 project/
 src/rtl/
 target/
+
+# third_party
+third_party/
