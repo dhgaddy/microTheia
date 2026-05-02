@@ -7,7 +7,7 @@ Project uses wafer.space MPW and runs using the gf180mcu PDK.
 Make sure Git and Git LFS are installed.
 
 ```bash
-git clone git@github.com:MrPoloGit/group-g.git
+git clone git@github.com:dolphin-530/microTheia.git
 cd group-g
 make clone-pdk
 git submodule update --init --recursive
