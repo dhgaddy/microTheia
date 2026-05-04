@@ -29,6 +29,7 @@ synth/*.log
 synth/*.asc
 synth/*.bit
 synth/*.json
+librelane/runs/
 
 # GF180 stuff
 __pycache__/
