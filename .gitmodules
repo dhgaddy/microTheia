@@ -1,3 +1,11 @@
+[submodule "src/verilog_spi"]
+	path = src/verilog_spi
+	url = https://github.com/janschiefer/verilog_spi
+
 [submodule "third_party/verilog_spi"]
 	path = third_party/verilog_spi
 	url = https://github.com/janschiefer/verilog_spi
+
+[submodule "dependencies/pdks/gf180mcuD"]
+	path = dependencies/pdks/gf180mcuD
+	url = https://github.com/wafer-space/gf180mcu
