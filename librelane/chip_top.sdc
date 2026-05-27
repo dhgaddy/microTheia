@@ -80,12 +80,14 @@ if { [info exists ::env(OPENLANE_SDC_IDEAL_CLOCKS)] && $::env(OPENLANE_SDC_IDEAL
     set_propagated_clock [all_clocks]
 }
 
-# SPI slave clock — 16 MHz, asynchronous to core clock.
+# SPI slave clock — 32 MHz, asynchronous to core clock.
 # SCLK is sampled by single-flop edge detectors clocked by the 64 MHz core
-# clock (4:1 ratio gives 2 core cycles per SCLK half-period).
+# clock (2:1 ratio). Metastability risk is negligible on GF180MCU 180nm DFFs
+# (resolution τ ~30 ps; 15.625 ns >> τ), but no formal STA guarantee exists
+# across this boundary due to set_clock_groups -asynchronous below.
 # Default pin mapping (alt_select=0): SCLK=input_PAD[5], MOSI=input_PAD[6],
 # CS=input_PAD[7], MISO=bidir_PAD[38].
-create_clock -period 62.5 -name SCLK [get_ports {input_PAD[5]}]
+create_clock -period 31.25 -name SCLK [get_ports {input_PAD[5]}]
 
 # Declare the two clock domains asynchronous so the tool does not attempt
 # cross-domain timing analysis between them.
@@ -94,13 +96,13 @@ set_clock_groups -asynchronous \
     -group [get_clocks SCLK]
 
 # SPI master drives MOSI/CS stable before the SCLK edge (SPI mode 0).
-# Allow up to 5 ns setup margin at the pad.
+# 5 ns setup margin at the pad is standard for a 32 MHz SPI master.
 set_input_delay -clock SCLK -max 5.0 [get_ports {input_PAD[6]}]
 set_input_delay -clock SCLK -min 0   [get_ports {input_PAD[6]}]
 set_input_delay -clock SCLK -max 5.0 [get_ports {input_PAD[7]}]
 set_input_delay -clock SCLK -min 0   [get_ports {input_PAD[7]}]
 
 # MISO must be valid before the next SCLK edge the master samples on.
-# Allow up to 10 ns output delay (half SCLK period = 31.25 ns leaves margin).
+# 10 ns output delay at 32 MHz (half period = 15.625 ns, leaving ~5 ns margin).
 set_output_delay -clock SCLK -max 10.0 [get_ports {bidir_PAD[38]}]
 set_output_delay -clock SCLK -min 0    [get_ports {bidir_PAD[38]}]

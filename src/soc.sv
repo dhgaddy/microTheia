@@ -32,7 +32,7 @@ module soc #(
     input  logic clk,
     input  logic rst,
     input  logic MOSI, //master out slave in (from off chip to in chip)
-    input  logic SCLK, //no CDC or DLL needed if SCLK sufficiently slower than clk. target is 16 MHz SCLK (4:1 ratio vs 64 MHz core clock), giving 2 core cycles per SCLK half-period for safe edge detection
+    input  logic SCLK, //no CDC or DLL needed if SCLK sufficiently slower than clk. target is 32 MHz SCLK (2:1 ratio vs 64 MHz core clock); metastability negligible on GF180MCU 180nm but no formal STA guarantee
     input  logic CS, // aka SS, signals a transaction is occuring or not
     output logic MISO, //master in slave out (from in chip to off chip)
     output logic [31:0] debug_bus,
