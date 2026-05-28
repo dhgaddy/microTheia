@@ -95,20 +95,12 @@ set_clock_groups -asynchronous \
     -group [get_clocks $clock_port] \
     -group [get_clocks SCLK]
 
-# Suppress hold checks on SCLK-constrained port paths. set_clock_groups only
-# cuts reg-to-reg cross-domain paths; port-level hold checks against an async
-# clock are spurious and must be false-pathed explicitly.
-set_false_path -hold -from [get_clocks SCLK]
-set_false_path -hold -to   [get_clocks SCLK]
-
 # SPI master drives MOSI/CS stable before the SCLK edge (SPI mode 0).
-# 5 ns setup margin at the pad is standard for a 32 MHz SPI master.
+# Only -max (setup) constraints — no -min because hold checks are not
+# meaningful for an asynchronous SPI slave with no SCLK-clocked flip-flops.
 set_input_delay -clock SCLK -max 5.0 [get_ports {input_PAD[6]}]
-set_input_delay -clock SCLK -min 0   [get_ports {input_PAD[6]}]
 set_input_delay -clock SCLK -max 5.0 [get_ports {input_PAD[7]}]
-set_input_delay -clock SCLK -min 0   [get_ports {input_PAD[7]}]
 
 # MISO must be valid before the next SCLK edge the master samples on.
 # 10 ns output delay at 32 MHz (half period = 15.625 ns, leaving ~5 ns margin).
 set_output_delay -clock SCLK -max 10.0 [get_ports {bidir_PAD[38]}]
-set_output_delay -clock SCLK -min 0    [get_ports {bidir_PAD[38]}]
