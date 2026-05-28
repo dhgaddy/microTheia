@@ -102,11 +102,18 @@ set_clock_groups -asynchronous \
 set_false_path -from [get_ports {input_PAD[5]}]
 
 # SPI master drives MOSI/CS stable before the SCLK edge (SPI mode 0).
-# Only -max (setup) constraints — no -min because hold checks are not
-# meaningful for an asynchronous SPI slave with no SCLK-clocked flip-flops.
+# Only -max (setup) constraints — hold is suppressed below because SCLK is
+# asynchronous to the core clock and port-to-reg hold checks are spurious.
 set_input_delay -clock SCLK -max 5.0 [get_ports {input_PAD[6]}]
 set_input_delay -clock SCLK -max 5.0 [get_ports {input_PAD[7]}]
 
 # MISO must be valid before the next SCLK edge the master samples on.
 # 10 ns output delay at 32 MHz (half period = 15.625 ns, leaving ~5 ns margin).
 set_output_delay -clock SCLK -max 10.0 [get_ports {bidir_PAD[38]}]
+
+# Suppress hold checks on all SPI port-to-reg paths. set_clock_groups only
+# cuts reg-to-reg cross-domain paths; port-level hold checks against an async
+# clock are spurious for all three SPI signal ports and the MISO output.
+set_false_path -hold -from [get_ports {input_PAD[6]}]
+set_false_path -hold -from [get_ports {input_PAD[7]}]
+set_false_path -hold -to   [get_ports {bidir_PAD[38]}]
