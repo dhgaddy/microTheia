@@ -95,6 +95,12 @@ set_clock_groups -asynchronous \
     -group [get_clocks $clock_port] \
     -group [get_clocks SCLK]
 
+# input_PAD[5] carries SCLK as both a clock (for MOSI/CS/MISO constraints
+# above) and as a data signal into the pos/neg edge detector flip-flops
+# (which are clocked by the core clock). Those data paths are inherently
+# asynchronous and produce spurious hold violations — suppress them.
+set_false_path -from [get_ports {input_PAD[5]}]
+
 # SPI master drives MOSI/CS stable before the SCLK edge (SPI mode 0).
 # Only -max (setup) constraints — no -min because hold checks are not
 # meaningful for an asynchronous SPI slave with no SCLK-clocked flip-flops.
