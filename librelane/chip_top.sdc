@@ -80,40 +80,15 @@ if { [info exists ::env(OPENLANE_SDC_IDEAL_CLOCKS)] && $::env(OPENLANE_SDC_IDEAL
     set_propagated_clock [all_clocks]
 }
 
-# SPI slave clock — 32 MHz, asynchronous to core clock.
-# SCLK is sampled by single-flop edge detectors clocked by the 64 MHz core
-# clock (2:1 ratio). Metastability risk is negligible on GF180MCU 180nm DFFs
-# (resolution τ ~30 ps; 15.625 ns >> τ), but no formal STA guarantee exists
-# across this boundary due to set_clock_groups -asynchronous below.
-# Default pin mapping (alt_select=0): SCLK=input_PAD[5], MOSI=input_PAD[6],
-# CS=input_PAD[7], MISO=bidir_PAD[38].
-create_clock -period 31.25 -name SCLK [get_ports {input_PAD[5]}]
-
-# Declare the two clock domains asynchronous so the tool does not attempt
-# cross-domain timing analysis between them.
-set_clock_groups -asynchronous \
-    -group [get_clocks $clock_port] \
-    -group [get_clocks SCLK]
-
-# input_PAD[5] carries SCLK as both a clock (for MOSI/CS/MISO constraints
-# above) and as a data signal into the pos/neg edge detector flip-flops
-# (which are clocked by the core clock). Those data paths are inherently
-# asynchronous and produce spurious hold violations — suppress them.
+# SPI slave — SCLK/MOSI/CS are all asynchronous to the 64 MHz core clock.
+# Target SCLK: 32 MHz (2:1 ratio). Metastability is negligible on GF180MCU
+# 180nm DFFs (resolution τ ~30 ps; one core period 15.625 ns >> τ).
+# We do NOT use create_clock for SCLK: doing so causes CTS to insert clock
+# buffer trees on the async SCLK wire, which creates spurious hold violations
+# that cannot be suppressed by SDC constraints alone.
+# Default pin mapping (alt_select=0):
+#   SCLK = input_PAD[5],  MOSI = input_PAD[6],  CS = input_PAD[7]
+#   MISO = bidir_PAD[38]
 set_false_path -from [get_ports {input_PAD[5]}]
-
-# SPI master drives MOSI/CS stable before the SCLK edge (SPI mode 0).
-# Only -max (setup) constraints — hold is suppressed below because SCLK is
-# asynchronous to the core clock and port-to-reg hold checks are spurious.
-set_input_delay -clock SCLK -max 5.0 [get_ports {input_PAD[6]}]
-set_input_delay -clock SCLK -max 5.0 [get_ports {input_PAD[7]}]
-
-# MISO must be valid before the next SCLK edge the master samples on.
-# 10 ns output delay at 32 MHz (half period = 15.625 ns, leaving ~5 ns margin).
-set_output_delay -clock SCLK -max 10.0 [get_ports {bidir_PAD[38]}]
-
-# Suppress hold checks on all SPI port-to-reg paths. set_clock_groups only
-# cuts reg-to-reg cross-domain paths; port-level hold checks against an async
-# clock are spurious for all three SPI signal ports and the MISO output.
-set_false_path -hold -from [get_ports {input_PAD[6]}]
-set_false_path -hold -from [get_ports {input_PAD[7]}]
-set_false_path -hold -to   [get_ports {bidir_PAD[38]}]
+set_false_path -from [get_ports {input_PAD[6]}]
+set_false_path -from [get_ports {input_PAD[7]}]
