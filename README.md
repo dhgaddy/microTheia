@@ -5,6 +5,42 @@
 
 Project uses wafer.space MPW and runs using the gf180mcu PDK.
 
+## Documentation
+
+Full technical documentation is in the [`docs/`](docs/) directory:
+
+| Document | Contents |
+|----------|----------|
+| [`docs/architecture.md`](docs/architecture.md) | System architecture, block diagram, pipeline stages, memory map, control flow |
+| [`docs/rtl_reference.md`](docs/rtl_reference.md) | Per-module RTL reference: ports, parameters, behavior, timing |
+| [`docs/simulation.md`](docs/simulation.md) | cocotb testbenches, utility functions, configuration files, waveform viewing |
+| [`docs/limitations.md`](docs/limitations.md) | Known limitations, things that don't work, results, and future improvements |
+
+The [`debug_mux_pinout.txt`](debug_mux_pinout.txt) file documents the per-bit assignments for all 11 debug bus pages.
+
+## Caveats
+
+> [!IMPORTANT]
+> Read these before running the project for the first time.
+
+- **Nix/OpenROAD first-run compile time.** The `flake.nix` environment compiles OpenROAD from source (the `leo/gf180mcu` branch) on first `nix-shell` invocation. This takes **30–90 minutes** depending on CPU speed. The result is cached locally; subsequent shells start in seconds.
+
+- **Gate-level simulation is slow.** `make sim-gl` runs a single full-chip GL simulation and takes approximately **7 hours** on a modern workstation. `make sim-gl-parallel` runs four gesture tests simultaneously; ensure you have adequate RAM and CPU cores before starting.
+
+- **Waveform file size.** GL simulation FST waveform files can reach **tens of gigabytes**. Ensure at least 50 GB of free disk space before running gate-level or chip-top RTL simulations.
+
+- **Weight loading is required before inference.** After every power cycle, the chip starts in `BOOT` state and will not classify events until a full weight/threshold load completes (`BOOT_REQ` → weight commands → `EVT_READS_DONE`). If the SPI master loses sync during loading, a fresh load from the beginning is required.
+
+- **`make sim` requires DUT.** Running `make sim` without `DUT=<module_name>` will fail. Always specify the module, e.g. `make sim DUT=voxel_bin_core`.
+
+- **PDK must be cloned before simulation.** Run `make clone-pdk` once to download the GF180MCU PDK. Simulation will fail without it because the SRAM behavioral models are part of the PDK.
+
+- **SDF back-annotation is not fully working.** `make sim-sdf` is provided but timing-accurate simulation is not reliable because the Verilog timing models for GF180MCU SRAMs are not consistently present in the open PDK. The simulation will fall back silently to zero-delay functional mode.
+
+- **iCE40 FPGA target uses a reduced configuration.** The full 16×16 × 16-bin design does not fit in iCE40 resources. The FPGA flow uses an 8×8 grid with 8 bins. See [`ice40/README.md`](ice40/README.md) for details.
+
+- **cocotb 2.0 API only.** Testbenches use the cocotb 2.0 coroutine syntax (`async def`, no `@cocotb.coroutine`). Do not mix 1.x-style testbench code; it will error at import time.
+
 ## Dependencies
 
 ### Nix
