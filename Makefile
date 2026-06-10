@@ -90,11 +90,6 @@ CHIP_TOP_SRCS := \
     $(MAKEFILE_DIR)/ip/gf180mcu_ws_ip__shuttle_id/vh/gf180mcu_ws_ip__shuttle_id.v \
     $(MAKEFILE_DIR)/ip/gf180mcu_ws_ip__project_id/vh/gf180mcu_ws_ip__project_id.v
 
-# IO pad sources for sim-chip-top-sanity: always use the behavioral stubs.
-# sim/io_stubs.v stubs all GF180MCU IO pad cells so no PDK clone is needed.
-# (GLS and full chip_top_tb.py runs resolve their own IO sources internally.)
-CHIP_TOP_IO_SRCS := $(MAKEFILE_DIR)/sim/io_stubs.v
-
 # Select design to test
 SIM_DUTS = $(strip $(DUT))
 
@@ -231,13 +226,12 @@ sim-chip-top: $(PDK_ROOT)/$(PDK) defines ## Run chip_top RTL simulation with coc
 .PHONY: sim-chip-top
 
 sim-chip-top-sanity: ## Quick chip_top sanity: 2 EVT2 events + debug sweep (no LFS, CI-friendly)
-	@echo "IO sources: $(CHIP_TOP_IO_SRCS)"
 	rm -rf cocotb/sim_build/chip_top_sanity
 	TOPLEVEL=chip_top \
 	TOPLEVEL_LANG=verilog \
 	COCOTB_TEST_MODULES=chip_top_tb \
 	COCOTB_TEST_FILTER=test_sanity_evt2_and_debug \
-	VERILOG_SOURCES="$(CHIP_TOP_SRCS) $(CHIP_TOP_IO_SRCS)" \
+	VERILOG_SOURCES="$(CHIP_TOP_SRCS) \
 	COMPILE_ARGS="-DSLOT_$(SLOT_UPPER) -I$(MAKEFILE_DIR)/src" \
 	WAVES=0 \
 	SIM_BUILD=cocotb/sim_build/chip_top_sanity \

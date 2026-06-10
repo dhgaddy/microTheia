@@ -7,24 +7,21 @@ module chip_core #(
     parameter NUM_INPUT_PADS,
     parameter NUM_BIDIR_PADS,
     parameter NUM_ANALOG_PADS
-)(
+    )(
     `ifdef USE_POWER_PINS
     inout  wire VDD,
     inout  wire VSS,
     `endif
-
+    
     input  wire clk,       // clock
     input  wire rst_n,     // reset (active low)
-
-    //the way these work is for each bus, the indices of each wire all correspond to 1 pin and its configuration settings
-    // example for the input bus: input_in[0] is the data in, input_pu[0] is the pull up configuration and input_pd[0] is the pull down config all for input-only pin 0
-    // bidirectional pins have more configuration settings
-    input  wire [NUM_INPUT_PADS-1:0] input_in,   // Input value: tie these to the input ports
+    
+    input  wire [NUM_INPUT_PADS-1:0] input_in,   // Input value
     output wire [NUM_INPUT_PADS-1:0] input_pu,   // Pull-up
     output wire [NUM_INPUT_PADS-1:0] input_pd,   // Pull-down
 
-    input  wire [NUM_BIDIR_PADS-1:0] bidir_in,   // Input value: we're not using
-    output wire [NUM_BIDIR_PADS-1:0] bidir_out,  // Output value: tie the output ports to here
+    input  wire [NUM_BIDIR_PADS-1:0] bidir_in,   // Input value
+    output wire [NUM_BIDIR_PADS-1:0] bidir_out,  // Output value
     output wire [NUM_BIDIR_PADS-1:0] bidir_oe,   // Output enable
     output wire [NUM_BIDIR_PADS-1:0] bidir_cs,   // Input type (0=CMOS Buffer, 1=Schmitt Trigger)
     output wire [NUM_BIDIR_PADS-1:0] bidir_sl,   // Slew rate (0=fast, 1=slow)
@@ -32,7 +29,7 @@ module chip_core #(
     output wire [NUM_BIDIR_PADS-1:0] bidir_pu,   // Pull-up
     output wire [NUM_BIDIR_PADS-1:0] bidir_pd,   // Pull-down
 
-    inout  wire [NUM_ANALOG_PADS-1:0] analog  // Analog: we're not using, but interested in if we could use for MIPI? super high speed streaming protocol that requires an analog pin
+    inout  wire [NUM_ANALOG_PADS-1:0] analog  // Analog
 );
 
     // See here for usage: https://gf180mcu-pdk.readthedocs.io/en/latest/IPs/IO/gf180mcu_fd_io/digital.html

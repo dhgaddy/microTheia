@@ -33,7 +33,7 @@
 `endif
 
 module chip_top #(
-    // Power/ground pads for core and I/O
+    // Power/ground pads for I/O
     parameter NUM_DVDD_PADS = `NUM_DVDD_PADS,
     parameter NUM_DVSS_PADS = `NUM_DVSS_PADS,
 
@@ -45,7 +45,7 @@ module chip_top #(
     parameter NUM_INPUT_PADS = `NUM_INPUT_PADS,
     parameter NUM_BIDIR_PADS = `NUM_BIDIR_PADS,
     parameter NUM_ANALOG_PADS = `NUM_ANALOG_PADS
-)(
+    )(
     `ifdef USE_POWER_PINS
     inout  wire VDD,
     inout  wire VSS,
@@ -55,10 +55,10 @@ module chip_top #(
 
     inout  wire clk_PAD,
     inout  wire rst_n_PAD,
-
+    
     inout  wire [NUM_INPUT_PADS-1:0] input_PAD,
     inout  wire [NUM_BIDIR_PADS-1:0] bidir_PAD,
-
+    
     inout  wire [NUM_ANALOG_PADS-1:0] analog_PAD
 );
 
@@ -266,7 +266,7 @@ module chip_top #(
     (* keep *) gf180mcu_ws_ip__shuttle_id shuttle_id ();
     (* keep *) gf180mcu_ws_ip__project_id project_id ();
     (* keep *) gf180mcu_ws_ip__marker marker ();
-
+    
     // wafer.space logo - can be removed if desired
     (* keep *) gf180mcu_ws_ip__logo wafer_space_logo ();
 
