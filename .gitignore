@@ -4,27 +4,15 @@ __pycache__/
 gf180mcu/
 gf180_drc.lyrdb
 sim_build/
-sim_build_*/
 final/
 img/
 *.lyrdb
+generated_defines.svh
 
 # Added GF180 stuff
-generated_defines.svh
+sim_build_*/
 results.xml
 macro_instances.txt
-
-# FPGA files
-synth/build/
-synth/icestorm_icebreaker/build/
-synth/*.log
-synth/*.asc
-synth/*.bit
-synth/*.json
-*.json
-*.asc
-*.bit
-*.log
 
 # Generated Verilog/SystemVerilog
 *.sv2v.v
