@@ -32,6 +32,20 @@ DESIGN_NAME: chip_top
 VERILOG_FILES:
 - dir::../src/chip_top.sv
 - dir::../src/chip_core.sv
+- dir::../src/soc.sv
+- dir::../src/spi_wrapper.sv
+- dir::../src/control_fsm.sv
+- dir::../src/evt2_decoder.sv
+- dir::../src/sram_wrapper.sv
+- dir::../src/input_fifo.sv
+- dir::../src/selectable_debug.sv
+- dir::../src/voxel_bin_core.sv
+- dir::../src/voxel_binning.sv
+- dir::../src/voxel_gesture_classifier.sv
+- dir::../src/voxel_mac_engine.sv
+- dir::../third_party/verilog_spi/spi_module.v
+- dir::../third_party/verilog_spi/pos_edge_det.v
+- dir::../third_party/verilog_spi/neg_edge_det.v
 
 # Enable plugin for better SystemVerilog support
 # USE_SLANG: True
