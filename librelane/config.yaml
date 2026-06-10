@@ -30,22 +30,24 @@ meta:
 
 DESIGN_NAME: chip_top
 VERILOG_FILES:
-- dir::../src/chip_top.sv
-- dir::../src/chip_core.sv
-- dir::../src/soc.sv
-- dir::../src/spi_wrapper.sv
-- dir::../src/control_fsm.sv
-- dir::../src/evt2_decoder.sv
-- dir::../src/sram_wrapper.sv
-- dir::../src/input_fifo.sv
-- dir::../src/selectable_debug.sv
-- dir::../src/voxel_bin_core.sv
-- dir::../src/voxel_binning.sv
-- dir::../src/voxel_gesture_classifier.sv
-- dir::../src/voxel_mac_engine.sv
-- dir::../third_party/verilog_spi/spi_module.v
-- dir::../third_party/verilog_spi/pos_edge_det.v
-- dir::../third_party/verilog_spi/neg_edge_det.v
+    - dir::../src/chip_top.sv
+    - dir::../src/chip_core.sv
+    - dir::../src/soc.sv
+    - dir::../src/spi_wrapper.sv
+    - dir::../src/evt2_decoder.sv
+    - dir::../src/input_fifo.sv
+    - dir::../src/control_fsm.sv
+    - dir::../src/voxel_binning.sv
+    - dir::../src/voxel_bin_core.sv
+    - dir::../src/voxel_mac_engine.sv
+    - dir::../src/voxel_gesture_classifier.sv
+    - dir::../src/selectable_debug.sv
+    - dir::../src/sram_wrapper.sv
+    - dir::../third_party/verilog_spi/spi_module.v
+    - dir::../third_party/verilog_spi/spi2.v
+    - dir::../third_party/verilog_spi/clock_divider.v
+    - dir::../third_party/verilog_spi/pos_edge_det.v
+    - dir::../third_party/verilog_spi/neg_edge_det.v
 
 # Enable plugin for better SystemVerilog support
 # USE_SLANG: True
@@ -61,9 +63,9 @@ FALLBACK_SDC: dir::chip_top.sdc
 
 # Power / ground nets
 VDD_NETS:
-- VDD
+    - VDD
 GND_NETS:
-- VSS
+    - VSS
 
 # We need to add gf180mcu_fd_io__bi_24t
 # due to the unused Y output for output only pads
@@ -75,39 +77,23 @@ IGNORE_DISCONNECTED_MODULES:
 - gf180mcu_ws_ip__logo
 - gf180mcu_ws_ip__marker
 
-# The 3.3V flow inserts hundreds of thousands of fillcap_16/tap_2 cells;
-# netgen's partition refinement does not converge in reasonable time without
-# excluding these from LVS. IO fill cells are excluded for the same reason.
-LVS_IGNORE_CELLS:
-- gf180mcu_as_sc_mcu7t3v3__fill_1
-- gf180mcu_as_sc_mcu7t3v3__fill_2
-- gf180mcu_as_sc_mcu7t3v3__fill_4
-- gf180mcu_as_sc_mcu7t3v3__fill_8
-- gf180mcu_as_sc_mcu7t3v3__fillcap_4
-- gf180mcu_as_sc_mcu7t3v3__fillcap_8
-- gf180mcu_as_sc_mcu7t3v3__fillcap_16
-- gf180mcu_as_sc_mcu7t3v3__tap_2
-- gf180mcu_fd_io__fill1
-- gf180mcu_fd_io__fill5
-- gf180mcu_fd_io__fill10
-- gf180mcu_fd_io__fillnc
-
 # Clock
 CLOCK_PORT: clk_PAD
 CLOCK_NET: clk_pad/Y
-CLOCK_PERIOD: 40 # 25 MHz
+CLOCK_PERIOD: 15.625 # 64 MHz
 
-# Overfix hold violations
-PL_RESIZER_HOLD_SLACK_MARGIN: 0.35
-GRT_RESIZER_HOLD_SLACK_MARGIN: 0.3
+# Fix hold violations
+PL_RESIZER_HOLD_SLACK_MARGIN: 0.4
+GRT_RESIZER_HOLD_SLACK_MARGIN: 0.35
 
-# Increase density for more 
-# logic on your die
-PL_TARGET_DENSITY_PCT: 35
+# Increase for more logic on your die
+PL_TARGET_DENSITY_PCT: 40 # 35 best so far for ver 2.0
 GRT_ALLOW_CONGESTION: true
 
+# NEW FROM TEMPLATE ---------------------------------------------
 # Allow a larger Y displacement
 PL_MAX_DISPLACEMENT_Y: 200
+# ---------------------------------------------------------------
 
 # Fix antenna violations after DRT
 DRT_ANTENNA_REPAIR_ITERS: 10
@@ -131,6 +117,8 @@ PDN_CORE_RING: True
 PDN_CORE_RING_VWIDTH: 25
 PDN_CORE_RING_HWIDTH: 25
 PDN_CORE_RING_CONNECT_TO_PADS: True
+# PDN_ENABLE_PINS: True
+# PDN_CORE_VERTICAL_LAYER: Metal2
 PDN_CORE_VERTICAL_LAYER: Metal4
 PDN_CORE_HORIZONTAL_LAYER: Metal3
 PDN_CORE_RING_CONNECT_TO_PAD_LAYERS: [Metal2]
@@ -140,40 +128,127 @@ PDN_CORE_RING_CONNECT_TO_PAD_LAYERS: [Metal2]
 # However, it is recommended to fix or carefully review all violations.
 ERROR_ON_MAGIC_DRC: False
 
-# Prevent false positive DRC errors in I/O cells
+
+
+# GF180MCU IO pad fake sites. Override here in case the PDK's
+# libs.tech/librelane/gf180mcu_fd_io/config.tcl does not set PAD_FAKE_SITES.
+# Values: GF_IO_Site = 0.1µm × 355µm, GF_COR_Site = 355µm × 355µm.
+PAD_SITE_NAME: GF_IO_Site
+PAD_CORNER_SITE_NAME: GF_COR_Site
+PAD_FAKE_SITES:
+    GF_IO_Site: [0.1, 355]
+    GF_COR_Site: [355, 355]
+
+# # Provide merged GDS so KLayout XOR can check 3.3V std cell layouts
+# EXTRA_GDS:
+#     - dir::../libs/gf180mcu_as_sc_mcu7t3v3/pdk/libs.ref/gf180mcu_as_sc_mcu7t3v3/gf180mcu_as_sc_mcu7t3v3__merged.gds
+
+
+# Skip every fill / tap / decap cell from the 3.3V SCL and IO libraries
+# during LVS. The 3.3V flow inserts hundreds of thousands of fillcap_16
+# / tap_2 cells; netgen's partition refinement does not converge in
+# reasonable time at that scale. These cells connect only to power /
+# ground rails, so dropping them does not affect LVS coverage.
+# Requires librelane >= 3.0.0 (see flake.nix).
+LVS_IGNORE_CELLS:
+    # 3.3V standard-cell library
+    - gf180mcu_as_sc_mcu7t3v3__fill_1
+    - gf180mcu_as_sc_mcu7t3v3__fill_2
+    - gf180mcu_as_sc_mcu7t3v3__fill_4
+    - gf180mcu_as_sc_mcu7t3v3__fill_8
+    - gf180mcu_as_sc_mcu7t3v3__fillcap_4
+    - gf180mcu_as_sc_mcu7t3v3__fillcap_8
+    - gf180mcu_as_sc_mcu7t3v3__fillcap_16
+    - gf180mcu_as_sc_mcu7t3v3__tap_2
+    # IO library fill cells
+    - gf180mcu_fd_io__fill1
+    - gf180mcu_fd_io__fill5
+    - gf180mcu_fd_io__fill10
+    - gf180mcu_fd_io__fillnc
+
+
+# new settings to try from from ethan's list
+# current best results are positive setup/hold slack, clean slew, and 102 cap violations
+# included default settings in comments so we can see how far we are "twisting" the knobs
+
+DESIGN_REPAIR_MAX_SLEW_PCT: 30          # default: 20 %
+
+DESIGN_REPAIR_MAX_CAP_PCT: 50           # default: 20 %
+
+GRT_DESIGN_REPAIR_MAX_SLEW_PCT: 20      # default: 10 %0
+
+GRT_DESIGN_REPAIR_MAX_CAP_PCT: 30       # default: 10 %
+
+# overrides the default max capacitance value used during CTS 
+# lower pushes CTS toward smaller clock loads per buffer, may help max cap/max slew
+# CTS_MAX_CAP: 0.15                        # default: None; units: pF -> unconstraining after other adjustments actually increased hold and setup slack with no additional violations
+
+# max transition/slew value used during CTS 
+# If left unset, the value is extracted from the Liberty data for the CTS buffers
+# trying to tighten slightly, over tightening produced major hold vios
+#CTS_MAX_SLEW: 1.20                       # default: None; -> unconstraining after other adjustments actually increased hold and setup slack with no additional violations
+
+# Limits the number of sinks allowed in each CTS sink cluster
+# smaller clusters mean more leaf buffers and lower fanout/cap per
+CTS_SINK_CLUSTERING_SIZE: 12               # default: None
+
+# Limits the physical diameter of each CTS sink cluster.
+# Smaller values keep sinks in a cluster physically closer together
+CTS_SINK_CLUSTERING_MAX_DIAMETER: 25      # default: None 
+
+CTS_CLK_MAX_WIRE_LENGTH: 450             # default: 0 best so far is 450 with 109 max cap violations spread between clk net and wires. 200 is only wire vios but thin hold/setup. unconstrained is mostly only clk net. 500 = 115 cap, mostly clk, good setup/hold
+
+# buffer long nets during design repair
+DESIGN_REPAIR_MAX_WIRE_LENGTH: 250       # default: 0 um 
+
+# same but after global routing when wire estimates are more realistic
+GRT_DESIGN_REPAIR_MAX_WIRE_LENGTH: 200   # default: 0 µm
+
+CTS_SINK_BUFFER_MAX_CAP_DERATE_PCT: 25  # default: None, smaller numbers means prefer larger buffers i think? so far 25 best w/102 cap vios & good slack
+
+MAX_FANOUT_CONSTRAINT: 12 # 11 works well
+
+
+
+# Due to OpenROAD bug
+# https://github.com/The-OpenROAD-Project/OpenROAD/issues/8229
+#PL_TIME_DRIVEN: False
+#PL_ROUTABILITY_DRIVEN: False
+
+# Prevent false positive DRC errors in I/O cells and SRAMs
 MAGIC_GDS_FLATGLOB:
-# For contacts
-- "*_CDNS_*"
-# Foundry provided SRAMs
-- "*$$*"
-- "M1_N*"
-- "M1_P*"
-- "M2_M1*"
-- "M3_M2*"
-- "nmos_5p0*"
-- "nmos_1p2*"
-- "nmos_3p3*"
-- "pmos_5p0*"
-- "pmos_1p2*"
-- "pmos_3p3*"
-- "via1_*"
-- "ypass_gate*"
-- "G_ring_*"
+    # For contacts
+    - "*_CDNS_*"
+    # Foundry provided SRAMs
+    - "*$$*"
+    - "M1_N*"
+    - "M1_P*"
+    - "M2_M1*"
+    - "M3_M2*"
+    - "nmos_5p0*"
+    - "nmos_1p2*"
+    # - "nmos_3p3*"
+    - "pmos_5p0*"
+    - "pmos_1p2*"
+    # - "pmos_3p3*"
+    - "via1_*"
+    - "ypass_gate*"
+    - "G_ring_*"
 # These additional cells must be flattened to get rid of 3.3V devices
 # (DUALGATE drawn into high-level cells)
-- "dcap_103*"
-- "din_*"
-- "mux821_*"
-- "rdummy_*"
-- "pmoscap_*"
-- "xdec_*"
-- "ypredec*"
-- "xpredec*"
-- "prexdec_*"
-- "xdec8_*"
-- "xdec16_*"
-- "xdec32_*"
-- "sa_*"
+    - "dcap_103*"
+    - "din_*"
+    - "mux821_*"
+    - "rdummy_*"
+    - "pmoscap_*"
+    - "xdec_*"
+    - "ypredec*"
+    - "xpredec*"
+    - "prexdec_*"
+    - "xdec8_*"
+    - "xdec16_*"
+    - "xdec32_*"
+    - "sa_*"
 
 # Since we cannot meet the minimum density limit on Metal2,
 # ignore active metal on previous and subsequent layers
@@ -213,3 +288,10 @@ KLAYOUT_ANTENNA_OPTIONS:
   decks: "antenna"
   variant: ref::$PDK
   workers: max
+
+# # Halo size around macros while cutting rows.
+# # Workaround for: https://github.com/The-OpenROAD-Project/OpenROAD/issues/8868
+# FP_MACRO_HORIZONTAL_HALO: 10
+# FP_MACRO_VERTICAL_HALO: 10
+# PDN_HORIZONTAL_HALO: 5
+# PDN_VERTICAL_HALO: 5
