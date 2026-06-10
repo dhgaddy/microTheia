@@ -1,11 +1,11 @@
 MAKEFILE_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
-RUN_TAG := $(shell ls librelane/runs/ 2>/dev/null | tail -n 1)
+RUN_TAG = $(shell ls librelane/runs/ | tail -n 1)
 TOP = chip_top
 
 PDK_ROOT ?= $(MAKEFILE_DIR)/gf180mcu
 PDK ?= gf180mcuD
-PDK_COMMIT ?= f3b5e46babb6b417f9a1a1b5c413f7dda6f68a51
+PDK_COMMIT ?= f6bfbd4d3d23c4236ff1f36126489ee59aa35cbd
 
 # Available SCL libraries:
 # gf180mcu_as_sc_mcu7t3v3
@@ -57,10 +57,15 @@ ifeq ($(filter $(SLOT),$(AVAILABLE_SLOTS)),)
     $(error $(SLOT) does not exist in AVAILABLE_SLOTS: $(AVAILABLE_SLOTS))
 endif
 
-SLOT_UPPER  := $(shell echo $(SLOT) | tr '[:lower:]' '[:upper:]')
-SLOT_DEFINE  = SLOT_$(SLOT_UPPER)
-SRAM_DEFINE  = SRAM_$(SRAM)
+SLOT_DEFINE = SLOT_$(shell echo $(SLOT) | tr '[:lower:]' '[:upper:]')
+SRAM_DEFINE = SRAM_$(SRAM)
 
+LIBRELANE_OPTS = --pdk ${PDK} --pdk-root ${PDK_ROOT} --manual-pdk --scl ${SCL} --pad ${PAD}
+LIBRELANE_CONFIGS = librelane/slots/slot_${SLOT}.yaml librelane/macros/macros_${MACROS}.yaml librelane/config.yaml
+
+.DEFAULT_GOAL := help
+
+### BEGIN CUSTOM CHANGES ----------------------------------------------------------------------
 # Source lists for sim-chip-top-sanity (Makefile.sim path, no chip_top_tb.py runner).
 CHIP_TOP_SRCS := \
     $(MAKEFILE_DIR)/src/chip_top.sv \
@@ -90,12 +95,6 @@ CHIP_TOP_SRCS := \
 # (GLS and full chip_top_tb.py runs resolve their own IO sources internally.)
 CHIP_TOP_IO_SRCS := $(MAKEFILE_DIR)/sim/io_stubs.v
 
-LIBRELANE_OPTS = --pdk ${PDK} --pdk-root ${PDK_ROOT} --manual-pdk --scl ${SCL} --pad ${PAD}
-LIBRELANE_CONFIGS = librelane/slots/slot_${SLOT}.yaml librelane/macros/macros_${MACROS}.yaml librelane/config.yaml
-
-.DEFAULT_GOAL := help
-
-### BEGIN CUSTOM CHANGES
 # Select design to test
 SIM_DUTS = $(strip $(DUT))
 
@@ -109,16 +108,7 @@ CONFIG_FILE := configs/$(CONFIG).txt
 # Default testbench module name is <DUT>_tb, but you can override it:
 # Example: make sim DUT=voxel_bin_core_parallel TB=voxel_bin_core
 TB ?= $(DUT)
-
-# install-3v3-scl: ## Install the 3.3V standard cell library into the PDK
-# 	git submodule update --init libs/gf180mcu_as_sc_mcu7t3v3 libs/gf180mcu_ocd_ip_sram
-# 	cp -r $(MAKEFILE_DIR)/libs/gf180mcu_as_sc_mcu7t3v3/pdk/libs.ref/gf180mcu_as_sc_mcu7t3v3 $(PDK_ROOT)/$(PDK)/libs.ref/
-# 	cp -r $(MAKEFILE_DIR)/libs/gf180mcu_as_sc_mcu7t3v3/pdk/libs.tech/librelane $(PDK_ROOT)/$(PDK)/libs.tech/
-# 	cp -r $(MAKEFILE_DIR)/libs/gf180mcu_as_sc_mcu7t3v3/pdk/libs.tech/magic $(PDK_ROOT)/$(PDK)/libs.tech/
-# 	cp $(MAKEFILE_DIR)/librelane/gf180mcu_as_sc_mcu7t3v3_config.tcl $(PDK_ROOT)/$(PDK)/libs.tech/librelane/gf180mcu_as_sc_mcu7t3v3/config.tcl
-# .PHONY: install-3v3-scl
-
-### END CUSTOM CHANGES
+### END CUSTOM CHANGES ------------------------------------------------------------
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -130,17 +120,19 @@ help: ## Show this help message
 all: librelane ## Build the project (runs LibreLane)
 .PHONY: all
 
-$(PDK_ROOT)/$(PDK):
+$(PDK_ROOT)/ciel/gf180mcu/versions/$(PDK_COMMIT)/$(PDK):
 	ciel enable $(PDK_COMMIT) --pdk-root $(PDK_ROOT) --pdk-family $(PDK) --include-libraries all
 
-clone-pdk: $(PDK_ROOT)/$(PDK) ## Clone the gf180mcu PDK
+clone-pdk: $(PDK_ROOT)/ciel/gf180mcu/versions/$(PDK_COMMIT)/$(PDK) ## Clone the gf180mcu PDK
 .PHONY: clone-pdk
 
-config-pdk:
+# NEW ------------------------------------------------------------
+config-pdk: ## Clone the gf180mcu PDK, pull test files, and pulls third party spi
 	$(MAKE) clone-pdk
 	git lfs pull
 	git submodule update --init third_party/verilog_spi
 .PHONY: config-pdk
+# ----------------------------------------------------------------
 
 # Need to find a better way to
 # pass the variables to LibreLane
@@ -151,45 +143,37 @@ defines:
 	$(file >>src/generated_defines.svh,`define ${SRAM_DEFINE})
 .PHONY: defines
 
-librelane: $(PDK_ROOT)/$(PDK) defines ## Run LibreLane flow (synthesis, PnR, verification)
+librelane: clone-pdk defines ## Run LibreLane flow (synthesis, PnR, verification)
 	SRAM_DEFINE=${SRAM_DEFINE} librelane ${LIBRELANE_CONFIGS} ${LIBRELANE_OPTS} --save-views-to $(MAKEFILE_DIR)/final
 .PHONY: librelane
 
-librelane-condensed: $(PDK_ROOT)/$(PDK) defines ## Run LibreLane flow (synthesis, PnR, verification)
+librelane-condensed: clone-pdk defines ## Run LibreLane flow (synthesis, PnR, verification)
 	SRAM_DEFINE=${SRAM_DEFINE} librelane --condensed ${LIBRELANE_CONFIGS} ${LIBRELANE_OPTS} --save-views-to $(MAKEFILE_DIR)/final
 .PHONY: librelane-condensed
 
-librelane-nodrc: $(PDK_ROOT)/$(PDK) defines ## Run LibreLane flow without DRC checks
+librelane-nodrc: clone-pdk defines ## Run LibreLane flow without DRC checks
 	SRAM_DEFINE=${SRAM_DEFINE} librelane ${LIBRELANE_CONFIGS} ${LIBRELANE_OPTS} --save-views-to $(MAKEFILE_DIR)/final --skip KLayout.Antenna --skip KLayout.DRC --skip Magic.DRC
 .PHONY: librelane-nodrc
 
-librelane-klayoutdrc: $(PDK_ROOT)/$(PDK) defines ## Run LibreLane flow without magic DRC checks
+librelane-klayoutdrc: clone-pdk defines ## Run LibreLane flow without magic DRC checks
 	SRAM_DEFINE=${SRAM_DEFINE} librelane ${LIBRELANE_CONFIGS} ${LIBRELANE_OPTS} --save-views-to $(MAKEFILE_DIR)/final --skip Magic.DRC
 .PHONY: librelane-klayoutdrc
 
-librelane-magicdrc: $(PDK_ROOT)/$(PDK) defines ## Run LibreLane flow without KLayout DRC checks
+librelane-magicdrc: clone-pdk defines ## Run LibreLane flow without KLayout DRC checks
 	SRAM_DEFINE=${SRAM_DEFINE} librelane ${LIBRELANE_CONFIGS} ${LIBRELANE_OPTS} --save-views-to $(MAKEFILE_DIR)/final --skip KLayout.DRC
 .PHONY: librelane-magicdrc
 
-librelane-openroad: $(PDK_ROOT)/$(PDK) defines ## Open the last run in OpenROAD
+librelane-openroad: clone-pdk defines ## Open the last run in OpenROAD
 	SRAM_DEFINE=${SRAM_DEFINE} librelane ${LIBRELANE_CONFIGS} ${LIBRELANE_OPTS} --last-run --flow OpenInOpenROAD
 .PHONY: librelane-openroad
 
-librelane-klayout: $(PDK_ROOT)/$(PDK) defines ## Open the last run in KLayout
+librelane-klayout: clone-pdk defines ## Open the last run in KLayout
 	SRAM_DEFINE=${SRAM_DEFINE} librelane ${LIBRELANE_CONFIGS} ${LIBRELANE_OPTS} --last-run --flow OpenInKLayout
 .PHONY: librelane-klayout
 
-librelane-padring: $(PDK_ROOT)/$(PDK) defines ## Only create the padring
+librelane-padring: clone-pdk defines ## Only create the padring
 	python3 scripts/padring.py ${LIBRELANE_CONFIGS} ${LIBRELANE_OPTS}
 .PHONY: librelane-padring
-
-lint: ## Lint all SystemVerilog files in src
-	verilator --lint-only \
-	          -Wall \
-	          -Wno-fatal \
-	          -flife lint.vlt \
-	          $(SV_SRCS)
-.PHONY: lint
 
 sim: $(PDK_ROOT)/$(PDK) defines ## Run RTL simulation with cocotb (DUT=chip_top runs chip_top tb)
 	@if [ -z "$(DUT)" ]; then \
@@ -238,6 +222,8 @@ sim-all: ## Test all the modules against Makefile compile args
 	$(MAKE) sim DUT=voxel_mac_engine
 	$(MAKE) sim DUT=voxel_binning
 	$(MAKE) sim DUT=voxel_bin_core
+	$(MAKE) sim DUT=soc
+	$(MAKE) sim DUT=chip_top
 .PHONY: sim-all
 
 sim-chip-top: $(PDK_ROOT)/$(PDK) defines ## Run chip_top RTL simulation with cocotb
