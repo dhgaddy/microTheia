@@ -41,7 +41,7 @@ pdk_root = os.getenv("PDK_ROOT", Path(__file__).resolve().parent / "../gf180mcu"
 pdk      = os.getenv("PDK", "gf180mcuD")
 scl      = os.getenv("SCL", "gf180mcu_as_sc_mcu7t3v3")
 pad      = os.getenv("PAD", "gf180mcu_fd_io")
-sram     = os.getenv("SRAM", "gf180mcu_fd_ip_sram")
+sram     = os.getenv("SRAM", "gf180mcu_ocd_ip_sram")
 slot     = os.getenv("SLOT", "1x1")
 
 # CUSTOM STUFF ----------------------------------------------------------------
