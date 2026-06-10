@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2026 Group G Contributors
+# SPDX-FileCopyrightText: © 2025 Project Template Contributors
 # SPDX-License-Identifier: Apache-2.0
 #
 # chip_top testbench
@@ -24,36 +24,28 @@
 #   chip_core.sv routes pins [5,6,7] to SPI when alt_select=0 (the power-on
 #   default) and pins [2,3,4] when alt_select=1.  This testbench follows the RTL.
 
-import logging
 import os
 import random
+import logging
 from pathlib import Path
-
-from cocotb_tools.runner import get_runner
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, FallingEdge, NextTimeStep, RisingEdge
+from cocotb.triggers import ClockCycles, FallingEdge, NextTimeStep, RisingEdge, Timer, Edge
+from cocotb_tools.runner import get_runner
 
 # ── Environment ───────────────────────────────────────────────────────────────
-sim = os.getenv("SIM", "icarus")
-# PDK_ROOT default tries the in-tree pdk first, then falls back to ~/.ciel.
-# The in-tree copy is what librelane synthesised against, so it's the correct
-# source for GLS standard-cell models.
-gl = os.getenv("GL", "").lower() not in ("", "0", "false", "no")
-_default_pdk_root = Path(__file__).resolve().parents[1] / "gf180mcu"
-if not _default_pdk_root.exists():
-    _default_pdk_root = Path("~/.ciel").expanduser()
-pdk_root = Path(os.getenv("PDK_ROOT", _default_pdk_root))
-pdk = os.getenv("PDK", "gf180mcuD")
-scl = os.getenv("SCL", "gf180mcu_fd_sc_mcu7t5v0")
-pad = os.getenv("PAD", "gf180mcu_fd_io")
-sram = os.getenv("SRAM", "gf180mcu_fd_ip_sram")
-slot = os.getenv("SLOT", "1x1")
+sim      = os.getenv("SIM", "icarus")
+gl       = os.getenv("GL", False)
+pdk_root = os.getenv("PDK_ROOT", Path(__file__).resolve().parent / "../gf180mcu")
+pdk      = os.getenv("PDK", "gf180mcuD")
+scl      = os.getenv("SCL", "gf180mcu_as_sc_mcu7t3v3")
+pad      = os.getenv("PAD", "gf180mcu_fd_io")
+sram     = os.getenv("SRAM", "gf180mcu_fd_ip_sram")
+slot     = os.getenv("SLOT", "1x1")
 
-hdl_toplevel = "chip_top"
-
-timing = os.getenv("TIMING", "").lower() not in ("", "0", "false", "no")
+# CUSTOM STUFF ----------------------------------------------------------------
+timing   = os.getenv("TIMING", "").lower() not in ("", "0", "false", "no")
 sdf_file = os.getenv("SDF_FILE")
 
 # Resolve the GLS netlist:
@@ -63,7 +55,6 @@ sdf_file = os.getenv("SDF_FILE")
 #      (librelane/runs/RUN_*/06-yosys-synthesis/chip_top.nl.v).
 # A clear message is raised at runner-build time if nothing is found.
 _repo_root = Path(__file__).resolve().parents[1]
-
 
 def _resolve_gl_netlist() -> Path:
     env = os.getenv("GL_NETLIST")
@@ -80,16 +71,16 @@ def _resolve_gl_netlist() -> Path:
     # No netlist found — return a path that will fail loudly in the runner.
     return _repo_root / "librelane" / "runs" / "RUN_<missing>" / "chip_top.nl.v"
 
-
 gl_netlist = _resolve_gl_netlist()
+# ------------------------------------------------------------------------
 
 hdl_toplevel = "chip_top"
 
 # ── Timing ────────────────────────────────────────────────────────────────────
-CLK_FREQ_HZ = int(os.getenv("CLK_FREQ_HZ", "64000000"))
-_raw_ps = int(round(1_000_000_000_000 / CLK_FREQ_HZ))
-CHIP_PERIOD_PS = _raw_ps + (_raw_ps % 2)  # cocotb Clock requires an even ps period
-DATA_WIDTH = 32
+CLK_FREQ_HZ    = int(os.getenv("CLK_FREQ_HZ", "64000000"))
+_raw_ps        = int(round(1_000_000_000_000 / CLK_FREQ_HZ))
+CHIP_PERIOD_PS = _raw_ps + (_raw_ps % 2)   # cocotb Clock requires an even ps period
+DATA_WIDTH     = 32
 
 # Each SCLK half-period expressed in chip-clock cycles.
 # 1 cycle → 32 MHz SCLK at 64 MHz chip clock.
@@ -97,36 +88,32 @@ SPI_HALF = int(os.getenv("SPI_HALF_CYCLES", "1"))
 
 # ── Pin map ───────────────────────────────────────────────────────────────────
 # input_PAD indices
-PIN_DEF_SCLK = 5  # default SPI (alt_select=0)
+PIN_DEF_SCLK = 5   # default SPI (alt_select=0)
 PIN_DEF_MOSI = 6
-PIN_DEF_CS = 7
-PIN_ALT_SCLK = 2  # alternate SPI (alt_select=1)
+PIN_DEF_CS   = 7
+PIN_ALT_SCLK = 2   # alternate SPI (alt_select=1)
 PIN_ALT_MOSI = 3
-PIN_ALT_CS = 4
-PIN_ALT_MODE = 8  # rising edge toggles alt_select flip-flop
+PIN_ALT_CS   = 4
+PIN_ALT_MODE = 8   # rising edge toggles alt_select flip-flop
 
 # bidir_PAD output indices
 BPIN_HEARTBEAT = 0
 BPIN_SPI_READY = 1
-BPIN_DBG_LO = 6  # debug_bus[0]
-BPIN_DEF_MISO = 38
-BPIN_ALT_MISO = 39
+BPIN_DBG_LO    = 6   # debug_bus[0]
+BPIN_DEF_MISO  = 38
+BPIN_ALT_MISO  = 39
 
 # ── EVT2 command word builders ────────────────────────────────────────────────
 # Encodings match soc_tb.py / control_fsm
 
-
 def _boot_req():
     return 0xC << 28
-
 
 def _debug_page(page):
     """type=0xE, page[3:0] in bits [27:24]."""
     return (0xE << 28) | ((int(page) & 0xF) << 24)
 
-
 # ── Input pin shadow ──────────────────────────────────────────────────────────
-
 
 class InputPins:
     """Shadow register so individual bits of input_PAD can be set."""
@@ -136,15 +123,15 @@ class InputPins:
 
     def set(self, idx, val):
         if val:
-            self._v |= 1 << idx
+            self._v |= (1 << idx)
         else:
             self._v &= ~(1 << idx)
 
     def drive(self, dut):
         dut.input_PAD.value = self._v
 
-
 # ── Low-level helpers ─────────────────────────────────────────────────────────
+
 async def _drive_spi_pins(dut, pins):
     """Apply external SPI pin changes away from clk_PAD's sampling edge.
 
@@ -156,6 +143,7 @@ async def _drive_spi_pins(dut, pins):
     """
     await FallingEdge(dut.clk_PAD)
     pins.drive(dut)
+
 
 async def _start_clock(dut):
     cocotb.start_soon(Clock(dut.clk_PAD, CHIP_PERIOD_PS, "ps").start())
@@ -192,14 +180,14 @@ def _bidir_str(dut):
     bidir_PAD always has Z bits on the reserved/inactive pads, so int()
     always raises ValueError — use string parsing instead.
     """
-    return str(dut.bidir_PAD.value)  # e.g. "1z0z0z0z1010...0"
+    return str(dut.bidir_PAD.value)   # e.g. "1z0z0z0z1010...0"
 
 
 def _bidir_bit(dut, idx):
     """Read one bit of bidir_PAD by index (0=LSB); returns 0 if Z/X."""
-    s = _bidir_str(dut)  # 40 chars, s[0] = bidir_PAD[39]
+    s = _bidir_str(dut)               # 40 chars, s[0] = bidir_PAD[39]
     c = s[39 - idx]
-    return 1 if c == "1" else 0
+    return 1 if c == '1' else 0
 
 
 async def _wait_spi_ready(dut, max_cycles=5000):
@@ -233,14 +221,14 @@ def _read_debug_bus(dut):
     internal i_chip_core.debug_bus signal validates the full output path
     including bit-mapping, output enables, and pad models.
     """
-    s = _bidir_str(dut)  # 40 chars, MSB-first (s[0] = bit 39)
+    s   = _bidir_str(dut)                # 40 chars, MSB-first (s[0] = bit 39)
     bus = 0
     # bidir_PAD[37:6] → 32 bits of debug_bus.  bit 6 = LSB of debug_bus.
     for i in range(32):
-        idx = 6 + i  # pin index 6..37
-        c = s[39 - idx]
-        if c == "1":
-            bus |= 1 << i
+        idx = 6 + i                      # pin index 6..37
+        c   = s[39 - idx]
+        if c == '1':
+            bus |= (1 << i)
     return bus
 
 
@@ -253,22 +241,11 @@ async def _startup(dut):
     await _wait_spi_ready(dut)
     return pins
 
-
 # ── SPI streaming ─────────────────────────────────────────────────────────────
 
-
-async def _spi_stream(
-    dut,
-    pins,
-    words,
-    *,
-    alt=False,
-    capture_miso=False,
-    half=SPI_HALF,
-    inter_gap=4,
-    progress_every=0,
-    tag="spi",
-):
+async def _spi_stream(dut, pins, words, *, alt=False,
+                      capture_miso=False, half=SPI_HALF, inter_gap=4,
+                      progress_every=0, tag="spi"):
     """
     Mode-0 SPI stream. CS stays low for the whole burst.
 
@@ -280,15 +257,15 @@ async def _spi_stream(
     sim is making progress — without breaking the CS-held-low invariant of a
     real sensor burst.
     """
-    p_sclk = PIN_ALT_SCLK if alt else PIN_DEF_SCLK
-    p_mosi = PIN_ALT_MOSI if alt else PIN_DEF_MOSI
-    p_cs = PIN_ALT_CS if alt else PIN_DEF_CS
+    p_sclk  = PIN_ALT_SCLK if alt else PIN_DEF_SCLK
+    p_mosi  = PIN_ALT_MOSI if alt else PIN_DEF_MOSI
+    p_cs    = PIN_ALT_CS   if alt else PIN_DEF_CS
     miso_bp = BPIN_ALT_MISO if alt else BPIN_DEF_MISO
 
     miso_words = []
 
     # Idle state: CS high, SCLK low
-    pins.set(p_cs, 1)
+    pins.set(p_cs,   1)
     pins.set(p_sclk, 0)
     pins.set(p_mosi, 0)
     await _drive_spi_pins(dut, pins)
@@ -334,9 +311,8 @@ async def _spi_stream(
             await _drive_spi_pins(dut, pins)
 
         if progress_every and (widx + 1) % progress_every == 0:
-            dut._log.info(
-                f"{tag}: streamed {widx + 1}/{len(words)} words (CS held low) …"
-            )
+            dut._log.info(f"{tag}: streamed {widx + 1}/{len(words)} words "
+                          f"(CS held low) …")
 
     # Deassert CS
     await ClockCycles(dut.clk_PAD, 4)
@@ -351,12 +327,12 @@ async def _spi_stream(
 
 async def _spi_xfer(dut, pins, word, *, alt=False, tag="spi_xfer"):
     """Single 32-bit SPI transfer with MISO capture."""
-    words = await _spi_stream(dut, pins, [word], alt=alt, capture_miso=True, tag=tag)
+    words = await _spi_stream(dut, pins, [word], alt=alt,
+                               capture_miso=True, tag=tag)
     return words[0]
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
-
 
 @cocotb.test(timeout_time=2, timeout_unit="ms")
 async def test_reset_and_spi_ready(dut):
@@ -387,7 +363,8 @@ async def test_default_spi_boot_and_miso(dut):
     await _spi_stream(dut, pins, [_boot_req()], alt=False, tag="boot_req")
     await ClockCycles(dut.clk_PAD, 20)
 
-    miso = await _spi_xfer(dut, pins, _debug_page(0), alt=False, tag="miso_page0")
+    miso = await _spi_xfer(dut, pins, _debug_page(0),
+                            alt=False, tag="miso_page0")
     dut._log.info(f"MISO after BOOT_REQ = 0x{miso:08X}")
     # classification_output starts at 0 after reset → MISO = 0
     assert miso == 0, f"Expected MISO=0x00000000 (no gesture yet), got 0x{miso:08X}"
@@ -417,13 +394,14 @@ async def test_debug_page_sweep(dut):
 
     prev_bus = None
     for page in range(5):
-        await _spi_stream(
-            dut, pins, [_debug_page(page)], alt=False, tag=f"page_sel_{page}"
-        )
+        await _spi_stream(dut, pins, [_debug_page(page)],
+                          alt=False, tag=f"page_sel_{page}")
         await ClockCycles(dut.clk_PAD, 10)
 
         bus = _read_debug_bus(dut)
-        dut._log.info(f"  Page {page} ({PAGE_NAMES[page]}): debug_bus=0x{bus:08X}")
+        dut._log.info(
+            f"  Page {page} ({PAGE_NAMES[page]}): debug_bus=0x{bus:08X}"
+        )
         prev_bus = bus
 
     dut._log.info("PASS: all debug pages 0-4 selected without simulation error")
@@ -448,23 +426,23 @@ async def test_alt_input_mode_toggle(dut):
     await _spi_stream(dut, pins, [_boot_req()], alt=False, tag="boot_def")
     await ClockCycles(dut.clk_PAD, 20)
 
-    miso_before = await _spi_xfer(
-        dut, pins, _debug_page(0), alt=False, tag="miso_before_toggle"
-    )
+    miso_before = await _spi_xfer(dut, pins, _debug_page(0),
+                                   alt=False, tag="miso_before_toggle")
     dut._log.info(f"Default MISO (before toggle) = 0x{miso_before:08X}")
 
     # --- pulse ALT_INPUT_MODE to trigger alt_select toggle ---
     dut._log.info("Pulsing ALT_INPUT_MODE (input_PAD[8]) high...")
     pins.set(PIN_ALT_MODE, 1)
     pins.drive(dut)
-    await ClockCycles(dut.clk_PAD, 8)  # > 2 sync FF + 1 edge-detect stage
+    await ClockCycles(dut.clk_PAD, 8)   # > 2 sync FF + 1 edge-detect stage
     pins.set(PIN_ALT_MODE, 0)
     pins.drive(dut)
     await ClockCycles(dut.clk_PAD, 8)
 
     # --- alt SPI (input_PAD[2,3,4]) should now be active ---
     dut._log.info("Testing alt SPI path (input_PAD[2,3,4], MISO=bidir_PAD[39])...")
-    miso_alt = await _spi_xfer(dut, pins, _debug_page(0), alt=True, tag="miso_alt")
+    miso_alt = await _spi_xfer(dut, pins, _debug_page(0),
+                                alt=True, tag="miso_alt")
     dut._log.info(f"Alt MISO (after toggle) = 0x{miso_alt:08X}")
 
     # In alt mode, bidir_out[38] is forced to 0 and bidir_oe[38]=0 (output disabled)
@@ -504,7 +482,8 @@ async def test_alt_input_mode_toggle_back(dut):
     await _spi_stream(dut, pins, [_boot_req()], alt=False, tag="boot_restored")
     await ClockCycles(dut.clk_PAD, 20)
 
-    miso = await _spi_xfer(dut, pins, _debug_page(0), alt=False, tag="miso_restored")
+    miso = await _spi_xfer(dut, pins, _debug_page(0),
+                            alt=False, tag="miso_restored")
     dut._log.info(f"MISO after double-toggle = 0x{miso:08X}")
 
     # bidir_PAD[39] (alt MISO) should be 0: bidir_out[39] driven to 0, OE[39]=0
@@ -524,11 +503,11 @@ async def test_alt_input_mode_toggle_back(dut):
 
 import struct
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_GRID_SIZE = 16
+_REPO_ROOT    = Path(__file__).resolve().parents[1]
+_GRID_SIZE    = 16
 _READOUT_BINS = 16
-_NUM_CLASSES = 4
-_FEAT_COUNT = _GRID_SIZE * _GRID_SIZE * _READOUT_BINS  # 4096
+_NUM_CLASSES  = 4
+_FEAT_COUNT   = _GRID_SIZE * _GRID_SIZE * _READOUT_BINS   # 4096
 
 # Programmable bin length — added by commit c1146c3.
 #
@@ -553,16 +532,9 @@ _EXPECTED_CLASS = {0: 0, 1: 1, 2: 2, 3: 3}
 
 # ── EVT2 word builders ────────────────────────────────────────────────────────
 
-
 def _w_weight(weight, feat_addr, class_id):
     # EVT_WEIGHT = 0x2: [27:20]=data, [19:8]=feature addr (12b), [7:2]=class/sram sel (6b)
-    return (
-        (0x2 << 28)
-        | ((weight & 0xFF) << 20)
-        | ((feat_addr & 0xFFF) << 8)
-        | ((class_id & 0x3F) << 2)
-    )
-
+    return (0x2 << 28) | ((weight & 0xFF) << 20) | ((feat_addr & 0xFFF) << 8) | ((class_id & 0x3F) << 2)
 
 def _w_thresh_upper(val, addr):
     # EVT_THRESH_U = 0x3: [27:9]=upper bits of threshold (19-bit field; fits
@@ -570,11 +542,9 @@ def _w_thresh_upper(val, addr):
     # RTL reads addr only from THRESH_L, so addr is ignored here.
     return (0x3 << 28) | (((val >> 18) & 0x7FFFF) << 9)
 
-
 def _w_thresh_lower(val, addr):
     # EVT_THRESH_L = 0x4: [27:10]=lower 18 bits of threshold, [9:7]=thresh addr (3b)
     return (0x4 << 28) | ((val & 0x3FFFF) << 10) | ((addr & 0x7) << 7)
-
 
 def _w_bin_length_upper(val):
     """
@@ -587,7 +557,6 @@ def _w_bin_length_upper(val):
     """
     return (0x5 << 28) | ((int(val) >> 17) & 0x1FFFF)
 
-
 def _w_bin_length_lower(val):
     """
     Lower 17 bits of bin length.  When this word is decoded the full 34-bit
@@ -596,13 +565,10 @@ def _w_bin_length_lower(val):
     """
     return (0x6 << 28) | (int(val) & 0x1FFFF)
 
-
 def _w_reads_done():
     return 0xF << 28
 
-
 # ── File helpers ──────────────────────────────────────────────────────────────
-
 
 def _load_weights():
     weights = []
@@ -624,7 +590,6 @@ def _load_weights():
         weights.append(vals[:_FEAT_COUNT])
     return weights
 
-
 def _load_thresholds():
     path = _REPO_ROOT / "weights/thresholds.mem"
     vals = []
@@ -638,8 +603,7 @@ def _load_thresholds():
                     vals.append(0)
     while len(vals) < 2 * _NUM_CLASSES:
         vals.append(0)
-    return vals[: 2 * _NUM_CLASSES]
-
+    return vals[:2 * _NUM_CLASSES]
 
 def _build_program_words(weights, thresholds, bin_length_us=BIN_LENGTH_US):
     """
@@ -670,7 +634,6 @@ def _build_program_words(weights, thresholds, bin_length_us=BIN_LENGTH_US):
     words.append(_w_reads_done())
     return words
 
-
 def _read_bin(path):
     data = Path(path).read_bytes()
     if data.startswith(b"version https://git-lfs.github.com/spec/v1"):
@@ -696,10 +659,10 @@ def _read_bin(path):
     #     bizarre TIME_HIGH values)
     #   • Concatenation of recordings without re-basing (TIME_HIGH would reset
     #     to 0 at the seam — definitely backwards)
-    last_th = -1
+    last_th     = -1
     last_th_idx = -1
     for idx, w in enumerate(words):
-        if (w >> 28) == 0x8:  # TIME_HIGH
+        if (w >> 28) == 0x8:                                # TIME_HIGH
             th = w & 0x0FFFFFFF
             if th < last_th:
                 raise RuntimeError(
@@ -707,10 +670,9 @@ def _read_bin(path):
                     f"th={th} < prev th={last_th} (prev word #{last_th_idx}). "
                     "File is corrupt or recordings were concatenated."
                 )
-            last_th = th
+            last_th     = th
             last_th_idx = idx
     return words
-
 
 def _append_flush_events(words, bin_length_us=BIN_LENGTH_US):
     """
@@ -736,27 +698,20 @@ def _append_flush_events(words, bin_length_us=BIN_LENGTH_US):
         if (w >> 28) == 0x8:
             last_th = w & 0x0FFFFFFF
     for i in range(1, _READOUT_BINS + 2):
-        ts_us = last_th * 64 + i * bin_length_us
+        ts_us  = last_th * 64 + i * bin_length_us
         th_val = (ts_us >> 6) & 0x0FFFFFFF
         ts_lsb = ts_us & 0x3F
         words.append((0x8 << 28) | th_val)
         words.append((ts_lsb << 22) | (160 << 11) | 160)
     return words
 
-
 def _resolve_bin_files():
     test_set = _REPO_ROOT / "EVT2_gesture_set" / "test_set"
-    names = [
-        "wave_down_sun_test1.bin",
-        "wave_left_sun_test1.bin",
-        "wave_right_sun_test1.bin",
-        "wave_up_sun_test1.bin",
-    ]
+    names = ["wave_down_sun_test1.bin", "wave_left_sun_test1.bin",
+             "wave_right_sun_test1.bin", "wave_up_sun_test1.bin"]
     return [test_set / n for n in names]
 
-
 # ── Classification-test helpers ───────────────────────────────────────────────
-
 
 def _resolve_handle(dut, path):
     """Resolve a signal handle ONCE. Returns the handle or None.
@@ -815,6 +770,7 @@ def _resolve_bus_handles(dut, path, width):
                 yield getattr(dut, child_name)
             except Exception:
                 continue
+
     # GL form: per-bit handles
     bits = []
     for i in range(width):
@@ -857,7 +813,6 @@ def _sig_bus(dut, path, width):
         val |= (int(h.value) & 1) << i
     return val
 
-
 # Time from end of BOOT_REQ word to evt_ld_en going high.  Driven by
 # control_fsm.sv:PWR_WAIT_CYCLES (default 1024) + 1 cycle for the FSM to
 # register boot_req_i + 1 cycle for the LD_OPEN→evt_ld_en register update.
@@ -891,31 +846,20 @@ async def _boot_chip_top(dut, pins, weights, thresholds):
 
 _MAIN_STATE_NAMES = {0: "ST_BOOT", 1: "ST_LOAD", 2: "ST_RUN", 3: "ST_DEBUG"}
 _LOAD_STATE_NAMES = {
-    0: "LD_IDLE",
-    1: "LD_WAIT_PWR",
-    2: "LD_OPEN",
-    3: "LD_WAIT",
-    4: "LD_DONE",
-    5: "LD_FAIL",
+    0: "LD_IDLE", 1: "LD_WAIT_PWR", 2: "LD_OPEN",
+    3: "LD_WAIT", 4: "LD_DONE", 5: "LD_FAIL",
 }
-
 
 def _probe_fsm_after_boot(dut):
     """Read the FSM state directly and log it; useful for diagnosing why
     GLS classification fails. In a healthy boot we expect main_state=ST_RUN
     (=2), evt_ld_en=0, core_rst_o=0.
     """
-    h_main = _resolve_bus_handles(
-        dut, "i_chip_core.u_soc.u_core.controller_fsm.main_state", 2
-    )
-    h_load = _resolve_bus_handles(
-        dut, "i_chip_core.u_soc.u_core.controller_fsm.load_state", 6
-    )
-    h_ldn = _resolve_handle(dut, "i_chip_core.u_soc.u_core.controller_fsm.evt_ld_en")
+    h_main = _resolve_bus_handles(dut, "i_chip_core.u_soc.u_core.controller_fsm.main_state", 2)
+    h_load = _resolve_bus_handles(dut, "i_chip_core.u_soc.u_core.controller_fsm.load_state", 6)
+    h_ldn  = _resolve_handle(dut, "i_chip_core.u_soc.u_core.controller_fsm.evt_ld_en")
     h_crst = _resolve_handle(dut, "i_chip_core.u_soc.u_core.controller_fsm.core_rst_o")
-    h_done = _resolve_handle(
-        dut, "i_chip_core.u_soc.u_core.controller_fsm.evt_reads_done"
-    )
+    h_done = _resolve_handle(dut, "i_chip_core.u_soc.u_core.controller_fsm.evt_reads_done")
 
     def _bits(handles):
         if handles is None:
@@ -945,7 +889,6 @@ def _probe_fsm_after_boot(dut):
             f"{_LOAD_STATE_NAMES.get(ls, ls)}. The classifier cannot run until "
             "main_state=ST_RUN (which deasserts core_rst_o and ungates MAC)."
         )
-
 
 # ── Speedup levers ────────────────────────────────────────────────────────────
 # A full 4-gesture run streams ≈ 1 M EVT2 words at 68 chip cycles each (32 SCLK
@@ -989,12 +932,11 @@ class _GestureResult:
     therefore the correct way to validate the chip's classification — exactly
     matching the methodology of voxel_bin_core_tb.
     """
-
     def __init__(self):
-        self.fired = False  # at least one gesture_valid pulse seen
-        self.gesture = None  # dominant gesture (set after collection)
-        self.confidence = None  # confidence of dominant class (last pulse)
-        self.gestures = []  # ordered list of (gesture, confidence)
+        self.fired      = False        # at least one gesture_valid pulse seen
+        self.gesture    = None         # dominant gesture (set after collection)
+        self.confidence = None         # confidence of dominant class (last pulse)
+        self.gestures   = []           # ordered list of (gesture, confidence)
 
     def dominant(self):
         """(gesture, confidence) of the most-frequent class. None if empty.
@@ -1020,7 +962,6 @@ class _GestureResult:
 
         return None, None
 
-
 async def _gesture_monitor(dut, result):
     """
     Background task: poll gesture_valid on every rising chip-clock edge and
@@ -1040,8 +981,8 @@ async def _gesture_monitor(dut, result):
     on the top-level chip clock instead.
     """
     h_valid = _resolve_handle(dut, "i_chip_core.u_soc.gesture_valid")
-    h_gest = _resolve_bus_handles(dut, "i_chip_core.u_soc.gesture", 2)
-    h_conf = _resolve_handle(dut, "i_chip_core.u_soc.gesture_confidence")
+    h_gest  = _resolve_bus_handles(dut, "i_chip_core.u_soc.gesture", 2)
+    h_conf  = _resolve_handle(dut, "i_chip_core.u_soc.gesture_confidence")
 
     if h_valid is None or h_gest is None or h_conf is None:
         dut._log.error(
@@ -1052,7 +993,7 @@ async def _gesture_monitor(dut, result):
 
     dut._log.info(
         f"_gesture_monitor: handles cached (gesture as "
-        f"{'bus' if len(h_gest) == 1 else 'per-bit'}, initial valid="
+        f"{'bus' if len(h_gest)==1 else 'per-bit'}, initial valid="
         f"{int(h_valid.value)})"
     )
 
@@ -1100,10 +1041,11 @@ async def _sample_miso_during_drain(dut, pins, result, *, num_samples, gap_cycle
 
     for i in range(num_samples):
         await ClockCycles(dut.clk_PAD, gap_cycles)
-        miso = await _spi_xfer(dut, pins, _debug_page(0), tag=f"drain_miso_{i}")
+        miso = await _spi_xfer(dut, pins, _debug_page(0),
+                                tag=f"drain_miso_{i}")
         # MISO encoding (see _expected_miso): bit[31]=confidence,
         # bits[30:29]=gesture.
-        gesture = (miso >> (DATA_WIDTH - 3)) & 0x3
+        gesture    = (miso >> (DATA_WIDTH - 3)) & 0x3
         confidence = (miso >> (DATA_WIDTH - 1)) & 0x1
         cur = (gesture, confidence)
         if cur == prev:
@@ -1143,10 +1085,9 @@ async def _stream_recording(dut, pins, bin_path):
         words = words[:_MAX_STREAM_WORDS]
 
     total = len(words)
-    stem = Path(bin_path).stem
-    dut._log.info(
-        f"Streaming {Path(bin_path).name}: {total} words (single CS-low burst)"
-    )
+    stem  = Path(bin_path).stem
+    dut._log.info(f"Streaming {Path(bin_path).name}: {total} words "
+                  f"(single CS-low burst)")
 
     result = _GestureResult()
 
@@ -1168,7 +1109,8 @@ async def _stream_recording(dut, pins, bin_path):
     # Single SPI burst with CS held low for the entire stream — matches how
     # a real GenX320 sensor delivers events: continuous, no CS toggling.
     # inter_gap=4: SPI re-arm needs ≥ 3 chip cycles minimum.
-    await _spi_stream(dut, pins, words, inter_gap=4, progress_every=10_000, tag=stem)
+    await _spi_stream(dut, pins, words, inter_gap=4,
+                      progress_every=10_000, tag=stem)
 
     # Drain: 300 000 cycles @ 64 MHz = 4.7 ms. After streaming we have
     # ~READOUT_BINS+2 = 18 flush-driven bin rollovers queued in the binner.
@@ -1182,9 +1124,7 @@ async def _stream_recording(dut, pins, bin_path):
 
     if use_pin_level_monitor:
         await _sample_miso_during_drain(
-            dut,
-            pins,
-            result,
+            dut, pins, result,
             num_samples=300,
             gap_cycles=1000,
         )
@@ -1203,25 +1143,21 @@ async def _stream_recording(dut, pins, bin_path):
     counts = {}
     for g, _ in result.gestures:
         counts[g] = counts.get(g, 0) + 1
-    hist = " ".join(
-        f"{GESTURE_NAMES.get(g, '?')}:{n}" for g, n in sorted(counts.items())
-    )
+    hist = " ".join(f"{GESTURE_NAMES.get(g, '?')}:{n}"
+                    for g, n in sorted(counts.items()))
     dut._log.info(
         f"[{stem}] {len(result.gestures)} gesture pulses; histogram=({hist}); "
         f"dominant={GESTURE_NAMES.get(dom_g, '?')} (confidence={dom_c})"
     )
 
-    result.gesture = dom_g
+    result.gesture    = dom_g
     result.confidence = dom_c
     return result
-
 
 def _expected_miso(gesture, confidence):
     return (((confidence & 1) << 2) | (gesture & 0x3)) << (DATA_WIDTH - 3)
 
-
 # ── Classification tests ──────────────────────────────────────────────────────
-
 
 # Targeted FSM-stepping diagnostic. After each boot step, read the FSM state
 # directly via internal signals (escaped names in GL, dotted hierarchy in RTL).
@@ -1238,28 +1174,18 @@ async def test_fsm_step_diagnostic(dut):
     await _wait_spi_ready(dut)
 
     # Cache probe handles up front (only signals that survived synthesis).
-    h_main = _resolve_bus_handles(
-        dut, "i_chip_core.u_soc.u_core.controller_fsm.main_state", 2
-    )
-    h_load = _resolve_bus_handles(
-        dut, "i_chip_core.u_soc.u_core.controller_fsm.load_state", 6
-    )
-    h_ldn = _resolve_handle(dut, "i_chip_core.u_soc.u_core.controller_fsm.evt_ld_en")
+    h_main = _resolve_bus_handles(dut, "i_chip_core.u_soc.u_core.controller_fsm.main_state", 2)
+    h_load = _resolve_bus_handles(dut, "i_chip_core.u_soc.u_core.controller_fsm.load_state", 6)
+    h_ldn  = _resolve_handle(dut, "i_chip_core.u_soc.u_core.controller_fsm.evt_ld_en")
     h_crst = _resolve_handle(dut, "i_chip_core.u_soc.u_core.controller_fsm.core_rst_o")
-    h_erd = _resolve_handle(
-        dut, "i_chip_core.u_soc.u_core.controller_fsm.evt_reads_done"
-    )
+    h_erd  = _resolve_handle(dut, "i_chip_core.u_soc.u_core.controller_fsm.evt_reads_done")
     h_swvalid = _resolve_handle(dut, "i_chip_core.u_soc.evt_word_valid")
-    h_evt_count = _resolve_bus_handles(
-        dut, "i_chip_core.u_soc.u_core.debug_event_count", 8
-    )
+    h_evt_count = _resolve_bus_handles(dut, "i_chip_core.u_soc.u_core.debug_event_count", 8)
     h_evt_word = _resolve_bus_handles(dut, "i_chip_core.u_soc.evt_word", 32)
 
     def _bits(h):
-        if h is None:
-            return None
-        if len(h) == 1:
-            return int(h[0].value)
+        if h is None: return None
+        if len(h) == 1: return int(h[0].value)
         v = 0
         for i, x in enumerate(h):
             v |= (int(x.value) & 1) << i
@@ -1269,12 +1195,11 @@ async def test_fsm_step_diagnostic(dut):
         return None if h is None else int(h.value)
 
     async def probe(label):
-        await ClockCycles(dut.clk_PAD, 1)  # settle
-        ms = _bits(h_main)
-        ls = _bits(h_load)
+        await ClockCycles(dut.clk_PAD, 1)   # settle
+        ms = _bits(h_main); ls = _bits(h_load)
         dut._log.info(
-            f"PROBE [{label}]: main={ms}({_MAIN_STATE_NAMES.get(ms, '?')}) "
-            f"load={ls}({_LOAD_STATE_NAMES.get(ls, '?')}) "
+            f"PROBE [{label}]: main={ms}({_MAIN_STATE_NAMES.get(ms,'?')}) "
+            f"load={ls}({_LOAD_STATE_NAMES.get(ls,'?')}) "
             f"evt_ld_en={_b1(h_ldn)} core_rst={_b1(h_crst)} "
             f"reads_done={_b1(h_erd)} "
             f"spi.evt_word_valid={_b1(h_swvalid)} "
@@ -1315,11 +1240,11 @@ async def test_fsm_step_diagnostic(dut):
 
     # Probe SPI input plumbing: toggle SCLK and check chip sees the edges.
     h_sclk = _resolve_handle(dut, "i_chip_core.SCLK_wire")
-    h_cs = _resolve_handle(dut, "i_chip_core.CS_wire")
+    h_cs   = _resolve_handle(dut, "i_chip_core.CS_wire")
     h_mosi = _resolve_handle(dut, "i_chip_core.MOSI_wire")
-    h_in5 = h_in2core[5] if h_in2core is not None and len(h_in2core) > 5 else None
-    h_oe0 = _resolve_handle(dut, "bidir_CORE2PAD_OE[0]")
-    h_oe1 = _resolve_handle(dut, "bidir_CORE2PAD_OE[1]")
+    h_in5  = (h_in2core[5] if h_in2core is not None and len(h_in2core) > 5 else None)
+    h_oe0  = _resolve_handle(dut, "bidir_CORE2PAD_OE[0]")
+    h_oe1  = _resolve_handle(dut, "bidir_CORE2PAD_OE[1]")
     h_rstn = _resolve_handle(dut, "i_chip_core.rst_n")
     dut._log.info(
         f"RESET PROBE: chip rst_n={int(h_rstn.value) if h_rstn is not None else '?'} "
@@ -1385,11 +1310,11 @@ async def test_diagnostic_pipeline_probe(dut):
       Page 0 (classifier+MAC) — scores_valid? gesture_valid?
     """
     bin_files = _resolve_bin_files()
-    bin_path = bin_files[1]  # wave_left
+    bin_path  = bin_files[1]   # wave_left
     if not bin_path.exists():
         raise FileNotFoundError(f"Missing: {bin_path}")
 
-    weights = _load_weights()
+    weights    = _load_weights()
     thresholds = _load_thresholds()
 
     pins = InputPins()
@@ -1416,19 +1341,13 @@ async def test_diagnostic_pipeline_probe(dut):
     chunk_size = 30_000
     for chunk_idx in range(3):
         start = chunk_idx * chunk_size
-        end = start + chunk_size
+        end   = start + chunk_size
         chunk = full[start:end]
         if not chunk:
             break
         dut._log.info(f"streaming chunk {chunk_idx} words [{start}:{end}]")
-        await _spi_stream(
-            dut,
-            pins,
-            chunk,
-            inter_gap=4,
-            progress_every=10_000,
-            tag=f"chunk{chunk_idx}",
-        )
+        await _spi_stream(dut, pins, chunk, inter_gap=4,
+                          progress_every=10_000, tag=f"chunk{chunk_idx}")
         # CS goes high here (between bursts); let pipeline settle
         await ClockCycles(dut.clk_PAD, 5_000)
         await snapshot(f"after chunk {chunk_idx} ({end} words streamed)")
@@ -1493,11 +1412,11 @@ async def test_classify_all_gestures(dut):
     MAC engine → gesture classifier → MISO output pin.
     """
     bin_files = _resolve_bin_files()
-    selected = [(i, bin_files[i]) for i in _GESTURE_INDICES if 0 <= i < len(bin_files)]
+    selected  = [(i, bin_files[i]) for i in _GESTURE_INDICES if 0 <= i < len(bin_files)]
     if not selected:
         raise ValueError(
             f"GESTURE_INDICES={_GESTURE_INDICES} selected no valid gestures "
-            f"(valid range: 0..{len(bin_files) - 1})"
+            f"(valid range: 0..{len(bin_files)-1})"
         )
     for _, bf in selected:
         if not bf.exists():
@@ -1507,17 +1426,14 @@ async def test_classify_all_gestures(dut):
             )
 
     if len(selected) < len(bin_files):
-        skipped = [
-            GESTURE_NAMES[i]
-            for i in range(len(bin_files))
-            if i not in {s[0] for s in selected}
-        ]
+        skipped = [GESTURE_NAMES[i] for i in range(len(bin_files))
+                   if i not in {s[0] for s in selected}]
         cocotb.log.info(
             f"GESTURE_INDICES filter active: running "
             f"{[GESTURE_NAMES[i] for i, _ in selected]}, skipping {skipped}"
         )
 
-    weights = _load_weights()
+    weights    = _load_weights()
     thresholds = _load_thresholds()
 
     results = []
@@ -1544,9 +1460,9 @@ async def test_classify_all_gestures(dut):
 
         # Stream the full recording and collect every gesture_valid pulse.
         result = await _stream_recording(dut, pins, bin_path)
-        dom_gesture = result.gesture  # dominant class (correctness)
+        dom_gesture    = result.gesture       # dominant class (correctness)
         dom_confidence = result.confidence
-        last_gesture, last_confidence = result.gestures[-1]  # MISO comparand
+        last_gesture, last_confidence = result.gestures[-1]   # MISO comparand
 
         dut._log.info(
             f"Dominant classifier output: gesture={dom_gesture} "
@@ -1584,9 +1500,8 @@ async def test_classify_all_gestures(dut):
             f"{[GESTURE_NAMES.get(g, g) for g, _ in result.gestures]})"
         )
 
-        results.append(
-            (GESTURE_NAMES[expected], dom_gesture, dom_confidence, len(result.gestures))
-        )
+        results.append((GESTURE_NAMES[expected], dom_gesture, dom_confidence,
+                        len(result.gestures)))
         dut._log.info(
             f"PASS [{bin_path.name}]: "
             f"expected={GESTURE_NAMES[expected]}, "
@@ -1603,20 +1518,19 @@ async def test_classify_all_gestures(dut):
     )
     for name, g, c, n in results:
         dut._log.info(
-            f"  {name:6s} → {GESTURE_NAMES.get(g, g)} (confidence={c}, {n} pulses)"
+            f"  {name:6s} → {GESTURE_NAMES.get(g, g)} "
+            f"(confidence={c}, {n} pulses)"
         )
     dut._log.info("=" * 70)
 
 
 # ── Runner ────────────────────────────────────────────────────────────────────
 
-
 def chip_top_runner():
     from cocotb_tools.runner import get_runner
-
     proj_path = Path(__file__).resolve().parent
 
-    defines = {f"SLOT_{slot.upper()}": True}
+    defines  = {f"SLOT_{slot.upper()}": True}
     defines[f"PDK_{pdk.replace('-', '_')}"] = True
     defines[f"SCL_{scl}"] = True
     defines[f"PAD_{pad}"] = True
@@ -1630,28 +1544,34 @@ def chip_top_runner():
                 "Override with GL_NETLIST=/abs/path/to/chip_top.{nl,pnl}.v"
             )
 
-        pdk_libs = pdk_root / pdk / "libs.ref"
-        # Vendored overrides — see headers in each file for the per-cell
-        # reason. We use sim/ copies instead of the upstream PDK files for
-        # the std-cell library and the IO pads (Verilator can't elaborate
-        # the upstream IO models which use unsupported `rnmos` primitives).
-        scl_v = proj_path / "../sim/gf180mcu_as_sc_mcu7t3v3.v"
+        pdk_libs = Path(pdk_root) / pdk / "libs.ref"
+
+        # SCL cell models: prefer ciel-managed PDK path; fall back to the
+        # vendored sim/ stub (kept for Verilator compat / offline use).
+        pdk_scl_v = pdk_libs / scl / "verilog" / f"{scl}.v"
+        scl_v = pdk_scl_v if pdk_scl_v.exists() else proj_path / "../sim/gf180mcu_as_sc_mcu7t3v3.v"
         scl_prim = pdk_libs / scl / "verilog" / "primitives.v"
-        io_v = proj_path / "../sim/gf180mcu_fd_io.v"
-        ws_io_v = proj_path / "../sim/gf180mcu_ws_io.v"
+
+        # IO pad models: prefer ciel-managed PDK path; fall back to vendored stubs.
+        pdk_io_v = pdk_libs / pad / "verilog" / f"{pad}.v"
+        io_v = pdk_io_v if pdk_io_v.exists() else proj_path / "../sim/gf180mcu_fd_io.v"
+        pdk_wsio_v = pdk_libs / pad / "verilog" / "gf180mcu_ws_io.v"
+        ws_io_v = pdk_wsio_v if pdk_wsio_v.exists() else proj_path / "../sim/gf180mcu_ws_io.v"
 
         sources = [scl_v]
-        if scl_prim.exists():
+        # gf180mcu_as_sc_mcu7t3v3 has no separate primitives.v; all others do.
+        if scl != "gf180mcu_as_sc_mcu7t3v3" and scl_prim.exists():
             sources.append(scl_prim)
+        if scl == "gf180mcu_as_sc_mcu7t3v3":
+            sources.append(proj_path / "../sim/gf180mcu_as_sc_mcu7t3v3_missing_cells.v")
         sources += [
-            # Extra behavioral models/stubs for cells used by the netlist but
-            # missing from the simulator-friendly std-cell model.
-            proj_path / "../sim/gf180mcu_as_sc_mcu7t3v3_missing_cells.v",
             # IO pad models.
             io_v,
             ws_io_v,
+
             # SRAM behavioral models.
             proj_path / "../sim/gf180mcu_ocd_ip_sram_models.v",
+
             # Gate-level netlist.
             gl_netlist,
         ]
@@ -1694,33 +1614,21 @@ def chip_top_runner():
             proj_path / "../third_party/verilog_spi/neg_edge_det.v",
         ]
 
-        # IO pad and SRAM models: use real PDK files when available, otherwise
-        # fall back to the behavioral stubs in sim/io_stubs.v so the PDK does
-        # not have to be cloned just to run RTL simulation.
-        pdk_io_v = (
-            Path(pdk_root) / pdk / "libs.ref/gf180mcu_fd_io/verilog/gf180mcu_fd_io.v"
-        )
-        pdk_wsio_v = (
-            Path(pdk_root) / pdk / "libs.ref/gf180mcu_fd_io/verilog/gf180mcu_ws_io.v"
-        )
-        pdk_sram_v = (
-            Path(pdk_root)
-            / pdk
-            / "libs.ref/gf180mcu_fd_ip_sram/verilog/gf180mcu_fd_ip_sram__sram512x8m8wm1.v"
-        )
+        # IO pad and SRAM models: use ciel-managed PDK files when available,
+        # otherwise fall back to vendored sim/ stubs (Verilator-friendly).
+        pdk_io_v   = Path(pdk_root) / pdk / "libs.ref" / pad  / "verilog" / f"{pad}.v"
+        pdk_wsio_v = Path(pdk_root) / pdk / "libs.ref" / pad  / "verilog" / "gf180mcu_ws_io.v"
+        pdk_sram_v = Path(pdk_root) / pdk / "libs.ref" / sram / "verilog" / f"{sram}__sram512x8m8wm1.v"
 
         if pdk_io_v.exists():
-            sources.append(pdk_io_v)
-            # gf180mcu_ws_io.v is absent from some PDK commits; the project
-            # maintains a sim/ copy that is always correct for RTL simulation.
-            ws_io_sim = proj_path / "../sim/gf180mcu_ws_io.v"
-            sources.append(ws_io_sim if ws_io_sim.exists() else pdk_wsio_v)
-            sources.append(pdk_sram_v)
+            sources += [pdk_io_v, pdk_wsio_v, pdk_sram_v]
         else:
-            print(
-                f"[chip_top_tb] PDK not found at {pdk_root}/{pdk}; using sim/io_stubs.v"
-            )
-            sources.append(proj_path / "../sim/io_stubs.v")
+            print(f"[chip_top_tb] PDK not found at {pdk_root}/{pdk}; using vendored sim/ stubs")
+            sources += [
+                proj_path / "../sim/gf180mcu_fd_io.v",
+                proj_path / "../sim/gf180mcu_ws_io.v",
+                proj_path / "../sim/gf180mcu_ocd_ip_sram_models.v",
+            ]
 
     sources += [
         proj_path / "../ip/gf180mcu_ws_ip__logo/vh/gf180mcu_ws_ip__logo.v",
@@ -1733,52 +1641,37 @@ def chip_top_runner():
     build_args = []
     if sim == "verilator":
         build_args = [
-            "--timing",
-            "--trace",
-            "--trace-fst",
-            "--trace-structs",
+            "--timing", "--trace", "--trace-fst", "--trace-structs",
             # Force deterministic 0-initialization for all uninitialized
             # variables (Verilator 5.x defaults to "unique" which inserts
             # random-X values for unassigned regs — fine for finding races
             # but introduces nondeterminism into GLS where many flops only
             # reset synchronously).
-            "--x-initial",
-            "0",
-            "--x-assign",
-            "0",
+            "--x-initial", "0",
+            "--x-assign", "0",
             # The gate-level netlist produces thousands of benign warnings:
             # WIDTH on tie cells, UNOPTFLAT on the IO pad inout chains,
             # PINMISSING / IMPLICIT on IP module instantiations,
             # MULTIDRIVEN on bidir pads. Suppress so the build doesn't
             # blow up on `-Werror`.
-            "-Wno-WIDTH",
-            "-Wno-UNOPTFLAT",
-            "-Wno-PINMISSING",
-            "-Wno-IMPLICIT",
-            "-Wno-MULTIDRIVEN",
-            "-Wno-TIMESCALEMOD",
-            "-Wno-COMBDLY",
-            "-Wno-INITIALDLY",
-            "-Wno-CASEINCOMPLETE",
-            "-Wno-CASEX",
-            "-Wno-LATCH",
-            "-Wno-UNUSED",
+            "-Wno-WIDTH", "-Wno-UNOPTFLAT", "-Wno-PINMISSING",
+            "-Wno-IMPLICIT", "-Wno-MULTIDRIVEN", "-Wno-TIMESCALEMOD",
+            "-Wno-COMBDLY", "-Wno-INITIALDLY", "-Wno-CASEINCOMPLETE",
+            "-Wno-CASEX", "-Wno-LATCH", "-Wno-UNUSED",
         ]
 
     # Allow parallel invocations to use isolated build/result paths via env
     # vars (e.g. one process per gesture). Defaults keep the single-process
     # flow unchanged.
-    sim_build = os.getenv("SIM_BUILD", "sim_build")
-    test_filter = os.getenv("COCOTB_TEST_FILTER")  # regex; None = all tests
-    results_xml = os.getenv("RESULTS_XML")  # absolute path or None
+    sim_build   = os.getenv("SIM_BUILD", "sim_build")
+    test_filter = os.getenv("COCOTB_TEST_FILTER")    # regex; None = all tests
+    results_xml = os.getenv("RESULTS_XML")           # absolute path or None
 
     hdl_top_for_sim = hdl_toplevel
 
     if timing:
         if not gl:
-            raise ValueError(
-                "TIMING=1 requires GL=1 because SDF applies to the gate-level netlist."
-            )
+            raise ValueError("TIMING=1 requires GL=1 because SDF applies to the gate-level netlist.")
 
         if sim != "icarus":
             raise ValueError("Timed SDF GLS should use SIM=icarus.")
@@ -1802,12 +1695,7 @@ def chip_top_runner():
 
     print(f"[chip_top_tb] HDL top for simulation: {hdl_top_for_sim}")
 
-    force_rebuild = os.getenv("FORCE_REBUILD", "0").lower() not in (
-        "",
-        "0",
-        "false",
-        "no",
-    )
+    force_rebuild = os.getenv("FORCE_REBUILD", "0").lower() not in ("", "0", "false", "no")
     waves_enabled = os.getenv("WAVES", "1").lower() not in ("", "0", "false", "no")
 
     runner = get_runner(sim)

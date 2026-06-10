@@ -10,8 +10,8 @@ All categories arranged alphabetically.
 * Leo Moser \<leo.moser@pm.me\> 
 
 ## μTheia
-* Liam Ditscheiner \<\>
+* Liam Ditscheiner \<liamditscheiner@gmail\>
 * Marco Frank \<therealmr.polo1@gmail.com\>
-* Dalton Gaddy \<\>
+* Dalton Gaddy \<daltonhgaddy@gmail.com\>
 * Marc Romero \<marcromero2022@gmail.com\>
-* Jason Waseq \<\>
+* Jason Waseq \<jwaseq@gmail.com\>
