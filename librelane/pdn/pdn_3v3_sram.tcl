@@ -1,5 +1,17 @@
 # SRAM macros
 
+# Dump all block (macro) instance names to macro_instances.txt in the run
+# directory so the exact elaborated names (including [] from generate loops)
+# are visible for PDN pattern debugging.
+set macro_instances_file [file join [pwd] "macro_instances.txt"]
+set fp [open $macro_instances_file w]
+foreach inst [[ord::get_db_block] getInsts] {
+    if { [$inst isBlock] } {
+        puts $fp "[$inst getName]"
+    }
+}
+close $fp
+
 # Weight SRAMs (col0, x=500) — 8 x sram1024x8
 define_pdn_grid \
     -macro \
