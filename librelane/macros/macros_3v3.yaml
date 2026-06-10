@@ -315,3 +315,10 @@ PDN_MACRO_CONNECTIONS:
       # "i_chip_core.u_soc.u_core.u_voxel_binning.u_counter_mem.gen_bank[2].gen_byte[1].genblk1.sel.u_sram"
       # "i_chip_core.u_soc.u_core.u_voxel_binning.u_counter_mem.gen_bank[3].gen_byte[0].genblk1.sel.u_sram"
       # "i_chip_core.u_soc.u_core.u_voxel_binning.u_counter_mem.gen_bank[3].gen_byte[1].genblk1.sel.u_sram"
+
+# Halo size around macros while cutting rows.
+# Workaround for: https://github.com/The-OpenROAD-Project/OpenROAD/issues/8868
+FP_MACRO_HORIZONTAL_HALO: 10
+FP_MACRO_VERTICAL_HALO: 10
+PDN_HORIZONTAL_HALO: 5
+PDN_VERTICAL_HALO: 5
