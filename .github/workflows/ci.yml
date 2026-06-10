@@ -81,7 +81,7 @@
 #           sudo tree /nix/store/*-librelane || true
 #       - name: Clone the PDK
 #         run: |
-#           nix develop --command make clone-pdk
+#           nix develop --command make config-pdk
 #       - name: Run RTL simulation
 #         run: |
 #           nix develop --command make sim
