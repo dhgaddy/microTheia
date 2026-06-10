@@ -173,7 +173,7 @@ sim: $(PDK_ROOT)/$(PDK) defines ## Run RTL simulation with cocotb (DUT=chip_top 
 	@if [ -z "$(DUT)" ]; then \
 		$(MAKE) sim-chip-top-sanity; \
 	elif [ "$(DUT)" = "chip_top" ]; then \
-		$(MAKE) sim-chip-top-sanity; \
+		$(MAKE) sim-chip-top; \
 	else \
 		for d in $(SIM_DUTS); do \
 			echo "===================================================="; \
