@@ -1614,21 +1614,17 @@ def chip_top_runner():
             proj_path / "../third_party/verilog_spi/neg_edge_det.v",
         ]
 
-        # IO pad and SRAM models: use ciel-managed PDK files when available,
-        # otherwise fall back to vendored sim/ stubs (Verilator-friendly).
+        # IO pad and SRAM models: check each file individually against the
+        # ciel-managed PDK; fall back to the vendored sim/ stub if absent.
+        # gf180mcu_ws_io.v is a wafer-space supply-pad stub that may not be
+        # present in all PDK distributions.
         pdk_io_v   = Path(pdk_root) / pdk / "libs.ref" / pad  / "verilog" / f"{pad}.v"
         pdk_wsio_v = Path(pdk_root) / pdk / "libs.ref" / pad  / "verilog" / "gf180mcu_ws_io.v"
         pdk_sram_v = Path(pdk_root) / pdk / "libs.ref" / sram / "verilog" / f"{sram}__sram512x8m8wm1.v"
 
-        if pdk_io_v.exists():
-            sources += [pdk_io_v, pdk_wsio_v, pdk_sram_v]
-        else:
-            print(f"[chip_top_tb] PDK not found at {pdk_root}/{pdk}; using vendored sim/ stubs")
-            sources += [
-                proj_path / "../sim/gf180mcu_fd_io.v",
-                proj_path / "../sim/gf180mcu_ws_io.v",
-                proj_path / "../sim/gf180mcu_ocd_ip_sram_models.v",
-            ]
+        sources.append(pdk_io_v   if pdk_io_v.exists()   else proj_path / "../sim/gf180mcu_fd_io.v")
+        sources.append(pdk_wsio_v if pdk_wsio_v.exists() else proj_path / "../sim/gf180mcu_ws_io.v")
+        sources.append(pdk_sram_v if pdk_sram_v.exists() else proj_path / "../sim/gf180mcu_ocd_ip_sram_models.v")
 
     sources += [
         proj_path / "../ip/gf180mcu_ws_ip__logo/vh/gf180mcu_ws_ip__logo.v",
