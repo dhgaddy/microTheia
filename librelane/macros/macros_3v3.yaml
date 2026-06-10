@@ -263,5 +263,55 @@ MACROS:
 # This is an alternative method compared to
 # specifying the power connections in the RTL
 PDN_MACRO_CONNECTIONS:
-- "i_chip_core.sram_0 VDD VSS VDD VSS"
-- "i_chip_core.sram_1 VDD VSS VDD VSS"
+- "i_chip_core\\..*\\.u_sram VDD VSS VDD VSS"
+
+      # # 256 SRAMS
+      # "i_chip_core.u_soc.u_core.u_input_fifo.u_fifo_mem.gen_bank[0].gen_byte[0].sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_input_fifo.u_fifo_mem.gen_bank[0].gen_byte[1].sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_input_fifo.u_fifo_mem.gen_bank[0].gen_byte[2].sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_input_fifo.u_fifo_mem.gen_bank[0].gen_byte[3].sel.u_sram"
+      # #standard threshold srams (same in expanded configuration)
+      # "i_chip_core.u_soc.u_core.u_thresh_ram.gen_bank[0].gen_byte[0].sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_thresh_ram.gen_bank[0].gen_byte[1].sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_thresh_ram.gen_bank[0].gen_byte[2].sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_thresh_ram.gen_bank[0].gen_byte[3].sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_thresh_ram.gen_bank[0].gen_byte[4].sel.u_sram"
+
+      # # 1024 SRAMS
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[0].u_weight_ram.gen_bank[0].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[0].u_weight_ram.gen_bank[1].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[1].u_weight_ram.gen_bank[0].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[1].u_weight_ram.gen_bank[1].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[2].u_weight_ram.gen_bank[0].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[2].u_weight_ram.gen_bank[1].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[3].u_weight_ram.gen_bank[0].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[3].u_weight_ram.gen_bank[1].gen_byte[0].genblk1.sel.u_sram"
+      # # standard feature srams
+      # "i_chip_core.u_soc.u_core.u_feature_ram.gen_bank[0].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_feature_ram.gen_bank[0].gen_byte[1].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_feature_ram.gen_bank[1].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_feature_ram.gen_bank[1].gen_byte[1].genblk1.sel.u_sram"
+      # # standard counter srams
+      # "i_chip_core.u_soc.u_core.u_voxel_binning.u_counter_mem.gen_bank[0].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_voxel_binning.u_counter_mem.gen_bank[0].gen_byte[1].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_voxel_binning.u_counter_mem.gen_bank[1].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_voxel_binning.u_counter_mem.gen_bank[1].gen_byte[1].genblk1.sel.u_sram"
+      #   # expansion weights srams
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[0].u_weight_ram.gen_bank[2].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[0].u_weight_ram.gen_bank[3].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[1].u_weight_ram.gen_bank[2].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[1].u_weight_ram.gen_bank[3].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[2].u_weight_ram.gen_bank[2].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[2].u_weight_ram.gen_bank[3].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[3].u_weight_ram.gen_bank[2].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.gen_weight_ram[3].u_weight_ram.gen_bank[3].gen_byte[0].genblk1.sel.u_sram"
+      # # expansion feature srams 
+      # "i_chip_core.u_soc.u_core.u_feature_ram.gen_bank[2].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_feature_ram.gen_bank[2].gen_byte[1].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_feature_ram.gen_bank[3].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_feature_ram.gen_bank[3].gen_byte[1].genblk1.sel.u_sram"
+      # # expansion counter srams
+      # "i_chip_core.u_soc.u_core.u_voxel_binning.u_counter_mem.gen_bank[2].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_voxel_binning.u_counter_mem.gen_bank[2].gen_byte[1].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_voxel_binning.u_counter_mem.gen_bank[3].gen_byte[0].genblk1.sel.u_sram"
+      # "i_chip_core.u_soc.u_core.u_voxel_binning.u_counter_mem.gen_bank[3].gen_byte[1].genblk1.sel.u_sram"
